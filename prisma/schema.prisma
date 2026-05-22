@@ -1,13 +1,559 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum ServiceKey {
+  VEHICLE_TRANSPORT
+  MOTORCYCLE_TRANSPORT
+  GOODS_TRANSPORT
+  FURNITURE_TRANSPORT
+}
+
+enum TransportRequestStatus {
+  DRAFT
+  PENDING_QUOTES
+  QUOTED
+  ACCEPTED
+  DRIVER_ASSIGNED
+  DRIVER_GOING_TO_PICKUP
+  DRIVER_ARRIVED_PICKUP
+  ITEM_PICKED_UP
+  PICKUP_IN_PROGRESS
+  IN_TRANSIT
+  DRIVER_GOING_TO_DROPOFF
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum ItemType {
+  VEHICLE
+  MOTORCYCLE
+  GOODS
+  FURNITURE
+  OTHER
+}
+
+enum ItemCondition {
+  WORKING
+  NOT_WORKING
+  NEW
+  USED
+  FRAGILE
+  UNKNOWN
+}
+
+enum VehicleCondition {
+  RUNNING
+  NEEDS_JUMP_START
+  NEEDS_WINCH
+  NEEDS_CRANE
+  MISSING_WHEELS
+}
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+}
+
+enum DriverStatus {
+  PENDING_PROFILE
+  PENDING_DOCUMENTS
+  PENDING_REVIEW
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum PreferredLanguage {
+  en
+  ar
+  de
+  fr
+  it
+}
+
+enum VehicleType {
+  CAR_CARRIER
+  FLATBED_TRUCK
+  TOW_TRUCK
+  VAN
+  BOX_TRUCK
+  PICKUP_TRUCK
+  MOTORCYCLE_TRAILER
+  FURNITURE_TRUCK
+  OTHER
+}
+
+enum DriverDocumentType {
+  DRIVER_LICENSE_FRONT
+  DRIVER_LICENSE_BACK
+  IDENTITY_DOCUMENT
+  PASSPORT
+  VEHICLE_REGISTRATION
+  VEHICLE_INSURANCE
+  VEHICLE_PHOTO
+  TECHNICAL_INSPECTION
+  PROFILE_PHOTO
+}
+
+enum DocumentStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DriverRequestAlertStatus {
+  NEW
+  SEEN
+  ACCEPTED
+  IGNORED
+  EXPIRED
+}
+
+enum DriverOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum DriverEarningStatus {
+  PENDING
+  AVAILABLE
+  PAID_OUT
+  CANCELLED
+}
+
+model User {
+  id            String             @id @default(cuid())
+  name          String
+  email         String             @unique
+  passwordHash  String
+  role          UserRole           @default(CUSTOMER)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  requests      TransportRequest[]
+  driverProfile DriverProfile?
+  customerRatings DriverRating[]
+}
+
+model Service {
+  id            String             @id @default(cuid())
+  key           ServiceKey         @unique
+  nameEn        String
+  nameAr        String
+  descriptionEn String
+  descriptionAr String
+  icon          String
+  isActive      Boolean            @default(true)
+  sortOrder     Int
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  requests      TransportRequest[]
+}
+
+model TransportRequest {
+  id                  String                 @id @default(cuid())
+  customerId          String
+  serviceId           String
+  status              TransportRequestStatus @default(DRAFT)
+  pickupLatitude      Float?
+  pickupLongitude     Float?
+  pickupAddress       String?
+  pickupPlaceId       String?
+  dropoffLatitude     Float?
+  dropoffLongitude    Float?
+  dropoffAddress      String?
+  dropoffPlaceId      String?
+  scheduledPickupAt   DateTime?
+  isImmediate         Boolean                @default(false)
+  itemTitle           String?
+  itemDescription     String?
+  itemType            ItemType?
+  itemBrand           String?
+  itemModel           String?
+  itemYear            Int?
+  vehicleVin          String?
+  vehicleBrand        String?
+  vehicleModel        String?
+  vehicleSeries       String?
+  vehicleVariant      String?
+  vehicleManufactureYear Int?
+  vehicleEstimatedWeightKg Float?
+  vehicleBodyType     String?
+  vehicleDataSource   String?
+  vehicleCondition    VehicleCondition?
+  vehicleConditionNotes String?
+  itemCondition       ItemCondition?
+  itemWeightKg        Float?
+  itemLengthCm        Float?
+  itemWidthCm         Float?
+  itemHeightCm        Float?
+  requiresLoadingHelp Boolean                @default(false)
+  loadingWorkersCount Int?
+  specialInstructions String?
+  customerNote        String?
+  submittedAt         DateTime?
+  acceptedOfferId     String?                @unique
+  assignedDriverId    String?
+  acceptedAt          DateTime?
+  driverArrivedPickupAt DateTime?
+  itemPickedUpAt      DateTime?
+  pickupConfirmedByDriver Boolean             @default(false)
+  pickupNotes         String?
+  pickupProofImageUrl String?
+  driverGoingToDropoffAt DateTime?
+  deliveredAt         DateTime?
+  deliveryConfirmedByDriver Boolean           @default(false)
+  deliveryNotes       String?
+  deliveryProofImageUrl String?
+  finalPrice           Decimal?              @db.Decimal(12, 2)
+  currency             String?
+  completedAt          DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  customer       User                    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service        Service                 @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  acceptedOffer  DriverOffer?            @relation("AcceptedOfferForRequest", fields: [acceptedOfferId], references: [id], onDelete: SetNull)
+  assignedDriver DriverProfile?          @relation("AssignedDriverForRequest", fields: [assignedDriverId], references: [id], onDelete: SetNull)
+  photos         TransportRequestPhoto[]
+  driverAlerts   DriverRequestAlert[]
+  offers         DriverOffer[]
+  driverLocations DriverLocation[]
+  driverEarning  DriverEarning?
+  driverRating   DriverRating?
+
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([assignedDriverId, status])
+  @@map("transport_requests")
+}
+
+model DriverLocation {
+  id         String   @id @default(cuid())
+  driverId   String
+  requestId  String?
+  latitude   Float
+  longitude  Float
+  heading    Float?
+  speed      Float?
+  accuracy   Float?
+  recordedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  driver  DriverProfile      @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  request TransportRequest?  @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  @@index([driverId, recordedAt])
+  @@index([requestId, recordedAt])
+  @@map("driver_locations")
+}
+
+model TransportRequestPhoto {
+  id           String   @id @default(cuid())
+  requestId    String
+  url          String
+  storageKey   String?
+  originalName String?
+  mimeType     String
+  sizeBytes    Int
+  sortOrder    Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  request TransportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, sortOrder])
+  @@index([requestId])
+  @@map("transport_request_photos")
+}
+
+model DriverProfile {
+  id                    String             @id @default(cuid())
+  userId                String             @unique
+  firstName             String
+  lastName              String
+  phone                 String             @unique
+  countryCode           String?
+  city                  String?
+  dateOfBirth           DateTime?
+  addressLine1          String?
+  addressLine2          String?
+  postalCode            String?
+  profilePhotoUrl       String?
+  preferredLanguage     PreferredLanguage?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  status                DriverStatus       @default(PENDING_PROFILE)
+  isProfileCompleted    Boolean            @default(false)
+  averageRating         Decimal?           @db.Decimal(3, 2)
+  ratingsCount          Int                @default(0)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicles      DriverVehicle[]
+  documents     DriverDocument[]
+  availability  DriverAvailability?
+  requestAlerts DriverRequestAlert[]
+  offers        DriverOffer[]
+  assignedRequests TransportRequest[] @relation("AssignedDriverForRequest")
+  locations     DriverLocation[]
+  earnings      DriverEarning[]
+  ratings       DriverRating[]
+
+  @@index([status])
+  @@map("driver_profiles")
+}
+
+model DriverAvailability {
+  id                       String   @id @default(cuid())
+  driverId                 String   @unique
+  timezone                 String
+  isOnline                 Boolean  @default(false)
+  serviceRadiusKm          Int
+  baseLatitude             Float?
+  baseLongitude            Float?
+  baseAddress              String?
+  acceptsImmediateRequests Boolean  @default(true)
+  acceptsScheduledRequests Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  driver   DriverProfile                @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  schedule DriverAvailabilitySchedule[]
+
+  @@index([isOnline])
+  @@map("driver_availabilities")
+}
+
+model DriverAvailabilitySchedule {
+  id             String    @id @default(cuid())
+  availabilityId String
+  dayOfWeek      DayOfWeek
+  isAvailable    Boolean   @default(false)
+  startTime      String?
+  endTime        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  availability DriverAvailability @relation(fields: [availabilityId], references: [id], onDelete: Cascade)
+
+  @@unique([availabilityId, dayOfWeek])
+  @@index([availabilityId])
+  @@map("driver_availability_schedules")
+}
+
+model DriverVehicle {
+  id          String      @id @default(cuid())
+  driverId    String
+  vehicleType VehicleType
+  make        String
+  model       String
+  year        Int
+  plateNumber String      @unique
+  color       String?
+  capacityKg  Float?
+  lengthCm    Float?
+  widthCm     Float?
+  heightCm    Float?
+  hasTrailer  Boolean     @default(false)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  driver    DriverProfile    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  documents DriverDocument[]
+
+  @@index([driverId])
+  @@map("driver_vehicles")
+}
+
+model DriverDocument {
+  id              String             @id @default(cuid())
+  driverId        String
+  vehicleId       String?
+  type            DriverDocumentType
+  url             String
+  storageKey      String?
+  originalName    String?
+  mimeType        String
+  sizeBytes       Int
+  status          DocumentStatus     @default(PENDING_REVIEW)
+  rejectionReason String?
+  expiresAt       DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  driver  DriverProfile  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  vehicle DriverVehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([type])
+  @@map("driver_documents")
+}
+
+model DriverRequestAlert {
+  id         String                   @id @default(cuid())
+  requestId  String
+  driverId   String
+  status     DriverRequestAlertStatus @default(NEW)
+  seenAt     DateTime?
+  acceptedAt DateTime?
+  ignoredAt  DateTime?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  request TransportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  driver  DriverProfile    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  offers  DriverOffer[]
+
+  @@unique([requestId, driverId])
+  @@index([driverId, status])
+  @@index([requestId])
+  @@map("driver_request_alerts")
+}
+
+model DriverOffer {
+  id                       String            @id @default(cuid())
+  requestId                String
+  driverId                 String
+  alertId                  String?
+  price                    Decimal           @db.Decimal(12, 2)
+  currency                 String
+  estimatedPickupAt        DateTime?
+  estimatedDeliveryAt      DateTime?
+  estimatedDurationMinutes Int?
+  message                  String?
+  status                   DriverOfferStatus @default(PENDING)
+  expiresAt                DateTime?
+  acceptedAt               DateTime?
+  rejectedAt               DateTime?
+  cancelledAt              DateTime?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+
+  request            TransportRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  driver             DriverProfile      @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  alert              DriverRequestAlert? @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  acceptedForRequest TransportRequest?  @relation("AcceptedOfferForRequest")
+
+  @@unique([requestId, driverId])
+  @@index([driverId, status])
+  @@index([requestId, status])
+  @@index([alertId])
+  @@map("driver_offers")
+}
+
+model DriverEarning {
+  id                String              @id @default(cuid())
+  driverId          String
+  tripId            String              @unique
+  grossAmount       Decimal             @db.Decimal(12, 2)
+  platformFeeAmount Decimal             @db.Decimal(12, 2)
+  netAmount         Decimal             @db.Decimal(12, 2)
+  currency          String
+  status            DriverEarningStatus @default(AVAILABLE)
+  availableAt       DateTime?
+  paidOutAt         DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  driver DriverProfile    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  trip   TransportRequest @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([driverId, status])
+  @@index([createdAt])
+  @@map("driver_earnings")
+}
+
+model DriverRating {
+  id         String           @id @default(cuid())
+  tripId      String           @unique
+  driverId    String
+  customerId  String
+  rating      Int
+  comment     String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  trip      TransportRequest @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  driver    DriverProfile    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  customer  User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([driverId, rating])
+  @@index([customerId])
+  @@map("driver_ratings")
+}
+
+model VehicleBrand {
+  id        String         @id @default(cuid())
+  name      String
+  slug      String         @unique
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  models    VehicleModel[]
+
+  @@index([isActive])
+  @@map("vehicle_brands")
+}
+
+model VehicleModel {
+  id        String          @id @default(cuid())
+  brandId   String
+  name      String
+  slug      String
+  bodyType  String?
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  brand     VehicleBrand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  series    VehicleSeries[]
+
+  @@unique([brandId, slug])
+  @@index([brandId, isActive])
+  @@map("vehicle_models")
+}
+
+model VehicleSeries {
+  id                String       @id @default(cuid())
+  modelId           String
+  name              String
+  slug              String
+  variantName       String?
+  yearFrom          Int?
+  yearTo            Int?
+  estimatedWeightKg Float?
+  bodyType          String?
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  model             VehicleModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@unique([modelId, slug])
+  @@index([modelId, isActive])
+  @@map("vehicle_series")
 }

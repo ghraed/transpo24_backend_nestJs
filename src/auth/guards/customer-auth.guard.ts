@@ -1,0 +1,45 @@
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { Request } from 'express';
+
+import { AuthService } from '../auth.service';
+
+@Injectable()
+export class CustomerAuthGuard implements CanActivate {
+  constructor(private readonly authService: AuthService) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<Request>();
+    const authHeader = request.headers.authorization;
+
+    if (!authHeader?.startsWith('Bearer ')) {
+      throw new UnauthorizedException(
+        'Missing or invalid authorization header.',
+      );
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim();
+    const user = this.authService.getUserFromAccessToken(token);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired token.');
+    }
+
+    if (user.role !== UserRole.CUSTOMER) {
+      throw new ForbiddenException('Customer access is required.');
+    }
+
+    (
+      request as Request & {
+        user?: { id: string; email: string; name: string; role: UserRole };
+      }
+    ).user = user;
+    return true;
+  }
+}
