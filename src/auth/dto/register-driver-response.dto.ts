@@ -1,12 +1,11 @@
-export interface LoginResponseDto {
+export interface RegisterDriverResponseDto {
   accessToken: string;
   user: {
     id: string;
-    name: string;
     email: string;
-    role: 'CUSTOMER' | 'DRIVER';
+    role: 'DRIVER';
   };
-  driver?: {
+  driver: {
     id: string;
     firstName: string;
     lastName: string;
@@ -16,5 +15,5 @@ export interface LoginResponseDto {
     status: string;
     isProfileCompleted: boolean;
   };
-  nextStep?: 'COMPLETE_PROFILE' | 'ADD_VEHICLE_DOCUMENTS';
+  nextStep: 'COMPLETE_PROFILE' | 'ADD_VEHICLE_DOCUMENTS';
 }
