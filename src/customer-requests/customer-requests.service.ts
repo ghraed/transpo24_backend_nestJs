@@ -448,6 +448,11 @@ const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.QUOTED,
 ];
 
+const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
+  TransportRequestStatus.PENDING_QUOTES,
+  TransportRequestStatus.QUOTED,
+];
+
 @Injectable()
 export class CustomerRequestsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -1323,6 +1328,7 @@ export class CustomerRequestsService {
       }
 
       if (driverProfile.status !== DriverStatus.APPROVED) {
+      if (driverProfile.status !== DriverStatus.APPROVED) {
         throw new BadRequestException('Offer driver must be approved.');
       }
 
@@ -1331,7 +1337,6 @@ export class CustomerRequestsService {
           'Offer driver must be online and available.',
         );
       }
-
       const acceptedAt = new Date();
 
       const acceptedOffer = await tx.driverOffer.update({
