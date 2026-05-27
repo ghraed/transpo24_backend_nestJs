@@ -1328,7 +1328,6 @@ export class CustomerRequestsService {
       }
 
       if (driverProfile.status !== DriverStatus.APPROVED) {
-      if (driverProfile.status !== DriverStatus.APPROVED) {
         throw new BadRequestException('Offer driver must be approved.');
       }
 

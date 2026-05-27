@@ -10,5 +10,6 @@ import { CustomerRequestsService } from './customer-requests.service';
   imports: [AuthModule],
   controllers: [CustomerHomeController, CustomerRequestsController],
   providers: [CustomerRequestsService, PrismaService],
+  exports: [CustomerRequestsService],
 })
 export class CustomerRequestsModule {}
