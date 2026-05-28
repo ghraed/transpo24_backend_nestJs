@@ -31,6 +31,15 @@ export type DriverArrivedPickupInput = {
   longitude: number;
 };
 
+export type PickupItemInput = {
+  driverId: string;
+  tripId: string;
+  latitude?: number;
+  longitude?: number;
+  notes?: string;
+  proofImageUrl?: string;
+};
+
 export type OfferAcceptedPayload = {
   tripId: string;
   driverId: string;
@@ -70,6 +79,27 @@ export type DriverArrivedPickupConfirmedPayload = {
   driverId: string;
   status: TransportRequestStatus;
   arrivedAt: string;
+};
+
+export type PickupItemResponse = {
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  status: TransportRequestStatus;
+  pickedUpAt: string;
+  pickupNotes: string | null;
+  pickupProofImageUrl: string | null;
+  nextStep: 'DELIVER_ITEM';
+};
+
+export type ItemPickedUpPayload = {
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  status: 'ITEM_PICKED_UP';
+  pickedUpAt: string;
+  pickupNotes: string | null;
+  pickupProofImageUrl: string | null;
 };
 
 export type TripAccessRecord = {
