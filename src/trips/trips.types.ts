@@ -40,6 +40,20 @@ export type PickupItemInput = {
   proofImageUrl?: string;
 };
 
+export type StartDeliveryInput = {
+  driverId: string;
+  tripId: string;
+};
+
+export type DeliverItemInput = {
+  driverId: string;
+  tripId: string;
+  latitude?: number;
+  longitude?: number;
+  notes?: string;
+  proofImageUrl?: string;
+};
+
 export type OfferAcceptedPayload = {
   tripId: string;
   driverId: string;
@@ -100,6 +114,54 @@ export type ItemPickedUpPayload = {
   pickedUpAt: string;
   pickupNotes: string | null;
   pickupProofImageUrl: string | null;
+};
+
+export type StartDeliveryResponse = {
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  status: 'DRIVER_GOING_TO_DROPOFF';
+  dropoffLocation: {
+    latitude: number;
+    longitude: number;
+    address: string | null;
+  };
+  startedAt: string;
+  nextStep: 'GO_TO_DROPOFF';
+};
+
+export type DeliverItemResponse = {
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  status: 'DELIVERED';
+  deliveredAt: string;
+  deliveryNotes: string | null;
+  deliveryProofImageUrl: string | null;
+  nextStep: 'VIEW_EARNINGS_AND_RATINGS';
+};
+
+export type DriverStartedDeliveryPayload = {
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  status: 'DRIVER_GOING_TO_DROPOFF';
+  dropoffLocation: {
+    latitude: number;
+    longitude: number;
+    address: string | null;
+  };
+  startedAt: string;
+};
+
+export type ItemDeliveredPayload = {
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  status: 'DELIVERED';
+  deliveredAt: string;
+  deliveryNotes: string | null;
+  deliveryProofImageUrl: string | null;
 };
 
 export type TripAccessRecord = {

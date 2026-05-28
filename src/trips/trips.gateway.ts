@@ -260,7 +260,6 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       .to(this.getTripRoom(payload.tripId))
       .emit('tripStatusUpdated', tripStatus);
   }
-
   private getAuthenticatedSocketUser(client: Socket): SocketUser {
     const user = client.data.user as SocketUser | undefined;
 
