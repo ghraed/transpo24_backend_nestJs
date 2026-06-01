@@ -448,11 +448,6 @@ const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.QUOTED,
 ];
 
-const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
-  TransportRequestStatus.PENDING_QUOTES,
-  TransportRequestStatus.QUOTED,
-];
-
 @Injectable()
 export class CustomerRequestsService {
   constructor(private readonly prisma: PrismaService) {}

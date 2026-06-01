@@ -1,4 +1,10 @@
-import { DriverOfferStatus, DriverStatus, TransportRequestStatus, UserRole } from '@prisma/client';
+import {
+  DriverEarningStatus,
+  DriverOfferStatus,
+  DriverStatus,
+  TransportRequestStatus,
+  UserRole,
+} from '@prisma/client';
 
 export type TripUserRole = UserRole;
 
@@ -188,4 +194,91 @@ export type DriverEligibility = {
   isProfileCompleted: boolean;
   vehicles: Array<{ id: string }>;
   availability: { isOnline: boolean } | null;
+};
+
+export type DateRangeQuery = {
+  from?: string;
+  to?: string;
+};
+
+export type PaginationQuery = {
+  page: number;
+  limit: number;
+};
+
+export type DriverEarningStatusType = DriverEarningStatus;
+
+export type DriverEarningsSummaryInput = DateRangeQuery & {
+  driverId: string;
+};
+
+export type DriverEarningsListInput = DateRangeQuery &
+  PaginationQuery & {
+    driverId: string;
+    status?: DriverEarningStatusType;
+  };
+
+export type DriverRatingsListInput = PaginationQuery & {
+  driverId: string;
+  rating?: number;
+};
+
+export type CreateDriverRatingInput = {
+  customerId: string;
+  tripId: string;
+  rating: number;
+  comment?: string;
+};
+
+export type DriverEarningsSummaryResponse = {
+  currency: string;
+  totalGross: number;
+  totalPlatformFees: number;
+  totalNet: number;
+  pendingAmount: number;
+  availableAmount: number;
+  paidOutAmount: number;
+  completedTripsCount: number;
+  averageRating: number | null;
+  ratingsCount: number;
+};
+
+export type DriverEarningItemResponse = {
+  id: string;
+  tripId: string;
+  grossAmount: number;
+  platformFeeAmount: number;
+  netAmount: number;
+  currency: string;
+  status: DriverEarningStatusType;
+  createdAt: string;
+  availableAt: string | null;
+  paidOutAt: string | null;
+};
+
+export type DriverRatingItemResponse = {
+  id: string;
+  tripId: string;
+  rating: number;
+  comment: string | null;
+  customerName: string | null;
+  createdAt: string;
+};
+
+export type PaginatedResponse<T> = {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export type CreateDriverRatingResponse = {
+  id: string;
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
 };
