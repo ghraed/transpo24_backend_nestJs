@@ -1,4 +1,6 @@
 import {
+  GoodsHeavyShipmentType,
+  GoodsShipmentSize,
   MotorcycleCondition,
   MotorcycleType,
   TransportRequestStatus,
@@ -63,6 +65,15 @@ export class CustomerRequestResponseDto {
     condition: MotorcycleCondition | null;
     requiresSpecialWrapping: boolean;
     requiresDedicatedCarrier: boolean;
+  };
+  goodsDetails?: {
+    shipmentSize: GoodsShipmentSize | null;
+    goodsDescription: string | null;
+    approximateWeightKg: number | null;
+    numberOfPieces: number | null;
+    isFragile: boolean;
+    requiresRefrigeration: boolean;
+    heavyShipmentType: GoodsHeavyShipmentType | null;
   };
   photos!: Array<{
     id: string;

@@ -11,6 +11,8 @@ import type { File as MulterFile } from 'multer';
 import {
   DriverOfferStatus,
   DriverStatus,
+  GoodsHeavyShipmentType,
+  GoodsShipmentSize,
   ItemCondition,
   ItemType,
   MotorcycleCondition,
@@ -121,6 +123,26 @@ interface CreateMotorcycleTransportRequestInput {
   scheduledPickupAt?: Date;
   pickupLocation: MotorcycleRequestLocationInput;
   deliveryLocation: MotorcycleRequestLocationInput;
+}
+
+interface GoodsRequestLocationInput {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  placeId?: string;
+}
+
+interface CreateGoodsTransportRequestInput {
+  customerId: string;
+  shipmentSize: GoodsShipmentSize;
+  goodsDescription: string;
+  approximateWeightKg: number;
+  numberOfPieces: number;
+  isFragile: boolean;
+  requiresRefrigeration: boolean;
+  heavyShipmentType?: GoodsHeavyShipmentType;
+  pickupLocation: GoodsRequestLocationInput;
+  deliveryLocation: GoodsRequestLocationInput;
 }
 
 interface UploadRequestPhotosInput {
@@ -242,6 +264,13 @@ type TransportRequestResponseSource = {
   motorcycleCondition: MotorcycleCondition | null;
   requiresSpecialWrapping: boolean;
   requiresDedicatedCarrier: boolean;
+  goodsShipmentSize: GoodsShipmentSize | null;
+  goodsDescription: string | null;
+  goodsApproximateWeightKg: number | null;
+  goodsNumberOfPieces: number | null;
+  goodsIsFragile: boolean;
+  goodsRequiresRefrigeration: boolean;
+  goodsHeavyShipmentType: GoodsHeavyShipmentType | null;
   itemCondition: ItemCondition | null;
   itemWeightKg: number | null;
   itemLengthCm: number | null;
@@ -377,6 +406,13 @@ const REQUEST_SELECT = {
   motorcycleCondition: true,
   requiresSpecialWrapping: true,
   requiresDedicatedCarrier: true,
+  goodsShipmentSize: true,
+  goodsDescription: true,
+  goodsApproximateWeightKg: true,
+  goodsNumberOfPieces: true,
+  goodsIsFragile: true,
+  goodsRequiresRefrigeration: true,
+  goodsHeavyShipmentType: true,
   itemCondition: true,
   itemWeightKg: true,
   itemLengthCm: true,
@@ -600,6 +636,84 @@ export class CustomerRequestsService {
         motorcycleCondition: input.motorcycleCondition,
         requiresSpecialWrapping: input.requiresSpecialWrapping,
         requiresDedicatedCarrier: input.requiresDedicatedCarrier,
+      },
+      select: REQUEST_SELECT,
+    });
+
+    return this.toResponseDto(request);
+  }
+
+  async createGoodsTransportRequest(
+    input: CreateGoodsTransportRequestInput,
+  ): Promise<CustomerRequestResponseDto> {
+    const service = await this.prisma.service.findUnique({
+      where: { key: ServiceKey.GOODS_TRANSPORT },
+      select: { id: true, isActive: true },
+    });
+
+    if (!service || !service.isActive) {
+      throw new BadRequestException(
+        'Goods transport service does not exist or is inactive.',
+      );
+    }
+
+    const isSameAsPickup =
+      input.pickupLocation.latitude === input.deliveryLocation.latitude &&
+      input.pickupLocation.longitude === input.deliveryLocation.longitude;
+
+    if (isSameAsPickup) {
+      throw new BadRequestException(
+        'Pickup and delivery locations cannot be exactly the same.',
+      );
+    }
+
+    if (input.approximateWeightKg <= 0) {
+      throw new BadRequestException(
+        'approximateWeightKg must be greater than 0.',
+      );
+    }
+
+    if (!Number.isInteger(input.numberOfPieces) || input.numberOfPieces < 1) {
+      throw new BadRequestException(
+        'numberOfPieces must be an integer greater than or equal to 1.',
+      );
+    }
+
+    if (input.approximateWeightKg >= 50 && !input.heavyShipmentType) {
+      throw new BadRequestException(
+        'heavyShipmentType is required when approximateWeightKg is 50 or more.',
+      );
+    }
+
+    const request = await this.prisma.transportRequest.create({
+      data: {
+        customerId: input.customerId,
+        serviceId: service.id,
+        status: TransportRequestStatus.DRAFT,
+        isImmediate: true,
+        pickupLatitude: input.pickupLocation.latitude,
+        pickupLongitude: input.pickupLocation.longitude,
+        pickupAddress: input.pickupLocation.address?.trim() || null,
+        pickupPlaceId: input.pickupLocation.placeId?.trim() || null,
+        dropoffLatitude: input.deliveryLocation.latitude,
+        dropoffLongitude: input.deliveryLocation.longitude,
+        dropoffAddress: input.deliveryLocation.address?.trim() || null,
+        dropoffPlaceId: input.deliveryLocation.placeId?.trim() || null,
+        itemTitle: `${input.shipmentSize} goods shipment`,
+        itemDescription: input.goodsDescription.trim(),
+        itemType: ItemType.GOODS,
+        itemWeightKg: input.approximateWeightKg,
+        itemCondition: input.isFragile ? ItemCondition.FRAGILE : null,
+        goodsShipmentSize: input.shipmentSize,
+        goodsDescription: input.goodsDescription.trim(),
+        goodsApproximateWeightKg: input.approximateWeightKg,
+        goodsNumberOfPieces: input.numberOfPieces,
+        goodsIsFragile: input.isFragile,
+        goodsRequiresRefrigeration: input.requiresRefrigeration,
+        goodsHeavyShipmentType:
+          input.approximateWeightKg >= 50
+            ? (input.heavyShipmentType ?? null)
+            : null,
       },
       select: REQUEST_SELECT,
     });
@@ -1218,6 +1332,44 @@ export class CustomerRequestsService {
       }
     }
 
+    if (service.key === ServiceKey.GOODS_TRANSPORT) {
+      if (!request.goodsShipmentSize) {
+        throw new BadRequestException(
+          'shipmentSize is required for goods transport.',
+        );
+      }
+      if (!request.goodsDescription?.trim()) {
+        throw new BadRequestException(
+          'goodsDescription is required for goods transport.',
+        );
+      }
+      if (
+        !request.goodsApproximateWeightKg ||
+        request.goodsApproximateWeightKg <= 0
+      ) {
+        throw new BadRequestException(
+          'approximateWeightKg must be greater than 0 for goods transport.',
+        );
+      }
+      if (
+        !request.goodsNumberOfPieces ||
+        !Number.isInteger(request.goodsNumberOfPieces) ||
+        request.goodsNumberOfPieces < 1
+      ) {
+        throw new BadRequestException(
+          'numberOfPieces must be an integer greater than or equal to 1 for goods transport.',
+        );
+      }
+      if (
+        request.goodsApproximateWeightKg >= 50 &&
+        !request.goodsHeavyShipmentType
+      ) {
+        throw new BadRequestException(
+          'heavyShipmentType is required when approximateWeightKg is 50 or more.',
+        );
+      }
+    }
+
     const updatedRequest = await this.prisma.transportRequest.update({
       where: { id: input.requestId },
       data: {
@@ -1779,6 +1931,26 @@ export class CustomerRequestsService {
           }
         : undefined;
 
+    const goodsDetails =
+      request.itemType === ItemType.GOODS ||
+      request.goodsShipmentSize !== null ||
+      request.goodsDescription !== null ||
+      request.goodsApproximateWeightKg !== null ||
+      request.goodsNumberOfPieces !== null ||
+      request.goodsIsFragile ||
+      request.goodsRequiresRefrigeration ||
+      request.goodsHeavyShipmentType !== null
+        ? {
+            shipmentSize: request.goodsShipmentSize,
+            goodsDescription: request.goodsDescription,
+            approximateWeightKg: request.goodsApproximateWeightKg,
+            numberOfPieces: request.goodsNumberOfPieces,
+            isFragile: request.goodsIsFragile,
+            requiresRefrigeration: request.goodsRequiresRefrigeration,
+            heavyShipmentType: request.goodsHeavyShipmentType,
+          }
+        : undefined;
+
     return {
       id: request.id,
       serviceId: request.serviceId,
@@ -1814,6 +1986,7 @@ export class CustomerRequestsService {
         conditionNotes: request.vehicleConditionNotes,
       },
       motorcycleDetails,
+      goodsDetails,
       photos: this.toPhotoResponses(request.photos),
     };
   }

@@ -21,6 +21,7 @@ import { extname, join } from 'node:path';
 import { FilesInterceptor } from '@nestjs/platform-express';
 
 import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
+import { CreateGoodsTransportRequestDto } from './dto/create-goods-transport-request.dto';
 import { CreateMotorcycleTransportRequestDto } from './dto/create-motorcycle-transport-request.dto';
 import { CreateServiceRequestDto } from './dto/create-service-request.dto';
 import {
@@ -107,6 +108,25 @@ export class CustomerRequestsController {
       scheduledPickupAt: dto.scheduledPickupAt
         ? new Date(dto.scheduledPickupAt)
         : undefined,
+      pickupLocation: dto.pickupLocation,
+      deliveryLocation: dto.deliveryLocation,
+    });
+  }
+
+  @Post('goods-transport')
+  async createGoodsTransportRequest(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateGoodsTransportRequestDto,
+  ): Promise<CustomerRequestResponseDto> {
+    return this.customerRequestsService.createGoodsTransportRequest({
+      customerId: request.user.id,
+      shipmentSize: dto.shipmentSize,
+      goodsDescription: dto.goodsDescription,
+      approximateWeightKg: dto.approximateWeightKg,
+      numberOfPieces: dto.numberOfPieces,
+      isFragile: dto.isFragile,
+      requiresRefrigeration: dto.requiresRefrigeration,
+      heavyShipmentType: dto.heavyShipmentType,
       pickupLocation: dto.pickupLocation,
       deliveryLocation: dto.deliveryLocation,
     });

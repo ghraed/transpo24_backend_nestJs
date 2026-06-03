@@ -73,6 +73,20 @@ enum MotorcycleCondition {
   UNKNOWN
 }
 
+enum GoodsShipmentSize {
+  XS
+  S
+  M
+  L
+  XL
+  XXL
+}
+
+enum GoodsHeavyShipmentType {
+  ONE_HEAVY_ITEM
+  MULTIPLE_SMALLER_PIECES
+}
+
 enum UserRole {
   CUSTOMER
   DRIVER
@@ -223,6 +237,13 @@ model TransportRequest {
   motorcycleCondition MotorcycleCondition?
   requiresSpecialWrapping Boolean            @default(false)
   requiresDedicatedCarrier Boolean           @default(false)
+  goodsShipmentSize    GoodsShipmentSize?
+  goodsDescription     String?
+  goodsApproximateWeightKg Float?
+  goodsNumberOfPieces  Int?
+  goodsIsFragile       Boolean               @default(false)
+  goodsRequiresRefrigeration Boolean         @default(false)
+  goodsHeavyShipmentType GoodsHeavyShipmentType?
   itemCondition       ItemCondition?
   itemWeightKg        Float?
   itemLengthCm        Float?
