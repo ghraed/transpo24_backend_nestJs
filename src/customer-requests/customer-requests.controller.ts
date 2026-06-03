@@ -21,6 +21,7 @@ import { extname, join } from 'node:path';
 import { FilesInterceptor } from '@nestjs/platform-express';
 
 import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
+import { CreateMotorcycleTransportRequestDto } from './dto/create-motorcycle-transport-request.dto';
 import { CreateServiceRequestDto } from './dto/create-service-request.dto';
 import {
   CustomerHomeRequestSummaryDto,
@@ -87,6 +88,27 @@ export class CustomerRequestsController {
       vehicleDataSource: dto.vehicleDataSource,
       vehicleCondition: dto.vehicleCondition,
       vehicleConditionNotes: dto.vehicleConditionNotes,
+    });
+  }
+
+  @Post('motorcycle-transport')
+  async createMotorcycleTransportRequest(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateMotorcycleTransportRequestDto,
+  ): Promise<CustomerRequestResponseDto> {
+    return this.customerRequestsService.createMotorcycleTransportRequest({
+      customerId: request.user.id,
+      motorcycleType: dto.motorcycleType,
+      chassisNumber: dto.chassisNumber,
+      motorcycleCondition: dto.motorcycleCondition,
+      requiresSpecialWrapping: dto.requiresSpecialWrapping,
+      requiresDedicatedCarrier: dto.requiresDedicatedCarrier,
+      isImmediate: dto.isImmediate,
+      scheduledPickupAt: dto.scheduledPickupAt
+        ? new Date(dto.scheduledPickupAt)
+        : undefined,
+      pickupLocation: dto.pickupLocation,
+      deliveryLocation: dto.deliveryLocation,
     });
   }
 

@@ -58,6 +58,21 @@ enum VehicleCondition {
   MISSING_WHEELS
 }
 
+enum MotorcycleType {
+  SPORT_BIKE
+  CRUISER
+  ELECTRIC_MOTORCYCLE
+  SCOOTER
+  OTHER
+}
+
+enum MotorcycleCondition {
+  WORKING
+  NOT_WORKING
+  DAMAGED
+  UNKNOWN
+}
+
 enum UserRole {
   CUSTOMER
   DRIVER
@@ -203,6 +218,11 @@ model TransportRequest {
   vehicleDataSource   String?
   vehicleCondition    VehicleCondition?
   vehicleConditionNotes String?
+  motorcycleType      MotorcycleType?
+  motorcycleChassisNumber String?
+  motorcycleCondition MotorcycleCondition?
+  requiresSpecialWrapping Boolean            @default(false)
+  requiresDedicatedCarrier Boolean           @default(false)
   itemCondition       ItemCondition?
   itemWeightKg        Float?
   itemLengthCm        Float?

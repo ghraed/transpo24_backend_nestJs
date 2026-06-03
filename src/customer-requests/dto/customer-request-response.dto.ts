@@ -1,4 +1,9 @@
-import { TransportRequestStatus, VehicleCondition } from '@prisma/client';
+import {
+  MotorcycleCondition,
+  MotorcycleType,
+  TransportRequestStatus,
+  VehicleCondition,
+} from '@prisma/client';
 
 export class CustomerRequestResponseDto {
   id!: string;
@@ -51,6 +56,13 @@ export class CustomerRequestResponseDto {
     dataSource: string | null;
     condition: VehicleCondition | null;
     conditionNotes: string | null;
+  };
+  motorcycleDetails?: {
+    type: MotorcycleType | null;
+    chassisNumber: string | null;
+    condition: MotorcycleCondition | null;
+    requiresSpecialWrapping: boolean;
+    requiresDedicatedCarrier: boolean;
   };
   photos!: Array<{
     id: string;

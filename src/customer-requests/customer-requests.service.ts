@@ -13,6 +13,8 @@ import {
   DriverStatus,
   ItemCondition,
   ItemType,
+  MotorcycleCondition,
+  MotorcycleType,
   Prisma,
   ServiceKey,
   TransportRequestStatus,
@@ -99,6 +101,26 @@ interface UpdateScheduleAndItemDetailsInput {
   requiresLoadingHelp: boolean;
   loadingWorkersCount?: number;
   specialInstructions?: string;
+}
+
+interface MotorcycleRequestLocationInput {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  placeId?: string;
+}
+
+interface CreateMotorcycleTransportRequestInput {
+  customerId: string;
+  motorcycleType: MotorcycleType;
+  chassisNumber?: string;
+  motorcycleCondition: MotorcycleCondition;
+  requiresSpecialWrapping: boolean;
+  requiresDedicatedCarrier: boolean;
+  isImmediate?: boolean;
+  scheduledPickupAt?: Date;
+  pickupLocation: MotorcycleRequestLocationInput;
+  deliveryLocation: MotorcycleRequestLocationInput;
 }
 
 interface UploadRequestPhotosInput {
@@ -215,6 +237,11 @@ type TransportRequestResponseSource = {
   vehicleDataSource: string | null;
   vehicleCondition: VehicleCondition | null;
   vehicleConditionNotes: string | null;
+  motorcycleType: MotorcycleType | null;
+  motorcycleChassisNumber: string | null;
+  motorcycleCondition: MotorcycleCondition | null;
+  requiresSpecialWrapping: boolean;
+  requiresDedicatedCarrier: boolean;
   itemCondition: ItemCondition | null;
   itemWeightKg: number | null;
   itemLengthCm: number | null;
@@ -345,6 +372,11 @@ const REQUEST_SELECT = {
   vehicleDataSource: true,
   vehicleCondition: true,
   vehicleConditionNotes: true,
+  motorcycleType: true,
+  motorcycleChassisNumber: true,
+  motorcycleCondition: true,
+  requiresSpecialWrapping: true,
+  requiresDedicatedCarrier: true,
   itemCondition: true,
   itemWeightKg: true,
   itemLengthCm: true,
@@ -491,6 +523,83 @@ export class CustomerRequestsService {
           service.key === ServiceKey.VEHICLE_TRANSPORT
             ? input.vehicleConditionNotes?.trim() || null
             : null,
+      },
+      select: REQUEST_SELECT,
+    });
+
+    return this.toResponseDto(request);
+  }
+
+  async createMotorcycleTransportRequest(
+    input: CreateMotorcycleTransportRequestInput,
+  ): Promise<CustomerRequestResponseDto> {
+    const service = await this.prisma.service.findUnique({
+      where: { key: ServiceKey.MOTORCYCLE_TRANSPORT },
+      select: { id: true, isActive: true },
+    });
+
+    if (!service || !service.isActive) {
+      throw new BadRequestException(
+        'Motorcycle transport service does not exist or is inactive.',
+      );
+    }
+
+    const isSameAsPickup =
+      input.pickupLocation.latitude === input.deliveryLocation.latitude &&
+      input.pickupLocation.longitude === input.deliveryLocation.longitude;
+
+    if (isSameAsPickup) {
+      throw new BadRequestException(
+        'Pickup and delivery locations cannot be exactly the same.',
+      );
+    }
+
+    if (input.scheduledPickupAt && Number.isNaN(input.scheduledPickupAt.getTime())) {
+      throw new BadRequestException(
+        'scheduledPickupAt must be a valid ISO date.',
+      );
+    }
+
+    if (input.isImmediate === false && !input.scheduledPickupAt) {
+      throw new BadRequestException(
+        'scheduledPickupAt is required when isImmediate is false.',
+      );
+    }
+
+    if (
+      input.scheduledPickupAt &&
+      input.scheduledPickupAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('scheduledPickupAt cannot be in the past.');
+    }
+
+    const request = await this.prisma.transportRequest.create({
+      data: {
+        customerId: input.customerId,
+        serviceId: service.id,
+        status: TransportRequestStatus.DRAFT,
+        submittedAt: null,
+        isImmediate: input.isImmediate ?? true,
+        scheduledPickupAt:
+          input.isImmediate === false
+            ? (input.scheduledPickupAt ?? null)
+            : null,
+        pickupLatitude: input.pickupLocation.latitude,
+        pickupLongitude: input.pickupLocation.longitude,
+        pickupAddress: input.pickupLocation.address?.trim() || null,
+        pickupPlaceId: input.pickupLocation.placeId?.trim() || null,
+        dropoffLatitude: input.deliveryLocation.latitude,
+        dropoffLongitude: input.deliveryLocation.longitude,
+        dropoffAddress: input.deliveryLocation.address?.trim() || null,
+        dropoffPlaceId: input.deliveryLocation.placeId?.trim() || null,
+        itemTitle: this.toMotorcycleRequestTitle(input.motorcycleType),
+        itemType: ItemType.MOTORCYCLE,
+        motorcycleType: input.motorcycleType,
+        motorcycleChassisNumber:
+          input.chassisNumber?.trim().toUpperCase() || null,
+        motorcycleCondition: input.motorcycleCondition,
+        requiresSpecialWrapping: input.requiresSpecialWrapping,
+        requiresDedicatedCarrier: input.requiresDedicatedCarrier,
       },
       select: REQUEST_SELECT,
     });
@@ -1096,6 +1205,19 @@ export class CustomerRequestsService {
       }
     }
 
+    if (service.key === ServiceKey.MOTORCYCLE_TRANSPORT) {
+      if (!request.motorcycleType) {
+        throw new BadRequestException(
+          'motorcycleType is required for motorcycle transport.',
+        );
+      }
+      if (!request.motorcycleCondition) {
+        throw new BadRequestException(
+          'motorcycleCondition is required for motorcycle transport.',
+        );
+      }
+    }
+
     const updatedRequest = await this.prisma.transportRequest.update({
       where: { id: input.requestId },
       data: {
@@ -1641,6 +1763,22 @@ export class CustomerRequestsService {
       specialInstructions: request.specialInstructions,
     };
 
+    const motorcycleDetails =
+      request.itemType === ItemType.MOTORCYCLE ||
+      request.motorcycleType !== null ||
+      request.motorcycleChassisNumber !== null ||
+      request.motorcycleCondition !== null ||
+      request.requiresSpecialWrapping ||
+      request.requiresDedicatedCarrier
+        ? {
+            type: request.motorcycleType,
+            chassisNumber: request.motorcycleChassisNumber,
+            condition: request.motorcycleCondition,
+            requiresSpecialWrapping: request.requiresSpecialWrapping,
+            requiresDedicatedCarrier: request.requiresDedicatedCarrier,
+          }
+        : undefined;
+
     return {
       id: request.id,
       serviceId: request.serviceId,
@@ -1675,8 +1813,25 @@ export class CustomerRequestsService {
         condition: request.vehicleCondition,
         conditionNotes: request.vehicleConditionNotes,
       },
+      motorcycleDetails,
       photos: this.toPhotoResponses(request.photos),
     };
+  }
+
+  private toMotorcycleRequestTitle(motorcycleType: MotorcycleType): string {
+    switch (motorcycleType) {
+      case MotorcycleType.SPORT_BIKE:
+        return 'Sport bike transport';
+      case MotorcycleType.CRUISER:
+        return 'Cruiser transport';
+      case MotorcycleType.ELECTRIC_MOTORCYCLE:
+        return 'Electric motorcycle transport';
+      case MotorcycleType.SCOOTER:
+        return 'Scooter transport';
+      case MotorcycleType.OTHER:
+      default:
+        return 'Motorcycle transport';
+    }
   }
 
   private assertVehicleConditionForService(input: {
