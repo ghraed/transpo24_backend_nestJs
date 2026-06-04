@@ -2,14 +2,17 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 import {
   DriverOfferStatus,
+  DriverRequestAlertStatus,
   DriverStatus,
   GoodsHeavyShipmentType,
   GoodsShipmentSize,
@@ -21,9 +24,11 @@ import {
   ServiceKey,
   TransportRequestStatus,
   VehicleCondition,
+  VehicleType,
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { TripsGateway } from '../trips/trips.gateway';
 import {
   CustomerRequestResponseDto,
   CustomerHomeRequestSummaryDto,
@@ -141,8 +146,31 @@ interface CreateGoodsTransportRequestInput {
   isFragile: boolean;
   requiresRefrigeration: boolean;
   heavyShipmentType?: GoodsHeavyShipmentType;
+  isImmediate?: boolean;
+  scheduledPickupAt?: Date;
   pickupLocation: GoodsRequestLocationInput;
   deliveryLocation: GoodsRequestLocationInput;
+}
+
+interface FurnitureRequestLocationInput {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  placeId?: string;
+}
+
+interface CreateFurnitureTransportRequestInput {
+  customerId: string;
+  furnitureDescription: string;
+  approximateItemCount: number;
+  needsHelpers?: boolean;
+  isImmediate?: boolean;
+  scheduledPickupAt?: Date;
+  movingDate: Date;
+  customerCanHelpLoading?: boolean;
+  pickupLocation: FurnitureRequestLocationInput;
+  deliveryLocation: FurnitureRequestLocationInput;
+  files: MulterFile[];
 }
 
 interface UploadRequestPhotosInput {
@@ -271,6 +299,10 @@ type TransportRequestResponseSource = {
   goodsIsFragile: boolean;
   goodsRequiresRefrigeration: boolean;
   goodsHeavyShipmentType: GoodsHeavyShipmentType | null;
+  furnitureDescription: string | null;
+  furnitureApproximateItemCount: number | null;
+  furnitureNeedsHelpers: boolean;
+  furnitureCustomerCanHelpLoading: boolean;
   itemCondition: ItemCondition | null;
   itemWeightKg: number | null;
   itemLengthCm: number | null;
@@ -361,6 +393,86 @@ type CustomerRequestOfferSource = {
   status: DriverOfferStatus;
   createdAt: Date;
   acceptedAt: Date | null;
+  driver: {
+    firstName: string;
+    lastName: string;
+    averageRating: Prisma.Decimal | null;
+    profilePhotoUrl: string | null;
+    vehicles: Array<{
+      documents: Array<{
+        url: string;
+      }>;
+    }>;
+  };
+};
+
+type DispatchSummary = CustomerRequestResponseDto['dispatchSummary'];
+
+type EligibleDriverDispatchCandidate = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  status: DriverStatus;
+  isProfileCompleted: boolean;
+  availability: {
+    isOnline: boolean;
+    baseLatitude: number | null;
+    baseLongitude: number | null;
+    serviceRadiusKm: number;
+    acceptsImmediateRequests: boolean;
+    acceptsScheduledRequests: boolean;
+  } | null;
+  vehicles: Array<{
+    vehicleType: VehicleType;
+  }>;
+};
+
+type DriverRequestAlertSummaryPayload = {
+  alertId: string;
+  requestId: string;
+  alertStatus: DriverRequestAlertStatus;
+  requestStatus: TransportRequestStatus;
+  service: {
+    id: string;
+    key: ServiceKey;
+    nameEn: string;
+    nameAr: string;
+    icon: string | null;
+  } | null;
+  pickup: {
+    latitude: number | null;
+    longitude: number | null;
+    address: string | null;
+  };
+  dropoff: {
+    latitude: number | null;
+    longitude: number | null;
+    address: string | null;
+  };
+  schedule: {
+    isImmediate: boolean;
+    scheduledPickupAt: string | null;
+  };
+  item: {
+    title: string | null;
+    type: ItemType | null;
+    description: string | null;
+  };
+  vehicleDetails: {
+    vin: string | null;
+    brand: string | null;
+    model: string | null;
+    series: string | null;
+    variant: string | null;
+    manufactureYear: number | null;
+    estimatedWeightKg: number | null;
+    bodyType: string | null;
+    condition: VehicleCondition | null;
+    conditionNotes: string | null;
+  };
+  distanceKm: number | null;
+  createdAt: string;
+  submittedAt: string | null;
 };
 
 const MAX_TOTAL_PHOTOS = 8;
@@ -413,6 +525,10 @@ const REQUEST_SELECT = {
   goodsIsFragile: true,
   goodsRequiresRefrigeration: true,
   goodsHeavyShipmentType: true,
+  furnitureDescription: true,
+  furnitureApproximateItemCount: true,
+  furnitureNeedsHelpers: true,
+  furnitureCustomerCanHelpLoading: true,
   itemCondition: true,
   itemWeightKg: true,
   itemLengthCm: true,
@@ -481,6 +597,13 @@ const REQUEST_STATUS_SELECT = {
   },
 } satisfies Prisma.TransportRequestSelect;
 
+const DRIVER_SERVICE_VEHICLE_TYPE_MAP: Record<ServiceKey, VehicleType[]> = {
+  VEHICLE_TRANSPORT: ['CAR_CARRIER', 'FLATBED_TRUCK', 'TOW_TRUCK'],
+  MOTORCYCLE_TRANSPORT: ['MOTORCYCLE_TRAILER', 'VAN', 'PICKUP_TRUCK'],
+  GOODS_TRANSPORT: ['VAN', 'BOX_TRUCK', 'PICKUP_TRUCK'],
+  FURNITURE_TRANSPORT: ['FURNITURE_TRUCK', 'BOX_TRUCK', 'VAN'],
+};
+
 const STATUS_LABELS: Record<TransportRequestStatus, string> = {
   DRAFT: 'Draft',
   PENDING_QUOTES: 'Waiting for driver offers',
@@ -518,7 +641,11 @@ const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
 
 @Injectable()
 export class CustomerRequestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => TripsGateway))
+    private readonly tripsGateway: TripsGateway,
+  ) {}
 
   async createDraftRequest(
     input: CreateCustomerRequestInput,
@@ -685,12 +812,35 @@ export class CustomerRequestsService {
       );
     }
 
+    if (input.scheduledPickupAt && Number.isNaN(input.scheduledPickupAt.getTime())) {
+      throw new BadRequestException(
+        'scheduledPickupAt must be a valid ISO date.',
+      );
+    }
+
+    if (input.isImmediate === false && !input.scheduledPickupAt) {
+      throw new BadRequestException(
+        'scheduledPickupAt is required when isImmediate is false.',
+      );
+    }
+
+    if (
+      input.scheduledPickupAt &&
+      input.scheduledPickupAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('scheduledPickupAt cannot be in the past.');
+    }
+
     const request = await this.prisma.transportRequest.create({
       data: {
         customerId: input.customerId,
         serviceId: service.id,
         status: TransportRequestStatus.DRAFT,
-        isImmediate: true,
+        isImmediate: input.isImmediate ?? true,
+        scheduledPickupAt:
+          input.isImmediate === false
+            ? (input.scheduledPickupAt ?? null)
+            : null,
         pickupLatitude: input.pickupLocation.latitude,
         pickupLongitude: input.pickupLocation.longitude,
         pickupAddress: input.pickupLocation.address?.trim() || null,
@@ -719,6 +869,153 @@ export class CustomerRequestsService {
     });
 
     return this.toResponseDto(request);
+  }
+
+  async createFurnitureTransportRequest(
+    input: CreateFurnitureTransportRequestInput,
+  ): Promise<CustomerRequestResponseDto> {
+    if (!input.files || input.files.length === 0) {
+      throw new BadRequestException('At least one furniture photo is required.');
+    }
+
+    const service = await this.prisma.service.findUnique({
+      where: { key: ServiceKey.FURNITURE_TRANSPORT },
+      select: { id: true, isActive: true },
+    });
+
+    if (!service || !service.isActive) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException(
+        'Furniture transport service does not exist or is inactive.',
+      );
+    }
+
+    const isSameAsPickup =
+      input.pickupLocation.latitude === input.deliveryLocation.latitude &&
+      input.pickupLocation.longitude === input.deliveryLocation.longitude;
+
+    if (isSameAsPickup) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException(
+        'Pickup and delivery locations cannot be exactly the same.',
+      );
+    }
+
+    if (!input.furnitureDescription?.trim()) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException('furnitureDescription is required.');
+    }
+
+    if (
+      !Number.isInteger(input.approximateItemCount) ||
+      input.approximateItemCount < 1
+    ) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException(
+        'approximateItemCount must be an integer greater than or equal to 1.',
+      );
+    }
+
+    if (Number.isNaN(input.movingDate.getTime())) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException('movingDate must be a valid ISO date.');
+    }
+
+    if (input.scheduledPickupAt && Number.isNaN(input.scheduledPickupAt.getTime())) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException(
+        'scheduledPickupAt must be a valid ISO date.',
+      );
+    }
+
+    if (input.isImmediate === false && !input.scheduledPickupAt) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException(
+        'scheduledPickupAt is required when isImmediate is false.',
+      );
+    }
+
+    const effectiveMovingDate =
+      input.isImmediate === false
+        ? (input.scheduledPickupAt ?? input.movingDate)
+        : input.movingDate;
+
+    if (effectiveMovingDate.getTime() < Date.now()) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException(
+        input.isImmediate === false
+          ? 'scheduledPickupAt cannot be in the past.'
+          : 'movingDate cannot be in the past.',
+      );
+    }
+
+    for (const file of input.files) {
+      if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+        await this.cleanupFiles(input.files);
+        throw new BadRequestException(
+          'Only JPEG, PNG, and WEBP images are allowed.',
+        );
+      }
+    }
+
+    if (input.files.length > MAX_TOTAL_PHOTOS) {
+      await this.cleanupFiles(input.files);
+      throw new BadRequestException(
+        `A request can have up to ${MAX_TOTAL_PHOTOS} photos.`,
+      );
+    }
+
+    const photoRows = input.files.map((file, index) => {
+      const storageKey = relative(process.cwd(), file.path).replace(/\\/g, '/');
+      const url = `/${storageKey}`;
+      return {
+        url,
+        storageKey,
+        originalName: file.originalname || null,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        sortOrder: index + 1,
+      };
+    });
+
+    try {
+      const request = await this.prisma.transportRequest.create({
+        data: {
+          customerId: input.customerId,
+          serviceId: service.id,
+          status: TransportRequestStatus.DRAFT,
+          submittedAt: null,
+          isImmediate: input.isImmediate ?? false,
+          scheduledPickupAt: effectiveMovingDate,
+          pickupLatitude: input.pickupLocation.latitude,
+          pickupLongitude: input.pickupLocation.longitude,
+          pickupAddress: input.pickupLocation.address?.trim() || null,
+          pickupPlaceId: input.pickupLocation.placeId?.trim() || null,
+          dropoffLatitude: input.deliveryLocation.latitude,
+          dropoffLongitude: input.deliveryLocation.longitude,
+          dropoffAddress: input.deliveryLocation.address?.trim() || null,
+          dropoffPlaceId: input.deliveryLocation.placeId?.trim() || null,
+          itemTitle: 'Furniture transport',
+          itemDescription: input.furnitureDescription.trim(),
+          itemType: ItemType.FURNITURE,
+          furnitureDescription: input.furnitureDescription.trim(),
+          furnitureApproximateItemCount: input.approximateItemCount,
+          furnitureNeedsHelpers: input.needsHelpers ?? false,
+          furnitureCustomerCanHelpLoading:
+            input.customerCanHelpLoading ?? false,
+          requiresLoadingHelp: input.needsHelpers ?? false,
+          photos: {
+            create: photoRows,
+          },
+        },
+        select: REQUEST_SELECT,
+      });
+
+      return this.toResponseDto(request);
+    } catch (error) {
+      await this.cleanupFiles(input.files);
+      throw error;
+    }
   }
 
   async updatePickupLocation(
@@ -1370,6 +1667,40 @@ export class CustomerRequestsService {
       }
     }
 
+    if (service.key === ServiceKey.FURNITURE_TRANSPORT) {
+      if (request.photos.length === 0) {
+        throw new BadRequestException(
+          'At least one furniture photo is required for furniture transport.',
+        );
+      }
+      if (!request.furnitureDescription?.trim()) {
+        throw new BadRequestException(
+          'furnitureDescription is required for furniture transport.',
+        );
+      }
+      if (
+        !request.furnitureApproximateItemCount ||
+        !Number.isInteger(request.furnitureApproximateItemCount) ||
+        request.furnitureApproximateItemCount < 1
+      ) {
+        throw new BadRequestException(
+          'approximateItemCount must be an integer greater than or equal to 1 for furniture transport.',
+        );
+      }
+      if (!request.isImmediate) {
+        if (!request.scheduledPickupAt) {
+          throw new BadRequestException(
+            'movingDate is required for furniture transport.',
+          );
+        }
+        if (request.scheduledPickupAt.getTime() < Date.now()) {
+          throw new BadRequestException(
+            'movingDate cannot be in the past for furniture transport.',
+          );
+        }
+      }
+    }
+
     const updatedRequest = await this.prisma.transportRequest.update({
       where: { id: input.requestId },
       data: {
@@ -1377,11 +1708,25 @@ export class CustomerRequestsService {
         submittedAt: new Date(),
         customerNote: input.customerNote?.trim() || request.customerNote,
       },
-      select: REQUEST_SELECT,
+      select: {
+        ...REQUEST_SELECT,
+        service: {
+          select: {
+            id: true,
+            key: true,
+            nameEn: true,
+            nameAr: true,
+            icon: true,
+          },
+        },
+      },
     });
 
-    // TODO: emit event/job for future quote matching and notifications.
-    return this.toResponseDto(updatedRequest);
+    const dispatchSummary = await this.dispatchSubmittedRequestToEligibleDrivers(
+      updatedRequest,
+    );
+
+    return this.toResponseDto(updatedRequest, dispatchSummary);
   }
 
   async getCustomerRequestStatus(
@@ -1476,6 +1821,29 @@ export class CustomerRequestsService {
         status: true,
         createdAt: true,
         acceptedAt: true,
+        driver: {
+          select: {
+            firstName: true,
+            lastName: true,
+            averageRating: true,
+            profilePhotoUrl: true,
+            vehicles: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'asc' },
+              take: 1,
+              select: {
+                documents: {
+                  where: { type: 'VEHICLE_PHOTO' },
+                  orderBy: { createdAt: 'asc' },
+                  take: 1,
+                  select: {
+                    url: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1631,6 +1999,18 @@ export class CustomerRequestsService {
         },
       });
 
+      const rejectedPendingOffers = await tx.driverOffer.findMany({
+        where: {
+          requestId: request.id,
+          id: { not: offer.id },
+          status: DriverOfferStatus.PENDING,
+        },
+        select: {
+          id: true,
+          driverId: true,
+        },
+      });
+
       const rejectedOffers = await tx.driverOffer.updateMany({
         where: {
           requestId: request.id,
@@ -1667,6 +2047,7 @@ export class CustomerRequestsService {
         acceptedOffer,
         updatedRequest,
         rejectedOffersCount: rejectedOffers.count,
+        rejectedOffers: rejectedPendingOffers,
       };
     });
 
@@ -1680,7 +2061,19 @@ export class CustomerRequestsService {
       );
     }
 
-    return {
+    const acceptedRequest = await this.prisma.transportRequest.findUnique({
+      where: { id: result.updatedRequest.id },
+      select: {
+        pickupLatitude: true,
+        pickupLongitude: true,
+        pickupAddress: true,
+        dropoffLatitude: true,
+        dropoffLongitude: true,
+        dropoffAddress: true,
+      },
+    });
+
+    const response = {
       request: {
         id: result.updatedRequest.id,
         status: result.updatedRequest.status,
@@ -1690,8 +2083,49 @@ export class CustomerRequestsService {
       },
       acceptedOffer: this.toAcceptedOfferResponse(result.acceptedOffer),
       rejectedOffersCount: result.rejectedOffersCount,
-      nextStep: 'TRACK_REQUEST',
+      nextStep: 'TRACK_REQUEST' as const,
     };
+
+    this.tripsGateway.emitOfferAccepted(
+      {
+        tripId: result.updatedRequest.id,
+        acceptedOfferId: result.updatedRequest.acceptedOfferId,
+        driverId: result.updatedRequest.assignedDriverId,
+        customerId: input.customerId,
+        agreedPrice: Number(result.acceptedOffer.price),
+        currency: result.acceptedOffer.currency,
+        pickupLocation: {
+          latitude: acceptedRequest?.pickupLatitude ?? 0,
+          longitude: acceptedRequest?.pickupLongitude ?? 0,
+          address: acceptedRequest?.pickupAddress ?? null,
+        },
+        dropoffLocation: {
+          latitude: acceptedRequest?.dropoffLatitude ?? 0,
+          longitude: acceptedRequest?.dropoffLongitude ?? 0,
+          address: acceptedRequest?.dropoffAddress ?? null,
+        },
+        status: result.updatedRequest.status,
+      },
+      {
+        tripId: result.updatedRequest.id,
+        status: result.updatedRequest.status,
+        updatedAt: result.updatedRequest.acceptedAt.toISOString(),
+      },
+    );
+
+    for (const rejectedOffer of result.rejectedOffers) {
+      this.tripsGateway.emitOfferRejected({
+        requestId: result.updatedRequest.id,
+        offerId: rejectedOffer.id,
+        driverId: rejectedOffer.driverId,
+        status: DriverOfferStatus.REJECTED,
+        rejectedAt: result.updatedRequest.acceptedAt.toISOString(),
+      });
+    }
+
+    this.tripsGateway.emitRequestDriverSelected(input.customerId, response);
+
+    return response;
   }
 
   async getCustomerHome(
@@ -1888,6 +2322,7 @@ export class CustomerRequestsService {
 
   private toResponseDto(
     request: TransportRequestResponseSource,
+    dispatchSummary?: DispatchSummary,
   ): CustomerRequestResponseDto {
     const schedule: ScheduleResponse = {
       isImmediate: request.isImmediate,
@@ -1951,6 +2386,23 @@ export class CustomerRequestsService {
           }
         : undefined;
 
+    const furnitureDetails =
+      request.itemType === ItemType.FURNITURE ||
+      request.furnitureDescription !== null ||
+      request.furnitureApproximateItemCount !== null ||
+      request.furnitureNeedsHelpers ||
+      request.furnitureCustomerCanHelpLoading
+        ? {
+            description: request.furnitureDescription,
+            approximateItemCount: request.furnitureApproximateItemCount,
+            needsHelpers: request.furnitureNeedsHelpers,
+            movingDate: request.scheduledPickupAt
+              ? request.scheduledPickupAt.toISOString()
+              : null,
+            customerCanHelpLoading: request.furnitureCustomerCanHelpLoading,
+          }
+        : undefined;
+
     return {
       id: request.id,
       serviceId: request.serviceId,
@@ -1987,7 +2439,9 @@ export class CustomerRequestsService {
       },
       motorcycleDetails,
       goodsDetails,
+      furnitureDetails,
       photos: this.toPhotoResponses(request.photos),
+      dispatchSummary,
     };
   }
 
@@ -2122,23 +2576,319 @@ export class CustomerRequestsService {
   private toCustomerRequestOfferSummary(
     offer: CustomerRequestOfferSource,
   ): CustomerRequestOfferSummaryDto {
+    const driverName = `${offer.driver.firstName} ${offer.driver.lastName}`.trim();
+    const driverVehiclePhoto =
+      offer.driver.vehicles[0]?.documents[0]?.url ?? offer.driver.profilePhotoUrl ?? null;
+    const driverRating =
+      offer.driver.averageRating !== null ? Number(offer.driver.averageRating) : null;
+    const estimatedPickupAt = offer.estimatedPickupAt
+      ? offer.estimatedPickupAt.toISOString()
+      : null;
+
     return {
       id: offer.id,
+      offerId: offer.id,
       requestId: offer.requestId,
       driverId: offer.driverId,
+      driverName: driverName || null,
+      driverVehiclePhoto,
+      driverRating,
       price: Number(offer.price),
+      proposedPrice: Number(offer.price),
       currency: offer.currency,
-      estimatedPickupAt: offer.estimatedPickupAt
-        ? offer.estimatedPickupAt.toISOString()
-        : null,
+      estimatedPickupAt,
+      estimatedArrivalTime: estimatedPickupAt,
       estimatedDeliveryAt: offer.estimatedDeliveryAt
         ? offer.estimatedDeliveryAt.toISOString()
         : null,
       estimatedDurationMinutes: offer.estimatedDurationMinutes,
       message: offer.message,
       status: offer.status,
+      offerStatus: offer.status,
       createdAt: offer.createdAt.toISOString(),
       acceptedAt: offer.acceptedAt ? offer.acceptedAt.toISOString() : null,
     };
   }
+
+  private async dispatchSubmittedRequestToEligibleDrivers(
+    request: TransportRequestResponseSource & {
+      service: {
+        id: string;
+        key: ServiceKey;
+        nameEn: string;
+        nameAr: string;
+        icon: string | null;
+      } | null;
+    },
+  ): Promise<DispatchSummary> {
+    if (!request.service) {
+      return {
+        eligibleDriversCount: 0,
+        connectedDriversCount: 0,
+        alertsCreatedCount: 0,
+        broadcastedAt: new Date().toISOString(),
+        noConnectedDriversAvailable: true,
+      };
+    }
+
+    const eligibleDrivers = await this.prisma.driverProfile.findMany({
+      where: {
+        status: DriverStatus.APPROVED,
+        isProfileCompleted: true,
+        availability: {
+          is: {
+            isOnline: true,
+          },
+        },
+        vehicles: {
+          some: { isActive: true },
+        },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        isProfileCompleted: true,
+        availability: {
+          select: {
+            isOnline: true,
+            baseLatitude: true,
+            baseLongitude: true,
+            serviceRadiusKm: true,
+            acceptsImmediateRequests: true,
+            acceptsScheduledRequests: true,
+          },
+        },
+        vehicles: {
+          where: { isActive: true },
+          select: {
+            vehicleType: true,
+          },
+        },
+      },
+    });
+
+    const filteredDrivers = eligibleDrivers.filter((driver) =>
+      this.isEligibleForRealtimeDispatch(request, driver),
+    );
+
+    const existingAlerts = await this.prisma.driverRequestAlert.findMany({
+      where: {
+        requestId: request.id,
+        driverId: { in: filteredDrivers.map((driver) => driver.id) },
+      },
+      select: {
+        id: true,
+        driverId: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+    const existingAlertByDriverId = new Map(
+      existingAlerts.map((alert) => [alert.driverId, alert]),
+    );
+
+    let alertsCreatedCount = 0;
+    let connectedDriversCount = 0;
+    const broadcastedAt = new Date().toISOString();
+
+    for (const driver of filteredDrivers) {
+      const existingAlert = existingAlertByDriverId.get(driver.id);
+      const alert =
+        existingAlert ??
+        (await this.prisma.driverRequestAlert.create({
+          data: {
+            requestId: request.id,
+            driverId: driver.id,
+            status: DriverRequestAlertStatus.NEW,
+          },
+          select: {
+            id: true,
+            driverId: true,
+            status: true,
+            createdAt: true,
+          },
+        }));
+
+      if (!existingAlert) {
+        alertsCreatedCount += 1;
+      }
+
+      const roomConnections = this.tripsGateway.getDriverConnectionCount(driver.id);
+      if (roomConnections > 0) {
+        connectedDriversCount += 1;
+        this.tripsGateway.emitRequestNew(
+          driver.id,
+          this.toDriverRequestAlertSummaryPayload(
+            request,
+            alert,
+            this.calculateDistanceKm(
+              driver.availability?.baseLatitude ?? null,
+              driver.availability?.baseLongitude ?? null,
+              request.pickupLatitude,
+              request.pickupLongitude,
+            ),
+          ),
+        );
+      }
+    }
+
+    return {
+      eligibleDriversCount: filteredDrivers.length,
+      connectedDriversCount,
+      alertsCreatedCount,
+      broadcastedAt,
+      noConnectedDriversAvailable: connectedDriversCount === 0,
+    };
+  }
+
+  private isEligibleForRealtimeDispatch(
+    request: TransportRequestResponseSource & {
+      service: { key: ServiceKey } | null;
+    },
+    driver: EligibleDriverDispatchCandidate,
+  ): boolean {
+    if (!driver.availability?.isOnline || !request.service) {
+      return false;
+    }
+
+    if (request.isImmediate && !driver.availability.acceptsImmediateRequests) {
+      return false;
+    }
+
+    if (!request.isImmediate && !driver.availability.acceptsScheduledRequests) {
+      return false;
+    }
+
+    const vehicleTypes = new Set(driver.vehicles.map((vehicle) => vehicle.vehicleType));
+    if (!this.isServiceCompatibleWithDriverVehicles(request.service.key, vehicleTypes)) {
+      return false;
+    }
+
+    const distanceKm = this.calculateDistanceKm(
+      driver.availability.baseLatitude,
+      driver.availability.baseLongitude,
+      request.pickupLatitude,
+      request.pickupLongitude,
+    );
+
+    if (
+      distanceKm !== null &&
+      driver.availability.serviceRadiusKm > 0 &&
+      distanceKm > driver.availability.serviceRadiusKm
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private isServiceCompatibleWithDriverVehicles(
+    serviceKey: ServiceKey,
+    vehicleTypes: Set<VehicleType>,
+  ): boolean {
+    const allowedTypes = DRIVER_SERVICE_VEHICLE_TYPE_MAP[serviceKey];
+    return allowedTypes.some((vehicleType) => vehicleTypes.has(vehicleType));
+  }
+
+  private calculateDistanceKm(
+    originLat: number | null,
+    originLng: number | null,
+    targetLat: number | null,
+    targetLng: number | null,
+  ): number | null {
+    if (
+      originLat === null ||
+      originLng === null ||
+      targetLat === null ||
+      targetLng === null
+    ) {
+      return null;
+    }
+
+    const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRadians(targetLat - originLat);
+    const dLng = toRadians(targetLng - originLng);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(originLat)) *
+        Math.cos(toRadians(targetLat)) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Number((earthRadiusKm * c).toFixed(2));
+  }
+
+  private toDriverRequestAlertSummaryPayload(
+    request: TransportRequestResponseSource & {
+      service: {
+        id: string;
+        key: ServiceKey;
+        nameEn: string;
+        nameAr: string;
+        icon: string | null;
+      } | null;
+    },
+    alert: {
+      id: string;
+      status: DriverRequestAlertStatus;
+      createdAt: Date;
+    },
+    distanceKm: number | null,
+  ): DriverRequestAlertSummaryPayload {
+    return {
+      alertId: alert.id,
+      requestId: request.id,
+      alertStatus: alert.status,
+      requestStatus: request.status,
+      service: request.service
+        ? {
+            id: request.service.id,
+            key: request.service.key,
+            nameEn: request.service.nameEn,
+            nameAr: request.service.nameAr,
+            icon: request.service.icon ?? null,
+          }
+        : null,
+      pickup: {
+        latitude: request.pickupLatitude,
+        longitude: request.pickupLongitude,
+        address: request.pickupAddress,
+      },
+      dropoff: {
+        latitude: request.dropoffLatitude,
+        longitude: request.dropoffLongitude,
+        address: request.dropoffAddress,
+      },
+      schedule: {
+        isImmediate: request.isImmediate,
+        scheduledPickupAt: request.scheduledPickupAt
+          ? request.scheduledPickupAt.toISOString()
+          : null,
+      },
+      item: {
+        title: request.itemTitle,
+        type: request.itemType,
+        description: request.itemDescription,
+      },
+      vehicleDetails: {
+        vin: request.vehicleVin,
+        brand: request.vehicleBrand,
+        model: request.vehicleModel,
+        series: request.vehicleSeries,
+        variant: request.vehicleVariant,
+        manufactureYear: request.vehicleManufactureYear,
+        estimatedWeightKg: request.vehicleEstimatedWeightKg,
+        bodyType: request.vehicleBodyType,
+        condition: request.vehicleCondition,
+        conditionNotes: request.vehicleConditionNotes,
+      },
+      distanceKm,
+      createdAt: alert.createdAt.toISOString(),
+      submittedAt: request.submittedAt ? request.submittedAt.toISOString() : null,
+    };
+  }
 }
+

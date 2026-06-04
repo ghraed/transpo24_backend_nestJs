@@ -27,6 +27,7 @@ import { relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { TripsGateway } from '../trips/trips.gateway';
 import { DriverAvailabilityDayDto } from './dto/update-driver-availability.dto';
 import { DriverAvailabilityResponseDto } from './dto/driver-availability-response.dto';
 import {
@@ -61,6 +62,7 @@ import {
   DriverEarningsSummaryResponse,
   DriverRatingItemResponse,
   DriverRatingsListInput,
+  OfferNewPayload,
   PaginatedResponse,
 } from '../trips/trips.types';
 
@@ -326,6 +328,7 @@ type DriverRatingSource = {
 
 type RequestDetailsSource = {
   id: string;
+  customerId: string;
   status: TransportRequestStatus;
   submittedAt: Date | null;
   pickupLatitude: number | null;
@@ -556,6 +559,7 @@ const DRIVER_REQUEST_DETAILS_SELECT = {
       icon: true,
     },
   },
+  customerId: true,
   customer: {
     select: {
       name: true,
@@ -660,7 +664,10 @@ const ACCEPTED_JOB_REQUEST_STATUSES: TransportRequestStatus[] = [
 
 @Injectable()
 export class DriverService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tripsGateway: TripsGateway,
+  ) {}
 
   async getMe(input: GetDriverMeInput): Promise<DriverMeResponseDto> {
     const user = await this.prisma.user.findUnique({
@@ -1479,12 +1486,95 @@ export class DriverService {
               status: request.status,
             };
 
-      // TODO: emit customer.offer.received notification event when notifications/socket module is available.
       return {
         createdOffer,
         updatedRequest,
+        customerId: request.customerId,
+        driverId: profile.id,
       };
     });
+
+    const customerOffer = await this.prisma.driverOffer.findUnique({
+      where: { id: result.createdOffer.id },
+      select: {
+        id: true,
+        requestId: true,
+        driverId: true,
+        price: true,
+        currency: true,
+        estimatedPickupAt: true,
+        estimatedDeliveryAt: true,
+        estimatedDurationMinutes: true,
+        message: true,
+        status: true,
+        createdAt: true,
+        acceptedAt: true,
+        driver: {
+          select: {
+            firstName: true,
+            lastName: true,
+            averageRating: true,
+            profilePhotoUrl: true,
+            vehicles: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'asc' },
+              take: 1,
+              select: {
+                documents: {
+                  where: { type: DriverDocumentType.VEHICLE_PHOTO },
+                  orderBy: { createdAt: 'asc' },
+                  take: 1,
+                  select: { url: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (customerOffer) {
+      const estimatedPickupAt = customerOffer.estimatedPickupAt
+        ? customerOffer.estimatedPickupAt.toISOString()
+        : null;
+      const driverName = `${customerOffer.driver.firstName} ${customerOffer.driver.lastName}`.trim();
+      const payload: OfferNewPayload = {
+        requestId: result.updatedRequest.id,
+        requestStatus: result.updatedRequest.status,
+        offer: {
+          id: customerOffer.id,
+          offerId: customerOffer.id,
+          requestId: customerOffer.requestId,
+          driverId: customerOffer.driverId,
+          driverName: driverName || null,
+          driverVehiclePhoto:
+            customerOffer.driver.vehicles[0]?.documents[0]?.url ??
+            customerOffer.driver.profilePhotoUrl ??
+            null,
+          driverRating:
+            customerOffer.driver.averageRating !== null
+              ? Number(customerOffer.driver.averageRating)
+              : null,
+          price: Number(customerOffer.price),
+          proposedPrice: Number(customerOffer.price),
+          currency: customerOffer.currency,
+          estimatedPickupAt,
+          estimatedArrivalTime: estimatedPickupAt,
+          estimatedDeliveryAt: customerOffer.estimatedDeliveryAt
+            ? customerOffer.estimatedDeliveryAt.toISOString()
+            : null,
+          estimatedDurationMinutes: customerOffer.estimatedDurationMinutes,
+          message: customerOffer.message,
+          status: customerOffer.status,
+          offerStatus: customerOffer.status,
+          createdAt: customerOffer.createdAt.toISOString(),
+          acceptedAt: customerOffer.acceptedAt
+            ? customerOffer.acceptedAt.toISOString()
+            : null,
+        },
+      };
+      this.tripsGateway.emitOfferNew(result.customerId, payload);
+    }
 
     return {
       offer: this.toDriverOfferResponse(result.createdOffer),

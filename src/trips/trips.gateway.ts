@@ -23,6 +23,10 @@ import {
   ItemDeliveredPayload,
   ItemPickedUpPayload,
   OfferAcceptedPayload,
+  OfferNewPayload,
+  OfferRejectedPayload,
+  RequestDriverSelectedPayload,
+  RequestNewPayload,
   TripStatusUpdatedPayload,
 } from './trips.types';
 
@@ -211,6 +215,36 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (error) {
       throw this.toWsException(error);
     }
+  }
+
+  emitRequestNew(driverId: string, payload: RequestNewPayload): void {
+    this.server.to(this.getDriverRoom(driverId)).emit('requestNew', payload);
+  }
+
+  emitOfferNew(customerId: string, payload: OfferNewPayload): void {
+    this.server.to(this.getCustomerRoom(customerId)).emit('offerNew', payload);
+  }
+
+  emitRequestDriverSelected(
+    customerId: string,
+    payload: RequestDriverSelectedPayload,
+  ): void {
+    this.server
+      .to(this.getCustomerRoom(customerId))
+      .emit('requestDriverSelected', payload);
+  }
+
+  emitOfferRejected(payload: OfferRejectedPayload): void {
+    this.server
+      .to(this.getDriverRoom(payload.driverId))
+      .emit('offerRejected', payload);
+  }
+
+  getDriverConnectionCount(driverId: string): number {
+    const room = this.server.sockets.adapter.rooms.get(
+      this.getDriverRoom(driverId),
+    );
+    return room?.size ?? 0;
   }
 
   emitOfferAccepted(

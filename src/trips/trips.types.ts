@@ -5,6 +5,9 @@ import {
   TransportRequestStatus,
   UserRole,
 } from '@prisma/client';
+import type { CustomerRequestOfferSummaryDto } from '../customer-requests/dto/customer-request-offers.dto';
+import type { CustomerAcceptOfferResponseDto } from '../customer-requests/dto/customer-accept-offer-response.dto';
+import type { DriverRequestAlertSummaryDto } from '../driver/dto/driver-request-alert.dto';
 
 export type TripUserRole = UserRole;
 
@@ -62,8 +65,11 @@ export type DeliverItemInput = {
 
 export type OfferAcceptedPayload = {
   tripId: string;
+  acceptedOfferId: string;
   driverId: string;
   customerId: string;
+  agreedPrice: number;
+  currency: string;
   pickupLocation: {
     latitude: number;
     longitude: number;
@@ -76,6 +82,24 @@ export type OfferAcceptedPayload = {
   };
   status: TransportRequestStatus;
 };
+
+export type RequestNewPayload = DriverRequestAlertSummaryDto;
+
+export type OfferNewPayload = {
+  requestId: string;
+  requestStatus: TransportRequestStatus;
+  offer: CustomerRequestOfferSummaryDto;
+};
+
+export type OfferRejectedPayload = {
+  requestId: string;
+  offerId: string;
+  driverId: string;
+  status: DriverOfferStatus;
+  rejectedAt: string;
+};
+
+export type RequestDriverSelectedPayload = CustomerAcceptOfferResponseDto;
 
 export type TripStatusUpdatedPayload = {
   tripId: string;

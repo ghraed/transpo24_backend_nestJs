@@ -21,6 +21,7 @@ import { extname, join } from 'node:path';
 import { FilesInterceptor } from '@nestjs/platform-express';
 
 import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
+import { CreateFurnitureTransportRequestDto } from './dto/create-furniture-transport-request.dto';
 import { CreateGoodsTransportRequestDto } from './dto/create-goods-transport-request.dto';
 import { CreateMotorcycleTransportRequestDto } from './dto/create-motorcycle-transport-request.dto';
 import { CreateServiceRequestDto } from './dto/create-service-request.dto';
@@ -127,8 +128,70 @@ export class CustomerRequestsController {
       isFragile: dto.isFragile,
       requiresRefrigeration: dto.requiresRefrigeration,
       heavyShipmentType: dto.heavyShipmentType,
+      isImmediate: dto.isImmediate,
+      scheduledPickupAt: dto.scheduledPickupAt
+        ? new Date(dto.scheduledPickupAt)
+        : undefined,
       pickupLocation: dto.pickupLocation,
       deliveryLocation: dto.deliveryLocation,
+    });
+  }
+
+  @Post('furniture-transport')
+  @UseInterceptors(
+    FilesInterceptor('photos', MAX_PHOTOS_PER_REQUEST, {
+      storage: diskStorage({
+        destination: (_req, _file, callback) => {
+          const targetDirectory = join(
+            process.cwd(),
+            'uploads',
+            'transport-requests',
+            'furniture-transport',
+          );
+          mkdirSync(targetDirectory, { recursive: true });
+          callback(null, targetDirectory);
+        },
+        filename: (_req, file, callback) => {
+          const randomSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const extension =
+            extname(file.originalname || '').toLowerCase() || '.jpg';
+          callback(null, `photo-${randomSuffix}${extension}`);
+        },
+      }),
+      limits: {
+        fileSize: MAX_PHOTO_SIZE_BYTES,
+      },
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+          callback(
+            new Error('Only JPEG, PNG, and WEBP images are allowed.'),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async createFurnitureTransportRequest(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateFurnitureTransportRequestDto,
+    @UploadedFiles() files: MulterFile[],
+  ): Promise<CustomerRequestResponseDto> {
+    return this.customerRequestsService.createFurnitureTransportRequest({
+      customerId: request.user.id,
+      furnitureDescription: dto.furnitureDescription,
+      approximateItemCount: dto.approximateItemCount,
+      needsHelpers: dto.needsHelpers ?? false,
+      isImmediate: dto.isImmediate,
+      scheduledPickupAt: dto.scheduledPickupAt
+        ? new Date(dto.scheduledPickupAt)
+        : undefined,
+      movingDate: new Date(dto.movingDate),
+      customerCanHelpLoading: dto.customerCanHelpLoading ?? false,
+      pickupLocation: dto.pickupLocation,
+      deliveryLocation: dto.deliveryLocation,
+      files: files ?? [],
     });
   }
 
@@ -314,6 +377,7 @@ export class CustomerRequestsController {
   }
 
   @Post(':requestId/offers/:offerId/accept')
+  @Post(':requestId/offers/:offerId/confirm')
   async acceptDriverOffer(
     @Req() request: AuthenticatedRequest,
     @Param('requestId') requestId: string,

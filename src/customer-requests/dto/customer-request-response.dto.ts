@@ -75,6 +75,13 @@ export class CustomerRequestResponseDto {
     requiresRefrigeration: boolean;
     heavyShipmentType: GoodsHeavyShipmentType | null;
   };
+  furnitureDetails?: {
+    description: string | null;
+    approximateItemCount: number | null;
+    needsHelpers: boolean;
+    movingDate: string | null;
+    customerCanHelpLoading: boolean;
+  };
   photos!: Array<{
     id: string;
     url: string;
@@ -83,6 +90,13 @@ export class CustomerRequestResponseDto {
     sortOrder: number;
     createdAt: string;
   }>;
+  dispatchSummary?: {
+    eligibleDriversCount: number;
+    connectedDriversCount: number;
+    alertsCreatedCount: number;
+    broadcastedAt: string;
+    noConnectedDriversAvailable: boolean;
+  };
 }
 
 export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto {

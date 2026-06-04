@@ -244,6 +244,10 @@ model TransportRequest {
   goodsIsFragile       Boolean               @default(false)
   goodsRequiresRefrigeration Boolean         @default(false)
   goodsHeavyShipmentType GoodsHeavyShipmentType?
+  furnitureDescription String?
+  furnitureApproximateItemCount Int?
+  furnitureNeedsHelpers Boolean              @default(false)
+  furnitureCustomerCanHelpLoading Boolean    @default(false)
   itemCondition       ItemCondition?
   itemWeightKg        Float?
   itemLengthCm        Float?

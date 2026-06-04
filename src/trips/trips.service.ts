@@ -90,6 +90,7 @@ export class TripsService {
         id: true,
         customerId: true,
         assignedDriverId: true,
+        acceptedOfferId: true,
         status: true,
         pickupLatitude: true,
         pickupLongitude: true,
@@ -97,6 +98,12 @@ export class TripsService {
         dropoffLatitude: true,
         dropoffLongitude: true,
         dropoffAddress: true,
+        acceptedOffer: {
+          select: {
+            price: true,
+            currency: true,
+          },
+        },
       },
     });
 
@@ -121,8 +128,11 @@ export class TripsService {
 
     return {
       tripId: trip.id,
+      acceptedOfferId: trip.acceptedOfferId ?? '',
       driverId: trip.assignedDriverId,
       customerId: trip.customerId,
+      agreedPrice: trip.acceptedOffer ? Number(trip.acceptedOffer.price) : 0,
+      currency: trip.acceptedOffer?.currency ?? 'USD',
       pickupLocation: {
         latitude: trip.pickupLatitude,
         longitude: trip.pickupLongitude,

@@ -1,22 +1,18 @@
-import { GoodsHeavyShipmentType, GoodsShipmentSize } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
-  IsEnum,
   IsInt,
   IsNotEmpty,
-  IsNotEmptyObject,
   IsNumber,
+  IsNotEmptyObject,
   IsOptional,
   IsString,
   Max,
   MaxLength,
   Min,
-  ValidateIf,
   ValidateNested,
 } from 'class-validator';
-
 
 function toBoolean(value: unknown): boolean | undefined {
   if (typeof value === 'boolean') return value;
@@ -28,7 +24,19 @@ function toBoolean(value: unknown): boolean | undefined {
   return value as boolean | undefined;
 }
 
-class GoodsRequestLocationDto {
+function toObject(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+class FurnitureRequestLocationDto {
   @Type(() => Number)
   @IsNumber()
   @Min(-90)
@@ -52,34 +60,21 @@ class GoodsRequestLocationDto {
   placeId?: string;
 }
 
-export class CreateGoodsTransportRequestDto {
-  @IsEnum(GoodsShipmentSize)
-  shipmentSize!: GoodsShipmentSize;
-
+export class CreateFurnitureTransportRequestDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(1000)
-  goodsDescription!: string;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.000001)
-  approximateWeightKg!: number;
+  furnitureDescription!: string;
 
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  numberOfPieces!: number;
+  approximateItemCount!: number;
 
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
-  isFragile!: boolean;
-
-  @IsBoolean()
-  requiresRefrigeration!: boolean;
-
-  @ValidateIf((value: CreateGoodsTransportRequestDto) => value.approximateWeightKg >= 50)
-  @IsEnum(GoodsHeavyShipmentType)
-  heavyShipmentType?: GoodsHeavyShipmentType;
+  needsHelpers?: boolean;
 
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))
@@ -90,13 +85,23 @@ export class CreateGoodsTransportRequestDto {
   @IsDateString()
   scheduledPickupAt?: string;
 
-  @IsNotEmptyObject()
-  @ValidateNested()
-  @Type(() => GoodsRequestLocationDto)
-  pickupLocation!: GoodsRequestLocationDto;
+  @IsDateString()
+  movingDate!: string;
 
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  customerCanHelpLoading?: boolean;
+
+  @Transform(({ value }) => toObject(value))
   @IsNotEmptyObject()
   @ValidateNested()
-  @Type(() => GoodsRequestLocationDto)
-  deliveryLocation!: GoodsRequestLocationDto;
+  @Type(() => FurnitureRequestLocationDto)
+  pickupLocation!: FurnitureRequestLocationDto;
+
+  @Transform(({ value }) => toObject(value))
+  @IsNotEmptyObject()
+  @ValidateNested()
+  @Type(() => FurnitureRequestLocationDto)
+  deliveryLocation!: FurnitureRequestLocationDto;
 }
