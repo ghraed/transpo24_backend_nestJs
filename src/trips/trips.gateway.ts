@@ -20,6 +20,7 @@ import { LeaveTripRoomDto } from './dto/leave-trip-room.dto';
 import { TripsService } from './trips.service';
 import {
   AdditionalChargeAddedPayload,
+  DriverNearDeliveryPayload,
   DriverStartedDeliveryPayload,
   ItemDeliveredPayload,
   ItemPickedUpPayload,
@@ -158,7 +159,12 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       this.server
         .to(this.getTripRoom(payload.tripId))
-        .emit('driverLocationUpdated', updated);
+        .emit('driverLocationUpdated', updated.location);
+      if (updated.nearDelivery) {
+        this.server
+          .to(this.getTripRoom(payload.tripId))
+          .emit('driverNearDelivery', updated.nearDelivery);
+      }
     } catch (error) {
       throw this.toWsException(error);
     }
@@ -338,6 +344,12 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server
       .to(this.getTripRoom(payload.tripId))
       .emit('tripStatusUpdated', tripStatus);
+  }
+
+  emitDriverNearDelivery(payload: DriverNearDeliveryPayload): void {
+    this.server
+      .to(this.getTripRoom(payload.tripId))
+      .emit('driverNearDelivery', payload);
   }
   private getAuthenticatedSocketUser(client: Socket): SocketUser {
     const user = client.data.user as SocketUser | undefined;

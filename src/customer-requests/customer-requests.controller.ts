@@ -30,6 +30,7 @@ import {
   CustomerRequestResponseDto,
   CustomerRequestStatusResponseDto,
 } from './dto/customer-request-response.dto';
+import { CustomerRequestTrackingResponseDto } from './dto/customer-request-tracking.dto';
 import { AcceptDriverOfferDto } from './dto/accept-driver-offer.dto';
 import { CustomerAcceptOfferResponseDto } from './dto/customer-accept-offer-response.dto';
 import { CustomerRequestOffersResponseDto } from './dto/customer-request-offers.dto';
@@ -212,6 +213,17 @@ export class CustomerRequestsController {
     @Param('requestId') requestId: string,
   ): Promise<CustomerRequestOffersResponseDto> {
     return this.customerRequestsService.getCustomerRequestOffers({
+      customerId: request.user.id,
+      requestId,
+    });
+  }
+
+  @Get(':requestId/tracking')
+  async getRequestTracking(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ): Promise<CustomerRequestTrackingResponseDto> {
+    return this.customerRequestsService.getCustomerRequestTracking({
       customerId: request.user.id,
       requestId,
     });

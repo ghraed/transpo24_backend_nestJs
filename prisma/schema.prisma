@@ -212,6 +212,11 @@ enum AdditionalChargeStatus {
   FAILED
 }
 
+enum TransportProofPhotoType {
+  PICKUP
+  DELIVERY
+}
+
 model User {
   id            String             @id @default(cuid())
   name          String
@@ -312,10 +317,12 @@ model TransportRequest {
   pickupNotes         String?
   pickupProofImageUrl String?
   driverGoingToDropoffAt DateTime?
+  nearDeliveryNotifiedAt DateTime?
   deliveredAt         DateTime?
   deliveryConfirmedByDriver Boolean           @default(false)
   deliveryNotes       String?
   deliveryProofImageUrl String?
+  ratingAvailableAt   DateTime?
   finalPrice           Decimal?              @db.Decimal(12, 2)
   currency             String?
   paymentStatus        PaymentStatus?
@@ -333,6 +340,7 @@ model TransportRequest {
   acceptedOffer  DriverOffer?            @relation("AcceptedOfferForRequest", fields: [acceptedOfferId], references: [id], onDelete: SetNull)
   assignedDriver DriverProfile?          @relation("AssignedDriverForRequest", fields: [assignedDriverId], references: [id], onDelete: SetNull)
   photos         TransportRequestPhoto[]
+  proofPhotos    TransportRequestProofPhoto[]
   driverAlerts   DriverRequestAlert[]
   offers         DriverOffer[]
   driverLocations DriverLocation[]
@@ -386,6 +394,26 @@ model TransportRequestPhoto {
   @@unique([requestId, sortOrder])
   @@index([requestId])
   @@map("transport_request_photos")
+}
+
+model TransportRequestProofPhoto {
+  id           String                  @id @default(cuid())
+  requestId    String
+  type         TransportProofPhotoType
+  url          String
+  storageKey   String?
+  originalName String?
+  mimeType     String
+  sizeBytes    Int
+  sortOrder    Int
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  request TransportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, type, sortOrder])
+  @@index([requestId, type])
+  @@map("transport_request_proof_photos")
 }
 
 model DriverProfile {

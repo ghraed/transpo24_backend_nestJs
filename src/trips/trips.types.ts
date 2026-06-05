@@ -1,4 +1,5 @@
 import {
+  TransportProofPhotoType,
   DriverEarningStatus,
   DriverOfferStatus,
   DriverStatus,
@@ -51,6 +52,12 @@ export type PickupItemInput = {
   longitude?: number;
   notes?: string;
   proofImageUrl?: string;
+  proofPhotos?: Array<{
+    path: string;
+    originalname: string;
+    mimetype: string;
+    size: number;
+  }>;
 };
 
 export type StartDeliveryInput = {
@@ -65,6 +72,22 @@ export type DeliverItemInput = {
   longitude?: number;
   notes?: string;
   proofImageUrl?: string;
+  proofPhotos?: Array<{
+    path: string;
+    originalname: string;
+    mimetype: string;
+    size: number;
+  }>;
+};
+
+export type RequestProofPhotoPayload = {
+  id: string;
+  type: TransportProofPhotoType;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+  sortOrder: number;
+  createdAt: string;
 };
 
 export type OfferAcceptedPayload = {
@@ -141,6 +164,7 @@ export type PickupItemResponse = {
   pickedUpAt: string;
   pickupNotes: string | null;
   pickupProofImageUrl: string | null;
+  pickupProofPhotos: RequestProofPhotoPayload[];
   nextStep: 'DELIVER_ITEM';
 };
 
@@ -152,6 +176,7 @@ export type ItemPickedUpPayload = {
   pickedUpAt: string;
   pickupNotes: string | null;
   pickupProofImageUrl: string | null;
+  pickupProofPhotos: RequestProofPhotoPayload[];
 };
 
 export type StartDeliveryResponse = {
@@ -176,6 +201,8 @@ export type DeliverItemResponse = {
   deliveredAt: string;
   deliveryNotes: string | null;
   deliveryProofImageUrl: string | null;
+  deliveryProofPhotos: RequestProofPhotoPayload[];
+  ratingAvailable: boolean;
   nextStep: 'VIEW_EARNINGS_AND_RATINGS';
 };
 
@@ -200,6 +227,17 @@ export type ItemDeliveredPayload = {
   deliveredAt: string;
   deliveryNotes: string | null;
   deliveryProofImageUrl: string | null;
+  deliveryProofPhotos: RequestProofPhotoPayload[];
+  ratingAvailable: boolean;
+};
+
+export type DriverNearDeliveryPayload = {
+  tripId: string;
+  driverId: string;
+  customerId: string;
+  distanceKm: number;
+  thresholdKm: number;
+  notifiedAt: string;
 };
 
 export type TripAccessRecord = {

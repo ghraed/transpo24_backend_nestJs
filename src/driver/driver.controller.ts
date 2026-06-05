@@ -14,7 +14,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 import type { File as MulterFile } from 'multer';
@@ -92,6 +92,7 @@ type DriverDocumentUploadFields = {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const MAX_VEHICLE_PHOTOS = 8;
+const MAX_TRIP_PROOF_PHOTOS = 8;
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const DOCUMENT_MIME_TYPES = new Set([
   'image/jpeg',
@@ -418,10 +419,54 @@ export class DriverController {
   }
 
   @Patch('trips/:tripId/pickup-item')
+  @UseInterceptors(
+    FilesInterceptor('photos', MAX_TRIP_PROOF_PHOTOS, {
+      storage: diskStorage({
+        destination: (req, _file, callback) => {
+          const driverIdValue = req.user?.id;
+          const tripIdValue = req.params?.tripId;
+          const driverId =
+            typeof driverIdValue === 'string' ? driverIdValue : 'unknown-driver';
+          const tripId =
+            typeof tripIdValue === 'string' ? tripIdValue : 'unknown-trip';
+          const targetDirectory = join(
+            process.cwd(),
+            'uploads',
+            'trips',
+            driverId,
+            tripId,
+            'pickup-proof',
+          );
+          mkdirSync(targetDirectory, { recursive: true });
+          callback(null, targetDirectory);
+        },
+        filename: (_req, file, callback) => {
+          const randomSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const extension =
+            extname(file.originalname || '').toLowerCase() || '.jpg';
+          callback(null, `pickup-proof-${randomSuffix}${extension}`);
+        },
+      }),
+      limits: {
+        fileSize: MAX_IMAGE_BYTES,
+      },
+      fileFilter: (_req, file, callback) => {
+        if (!IMAGE_MIME_TYPES.has(file.mimetype)) {
+          callback(
+            new BadRequestException('Pickup proof photos must be JPEG, PNG, or WEBP.'),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
   async pickupItem(
     @Req() request: AuthenticatedRequest,
     @Param() params: DriverTripParamDto,
     @Body() dto: PickupItemDto,
+    @UploadedFiles() files: MulterFile[] | undefined,
   ): Promise<PickupItemResponse> {
     const result = await this.tripsService.pickupItem({
       driverId: request.user.id,
@@ -430,6 +475,7 @@ export class DriverController {
       longitude: dto.longitude,
       notes: dto.notes?.trim(),
       proofImageUrl: dto.proofImageUrl?.trim(),
+      proofPhotos: files ?? [],
     });
 
     this.tripsGateway.emitItemPickedUp(result.itemPickedUp, result.status);
@@ -457,10 +503,54 @@ export class DriverController {
   }
 
   @Patch('trips/:tripId/deliver-item')
+  @UseInterceptors(
+    FilesInterceptor('photos', MAX_TRIP_PROOF_PHOTOS, {
+      storage: diskStorage({
+        destination: (req, _file, callback) => {
+          const driverIdValue = req.user?.id;
+          const tripIdValue = req.params?.tripId;
+          const driverId =
+            typeof driverIdValue === 'string' ? driverIdValue : 'unknown-driver';
+          const tripId =
+            typeof tripIdValue === 'string' ? tripIdValue : 'unknown-trip';
+          const targetDirectory = join(
+            process.cwd(),
+            'uploads',
+            'trips',
+            driverId,
+            tripId,
+            'delivery-proof',
+          );
+          mkdirSync(targetDirectory, { recursive: true });
+          callback(null, targetDirectory);
+        },
+        filename: (_req, file, callback) => {
+          const randomSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const extension =
+            extname(file.originalname || '').toLowerCase() || '.jpg';
+          callback(null, `delivery-proof-${randomSuffix}${extension}`);
+        },
+      }),
+      limits: {
+        fileSize: MAX_IMAGE_BYTES,
+      },
+      fileFilter: (_req, file, callback) => {
+        if (!IMAGE_MIME_TYPES.has(file.mimetype)) {
+          callback(
+            new BadRequestException('Delivery proof photos must be JPEG, PNG, or WEBP.'),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
   async deliverItem(
     @Req() request: AuthenticatedRequest,
     @Param() params: DriverTripParamDto,
     @Body() dto: DeliverItemDto,
+    @UploadedFiles() files: MulterFile[] | undefined,
   ): Promise<DeliverItemResponse> {
     const result = await this.tripsService.deliverItem({
       driverId: request.user.id,
@@ -469,12 +559,10 @@ export class DriverController {
       longitude: dto.longitude,
       notes: dto.notes?.trim(),
       proofImageUrl: dto.proofImageUrl?.trim(),
+      proofPhotos: files ?? [],
     });
 
     this.tripsGateway.emitItemDelivered(result.delivered, result.status);
-    if (result.payment) {
-      this.tripsGateway.emitPaymentCaptured(result.payment.customerId, result.payment);
-    }
 
     return result.response;
   }

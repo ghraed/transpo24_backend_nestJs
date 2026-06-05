@@ -11,6 +11,7 @@ import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 import {
+  DriverDocumentType,
   DriverOfferStatus,
   DriverRequestAlertStatus,
   DriverStatus,
@@ -23,6 +24,7 @@ import {
   PaymentMethod,
   Prisma,
   ServiceKey,
+  TransportProofPhotoType,
   TransportRequestStatus,
   VehicleCondition,
   VehicleType,
@@ -45,6 +47,10 @@ import {
   CustomerRequestOfferSummaryDto,
   CustomerRequestOffersResponseDto,
 } from './dto/customer-request-offers.dto';
+import {
+  CustomerRequestTrackingResponseDto,
+  RequestProofPhotoDto,
+} from './dto/customer-request-tracking.dto';
 
 interface CreateCustomerRequestInput {
   customerId: string;
@@ -110,6 +116,11 @@ interface UpdateScheduleAndItemDetailsInput {
   requiresLoadingHelp: boolean;
   loadingWorkersCount?: number;
   specialInstructions?: string;
+}
+
+interface GetCustomerRequestTrackingInput {
+  customerId: string;
+  requestId: string;
 }
 
 interface MotorcycleRequestLocationInput {
@@ -1858,6 +1869,159 @@ export class CustomerRequestsService {
     };
   }
 
+  async getCustomerRequestTracking(
+    input: GetCustomerRequestTrackingInput,
+  ): Promise<CustomerRequestTrackingResponseDto> {
+    if (!input.requestId.trim()) {
+      throw new BadRequestException('requestId is required.');
+    }
+
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: input.requestId },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+        assignedDriverId: true,
+        pickupLatitude: true,
+        pickupLongitude: true,
+        pickupAddress: true,
+        pickupPlaceId: true,
+        dropoffLatitude: true,
+        dropoffLongitude: true,
+        dropoffAddress: true,
+        dropoffPlaceId: true,
+        nearDeliveryNotifiedAt: true,
+        deliveredAt: true,
+        ratingAvailableAt: true,
+        pickupProofImageUrl: true,
+        deliveryProofImageUrl: true,
+        updatedAt: true,
+        driverRating: {
+          select: {
+            id: true,
+          },
+        },
+        driverLocations: {
+          orderBy: {
+            recordedAt: 'desc',
+          },
+          take: 1,
+          select: {
+            latitude: true,
+            longitude: true,
+            heading: true,
+            speed: true,
+            accuracy: true,
+            recordedAt: true,
+          },
+        },
+        proofPhotos: {
+          orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }],
+          select: {
+            id: true,
+            type: true,
+            url: true,
+            mimeType: true,
+            sizeBytes: true,
+            sortOrder: true,
+            createdAt: true,
+          },
+        },
+        assignedDriver: {
+          select: {
+            firstName: true,
+            lastName: true,
+            vehicles: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'asc' },
+              take: 1,
+              select: {
+                documents: {
+                  where: { type: DriverDocumentType.VEHICLE_PHOTO },
+                  orderBy: { createdAt: 'asc' },
+                  take: 1,
+                  select: { url: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    if (request.customerId !== input.customerId) {
+      throw new ForbiddenException(
+        'You are not allowed to view tracking for this request.',
+      );
+    }
+
+    const latestDriverLocation = request.driverLocations[0] ?? null;
+    const pickupProofPhotos = this.toTrackingProofPhotoResponses(
+      request.proofPhotos.filter(
+        (photo) => photo.type === TransportProofPhotoType.PICKUP,
+      ),
+      request.pickupProofImageUrl,
+      TransportProofPhotoType.PICKUP,
+    );
+    const deliveryProofPhotos = this.toTrackingProofPhotoResponses(
+      request.proofPhotos.filter(
+        (photo) => photo.type === TransportProofPhotoType.DELIVERY,
+      ),
+      request.deliveryProofImageUrl,
+      TransportProofPhotoType.DELIVERY,
+    );
+
+    return {
+      requestId: request.id,
+      currentStatus: request.status,
+      assignedDriverId: request.assignedDriverId,
+      driverName: request.assignedDriver
+        ? `${request.assignedDriver.firstName} ${request.assignedDriver.lastName}`.trim() ||
+          null
+        : null,
+      driverVehiclePhoto:
+        request.assignedDriver?.vehicles[0]?.documents[0]?.url ?? null,
+      pickupLocation: {
+        latitude: request.pickupLatitude,
+        longitude: request.pickupLongitude,
+        address: request.pickupAddress,
+        placeId: request.pickupPlaceId,
+      },
+      deliveryLocation: {
+        latitude: request.dropoffLatitude,
+        longitude: request.dropoffLongitude,
+        address: request.dropoffAddress,
+        placeId: request.dropoffPlaceId,
+      },
+      latestDriverLocation: latestDriverLocation
+        ? {
+            latitude: latestDriverLocation.latitude,
+            longitude: latestDriverLocation.longitude,
+            heading: latestDriverLocation.heading,
+            speed: latestDriverLocation.speed,
+            accuracy: latestDriverLocation.accuracy,
+            recordedAt: latestDriverLocation.recordedAt.toISOString(),
+          }
+        : null,
+      pickupProofPhotos,
+      deliveryProofPhotos,
+      nearDeliveryNotifiedAt: request.nearDeliveryNotifiedAt
+        ? request.nearDeliveryNotifiedAt.toISOString()
+        : null,
+      deliveredAt: request.deliveredAt
+        ? request.deliveredAt.toISOString()
+        : null,
+      ratingAvailable:
+        Boolean(request.ratingAvailableAt) && !Boolean(request.driverRating),
+      updatedAt: request.updatedAt.toISOString(),
+    };
+  }
+
   async acceptDriverOffer(
     input: AcceptDriverOfferInput,
   ): Promise<CustomerAcceptOfferResponseDto> {
@@ -2328,6 +2492,48 @@ export class CustomerRequestsService {
       sortOrder: photo.sortOrder,
       createdAt: photo.createdAt.toISOString(),
     }));
+  }
+
+  private toTrackingProofPhotoResponses(
+    photos: Array<{
+      id: string;
+      type: TransportProofPhotoType;
+      url: string;
+      mimeType: string;
+      sizeBytes: number;
+      sortOrder: number;
+      createdAt: Date;
+    }>,
+    legacyUrl: string | null,
+    type: TransportProofPhotoType,
+  ): RequestProofPhotoDto[] {
+    if (photos.length > 0) {
+      return photos.map((photo) => ({
+        id: photo.id,
+        type: photo.type,
+        url: photo.url,
+        mimeType: photo.mimeType,
+        sizeBytes: photo.sizeBytes,
+        sortOrder: photo.sortOrder,
+        createdAt: photo.createdAt.toISOString(),
+      }));
+    }
+
+    if (!legacyUrl) {
+      return [];
+    }
+
+    return [
+      {
+        id: `legacy-${type.toLowerCase()}`,
+        type,
+        url: legacyUrl,
+        mimeType: 'image/*',
+        sizeBytes: 0,
+        sortOrder: 1,
+        createdAt: new Date(0).toISOString(),
+      },
+    ];
   }
 
   private toLocationResponse(
