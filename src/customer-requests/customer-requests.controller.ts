@@ -389,6 +389,8 @@ export class CustomerRequestsController {
       requestId,
       offerId,
       confirm: dto.confirm ?? true,
+      paymentMethod: dto.paymentMethod,
+      stripePaymentMethodId: dto.stripePaymentMethodId,
     });
   }
 }

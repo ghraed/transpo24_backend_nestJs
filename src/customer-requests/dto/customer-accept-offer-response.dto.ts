@@ -1,4 +1,5 @@
 import { DriverOfferStatus, TransportRequestStatus } from '@prisma/client';
+import { PaymentSummaryDto } from '../../payments/dto/request-payment.dto';
 
 export interface AcceptedOfferResponseDto {
   id: string;
@@ -24,6 +25,7 @@ export interface CustomerAcceptOfferResponseDto {
     acceptedAt: string;
   };
   acceptedOffer: AcceptedOfferResponseDto;
+  payment: PaymentSummaryDto;
   rejectedOffersCount: number;
   nextStep: 'TRACK_REQUEST';
 }

@@ -13,6 +13,7 @@ import {
   UserRole,
 } from '@prisma/client';
 
+import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DeliverItemInput,
@@ -51,11 +52,14 @@ export const DRIVER_PICKUP_ARRIVAL_RADIUS_METERS = 100;
 export const PICKUP_ITEM_RADIUS_METERS = 150;
 export const DELIVER_ITEM_RADIUS_METERS = 150;
 const PLATFORM_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
-const DEFAULT_CURRENCY = 'USD';
+const DEFAULT_CURRENCY = process.env.STRIPE_CURRENCY?.trim().toUpperCase() || 'CHF';
 
 @Injectable()
 export class TripsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paymentsService: PaymentsService,
+  ) {}
 
   async joinTripRoom(input: JoinTripRoomInput): Promise<void> {
     const trip = await this.prisma.transportRequest.findUnique({
@@ -132,7 +136,7 @@ export class TripsService {
       driverId: trip.assignedDriverId,
       customerId: trip.customerId,
       agreedPrice: trip.acceptedOffer ? Number(trip.acceptedOffer.price) : 0,
-      currency: trip.acceptedOffer?.currency ?? 'USD',
+      currency: trip.acceptedOffer?.currency ?? DEFAULT_CURRENCY,
       pickupLocation: {
         latitude: trip.pickupLatitude,
         longitude: trip.pickupLongitude,
@@ -501,6 +505,7 @@ export class TripsService {
     response: DeliverItemResponse;
     delivered: ItemDeliveredPayload;
     status: TripStatusUpdatedPayload;
+    payment: Awaited<ReturnType<PaymentsService['captureRequestPayment']>> | null;
   }> {
     this.validateTripId(input.tripId);
     const driverProfile = await this.validateDriverCanDeliverItem(
@@ -526,7 +531,7 @@ export class TripsService {
     });
 
     const now = new Date();
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const { deliveredTrip, payment } = await this.prisma.$transaction(async (tx) => {
       const current = await tx.transportRequest.findUnique({
         where: { id: trip.id },
         select: {
@@ -585,18 +590,26 @@ export class TripsService {
         },
       });
 
+      const payment = await this.paymentsService.captureRequestPaymentTx(tx, {
+        requestId: deliveredTrip.id,
+      });
+
       await this.createDriverEarningForDeliveredTrip(tx, deliveredTrip.id);
-      return deliveredTrip;
+      return {
+        deliveredTrip,
+        payment,
+      };
     });
 
     return {
-      response: this.mapDeliverItemResponse(updated),
-      delivered: this.mapItemDeliveredPayload(updated),
+      response: this.mapDeliverItemResponse(deliveredTrip),
+      delivered: this.mapItemDeliveredPayload(deliveredTrip),
       status: this.mapTripStatusUpdatedPayload(
-        updated.id,
-        updated.status,
-        updated.updatedAt,
+        deliveredTrip.id,
+        deliveredTrip.status,
+        deliveredTrip.updatedAt,
       ),
+      payment,
     };
   }
 

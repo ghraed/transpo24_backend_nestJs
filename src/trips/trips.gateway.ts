@@ -19,12 +19,16 @@ import { JoinTripRoomDto } from './dto/join-trip-room.dto';
 import { LeaveTripRoomDto } from './dto/leave-trip-room.dto';
 import { TripsService } from './trips.service';
 import {
+  AdditionalChargeAddedPayload,
   DriverStartedDeliveryPayload,
   ItemDeliveredPayload,
   ItemPickedUpPayload,
   OfferAcceptedPayload,
   OfferNewPayload,
   OfferRejectedPayload,
+  PaymentCancelledPayload,
+  PaymentCapturedPayload,
+  PaymentHeldPayload,
   RequestDriverSelectedPayload,
   RequestNewPayload,
   TripStatusUpdatedPayload,
@@ -238,6 +242,47 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server
       .to(this.getDriverRoom(payload.driverId))
       .emit('offerRejected', payload);
+  }
+
+  emitPaymentHeld(customerId: string, payload: PaymentHeldPayload): void {
+    this.server.to(this.getCustomerRoom(customerId)).emit('paymentHeld', payload);
+    this.server.to(this.getTripRoom(payload.requestId)).emit('paymentHeld', payload);
+  }
+
+  emitPaymentCaptured(
+    customerId: string,
+    payload: PaymentCapturedPayload,
+  ): void {
+    this.server
+      .to(this.getCustomerRoom(customerId))
+      .emit('paymentCaptured', payload);
+    this.server
+      .to(this.getTripRoom(payload.requestId))
+      .emit('paymentCaptured', payload);
+  }
+
+  emitPaymentCancelled(
+    customerId: string,
+    payload: PaymentCancelledPayload,
+  ): void {
+    this.server
+      .to(this.getCustomerRoom(customerId))
+      .emit('paymentCancelled', payload);
+    this.server
+      .to(this.getTripRoom(payload.requestId))
+      .emit('paymentCancelled', payload);
+  }
+
+  emitAdditionalChargeAdded(
+    customerId: string,
+    payload: AdditionalChargeAddedPayload,
+  ): void {
+    this.server
+      .to(this.getCustomerRoom(customerId))
+      .emit('additionalChargeAdded', payload);
+    this.server
+      .to(this.getTripRoom(payload.requestId))
+      .emit('additionalChargeAdded', payload);
   }
 
   getDriverConnectionCount(driverId: string): number {

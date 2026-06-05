@@ -8,6 +8,10 @@ import {
 import type { CustomerRequestOfferSummaryDto } from '../customer-requests/dto/customer-request-offers.dto';
 import type { CustomerAcceptOfferResponseDto } from '../customer-requests/dto/customer-accept-offer-response.dto';
 import type { DriverRequestAlertSummaryDto } from '../driver/dto/driver-request-alert.dto';
+import type {
+  AdditionalChargeResponseDto,
+  PaymentSummaryDto,
+} from '../payments/dto/request-payment.dto';
 
 export type TripUserRole = UserRole;
 
@@ -100,6 +104,10 @@ export type OfferRejectedPayload = {
 };
 
 export type RequestDriverSelectedPayload = CustomerAcceptOfferResponseDto;
+export type PaymentHeldPayload = PaymentSummaryDto;
+export type PaymentCapturedPayload = PaymentSummaryDto;
+export type PaymentCancelledPayload = PaymentSummaryDto;
+export type AdditionalChargeAddedPayload = AdditionalChargeResponseDto;
 
 export type TripStatusUpdatedPayload = {
   tripId: string;

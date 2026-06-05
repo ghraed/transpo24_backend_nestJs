@@ -172,17 +172,62 @@ enum DriverEarningStatus {
   CANCELLED
 }
 
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  APPLE_PAY
+  GOOGLE_PAY
+  APP_WALLET
+}
+
+enum PaymentStatus {
+  PAYMENT_HOLD_PENDING
+  PAYMENT_HELD
+  PAYMENT_FAILED
+  DELIVERY_CONFIRMED
+  PAYMENT_CAPTURE_PENDING
+  PAYMENT_CAPTURED
+  PAYMENT_RELEASED
+  PAYMENT_CANCELLED
+  PAYMENT_REFUNDED
+}
+
+enum PaymentTransactionType {
+  HOLD
+  CAPTURE
+  RELEASE
+  ADDITIONAL_CHARGE
+  REFUND
+}
+
+enum PaymentProvider {
+  STRIPE
+  APP_WALLET
+}
+
+enum AdditionalChargeStatus {
+  PENDING
+  CAPTURED
+  CANCELLED
+  FAILED
+}
+
 model User {
   id            String             @id @default(cuid())
   name          String
   email         String             @unique
   passwordHash  String
   role          UserRole           @default(CUSTOMER)
+  stripeCustomerId String?         @unique
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   requests      TransportRequest[]
   driverProfile DriverProfile?
   customerRatings DriverRating[]
+  wallet        CustomerWallet?
+  walletTransactions CustomerWalletTransaction[]
+  paymentHolds  PaymentHold[]
+  additionalCharges AdditionalCharge[]
 }
 
 model Service {
@@ -273,6 +318,12 @@ model TransportRequest {
   deliveryProofImageUrl String?
   finalPrice           Decimal?              @db.Decimal(12, 2)
   currency             String?
+  paymentStatus        PaymentStatus?
+  paymentMethod        PaymentMethod?
+  heldAmount           Decimal?              @db.Decimal(12, 2)
+  capturedAmount       Decimal?              @db.Decimal(12, 2)
+  paymentHoldId        String?               @unique
+  stripePaymentIntentId String?              @unique
   completedAt          DateTime?
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
@@ -287,10 +338,13 @@ model TransportRequest {
   driverLocations DriverLocation[]
   driverEarning  DriverEarning?
   driverRating   DriverRating?
+  paymentHold    PaymentHold?
+  additionalCharges AdditionalCharge[]
 
   @@index([customerId])
   @@index([serviceId])
   @@index([assignedDriverId, status])
+  @@index([paymentStatus])
   @@map("transport_requests")
 }
 
@@ -367,6 +421,8 @@ model DriverProfile {
   locations     DriverLocation[]
   earnings      DriverEarning[]
   ratings       DriverRating[]
+  paymentHolds  PaymentHold[]
+  additionalCharges AdditionalCharge[]
 
   @@index([status])
   @@map("driver_profiles")
@@ -504,6 +560,7 @@ model DriverOffer {
   driver             DriverProfile      @relation(fields: [driverId], references: [id], onDelete: Cascade)
   alert              DriverRequestAlert? @relation(fields: [alertId], references: [id], onDelete: SetNull)
   acceptedForRequest TransportRequest?  @relation("AcceptedOfferForRequest")
+  paymentHold        PaymentHold?
 
   @@unique([requestId, driverId])
   @@index([driverId, status])
@@ -551,6 +608,110 @@ model DriverRating {
   @@index([driverId, rating])
   @@index([customerId])
   @@map("driver_ratings")
+}
+
+model CustomerWallet {
+  id             String                     @id @default(cuid())
+  customerId     String                     @unique
+  currency       String
+  balance        Decimal                    @default(0) @db.Decimal(12, 2)
+  reservedBalance Decimal                   @default(0) @db.Decimal(12, 2)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  customer       User                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  transactions   CustomerWalletTransaction[]
+
+  @@index([customerId, currency])
+  @@map("customer_wallets")
+}
+
+model PaymentHold {
+  id                    String                     @id @default(cuid())
+  customerId            String
+  requestId             String                     @unique
+  acceptedOfferId       String                     @unique
+  driverId              String
+  amount                Decimal                    @db.Decimal(12, 2)
+  currency              String
+  paymentMethod         PaymentMethod
+  provider              PaymentProvider
+  status                PaymentStatus
+  stripePaymentMethodId String?
+  stripePaymentIntentId String?                    @unique
+  stripeClientSecret    String?
+  stripeChargeId        String?
+  metadata              Json?
+  capturedAt            DateTime?
+  releasedAt            DateTime?
+  cancelledAt           DateTime?
+  failedAt              DateTime?
+  failureReason         String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  customer              User                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  request               TransportRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  acceptedOffer         DriverOffer               @relation(fields: [acceptedOfferId], references: [id], onDelete: Cascade)
+  driver                DriverProfile             @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  walletTransactions    CustomerWalletTransaction[]
+
+  @@index([customerId, status])
+  @@index([driverId, status])
+  @@index([stripePaymentIntentId])
+  @@map("payment_holds")
+}
+
+model CustomerWalletTransaction {
+  id                String                 @id @default(cuid())
+  walletId          String
+  customerId        String
+  paymentHoldId     String?
+  additionalChargeId String?
+  amount            Decimal                @db.Decimal(12, 2)
+  currency          String
+  type              PaymentTransactionType
+  description       String?
+  metadata          Json?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  wallet            CustomerWallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  customer          User                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  paymentHold       PaymentHold?           @relation(fields: [paymentHoldId], references: [id], onDelete: SetNull)
+  additionalCharge  AdditionalCharge?      @relation(fields: [additionalChargeId], references: [id], onDelete: SetNull)
+
+  @@index([walletId, createdAt])
+  @@index([customerId, type])
+  @@index([paymentHoldId])
+  @@index([additionalChargeId])
+  @@map("customer_wallet_transactions")
+}
+
+model AdditionalCharge {
+  id                String                 @id @default(cuid())
+  requestId         String
+  driverId          String
+  customerId        String
+  amount            Decimal                @db.Decimal(12, 2)
+  currency          String
+  reason            String
+  equipmentType     String?
+  invoiceUrl        String
+  invoiceStorageKey String?
+  status            AdditionalChargeStatus @default(PENDING)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  request           TransportRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  driver            DriverProfile          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  customer          User                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  walletTransactions CustomerWalletTransaction[]
+
+  @@index([requestId, status])
+  @@index([driverId, status])
+  @@index([customerId, status])
+  @@map("additional_charges")
 }
 
 model VehicleBrand {

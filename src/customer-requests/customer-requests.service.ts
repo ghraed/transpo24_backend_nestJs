@@ -20,6 +20,7 @@ import {
   ItemType,
   MotorcycleCondition,
   MotorcycleType,
+  PaymentMethod,
   Prisma,
   ServiceKey,
   TransportRequestStatus,
@@ -28,6 +29,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PaymentsService } from '../payments/payments.service';
 import { TripsGateway } from '../trips/trips.gateway';
 import {
   CustomerRequestResponseDto,
@@ -196,6 +198,8 @@ interface AcceptDriverOfferInput {
   requestId: string;
   offerId: string;
   confirm: boolean;
+  paymentMethod: PaymentMethod;
+  stripePaymentMethodId?: string;
 }
 
 interface GetCustomerRequestStatusInput {
@@ -643,6 +647,7 @@ const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
 export class CustomerRequestsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly paymentsService: PaymentsService,
     @Inject(forwardRef(() => TripsGateway))
     private readonly tripsGateway: TripsGateway,
   ) {}
@@ -1864,6 +1869,10 @@ export class CustomerRequestsService {
       throw new BadRequestException('confirm must be true to accept an offer.');
     }
 
+    if (!input.paymentMethod) {
+      throw new BadRequestException('paymentMethod is required.');
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
       const request = await tx.transportRequest.findUnique({
         where: { id: input.requestId },
@@ -1973,6 +1982,18 @@ export class CustomerRequestsService {
           'Offer driver must be online and available.',
         );
       }
+
+      const payment = await this.paymentsService.createHoldForAcceptedOffer(tx, {
+        customerId: input.customerId,
+        requestId: request.id,
+        acceptedOfferId: offer.id,
+        driverId: offer.driverId,
+        amount: offer.price,
+        currency: offer.currency,
+        paymentMethod: input.paymentMethod,
+        stripePaymentMethodId: input.stripePaymentMethodId,
+      });
+
       const acceptedAt = new Date();
 
       const acceptedOffer = await tx.driverOffer.update({
@@ -2045,6 +2066,7 @@ export class CustomerRequestsService {
 
       return {
         acceptedOffer,
+        payment,
         updatedRequest,
         rejectedOffersCount: rejectedOffers.count,
         rejectedOffers: rejectedPendingOffers,
@@ -2082,6 +2104,7 @@ export class CustomerRequestsService {
         acceptedAt: result.updatedRequest.acceptedAt.toISOString(),
       },
       acceptedOffer: this.toAcceptedOfferResponse(result.acceptedOffer),
+      payment: result.payment,
       rejectedOffersCount: result.rejectedOffersCount,
       nextStep: 'TRACK_REQUEST' as const,
     };
@@ -2124,6 +2147,7 @@ export class CustomerRequestsService {
     }
 
     this.tripsGateway.emitRequestDriverSelected(input.customerId, response);
+    this.tripsGateway.emitPaymentHeld(input.customerId, result.payment);
 
     return response;
   }
@@ -2891,4 +2915,3 @@ export class CustomerRequestsService {
     };
   }
 }
-

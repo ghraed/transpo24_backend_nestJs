@@ -9,6 +9,8 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.use('/webhooks/stripe', express.raw({ type: 'application/json' }));
+
   app.enableCors({
     origin: true,
     credentials: true,

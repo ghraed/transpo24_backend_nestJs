@@ -9,11 +9,12 @@ import {
   Query,
   Put,
   Req,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 import type { File as MulterFile } from 'multer';
@@ -46,6 +47,7 @@ import {
 } from './dto/update-driver-availability.dto';
 import { UpdateDriverProfileDto } from './dto/update-driver-profile.dto';
 import { DriverService } from './driver.service';
+import { PaymentsService } from '../payments/payments.service';
 import { DriverTripParamDto, PickupItemDto } from './dto/pickup-item.dto';
 import { TripsGateway } from '../trips/trips.gateway';
 import { TripsService } from '../trips/trips.service';
@@ -66,6 +68,8 @@ import {
   DriverRatingItemResponse,
   PaginatedResponse,
 } from '../trips/trips.types';
+import { CreateAdditionalChargeDto } from '../payments/dto/create-additional-charge.dto';
+import { AdditionalChargeResponseDto } from '../payments/dto/request-payment.dto';
 
 type AuthenticatedRequest = Request & {
   user: {
@@ -101,6 +105,7 @@ const DOCUMENT_MIME_TYPES = new Set([
 export class DriverController {
   constructor(
     private readonly driverService: DriverService,
+    private readonly paymentsService: PaymentsService,
     private readonly tripsService: TripsService,
     private readonly tripsGateway: TripsGateway,
   ) {}
@@ -254,6 +259,76 @@ export class DriverController {
     });
   }
 
+  @Post('requests/:requestId/additional-charges')
+  @UseInterceptors(
+    FileInterceptor('invoice', {
+      storage: diskStorage({
+        destination: (req, _file, callback) => {
+          const driverIdValue = req.user?.id;
+          const requestIdValue = req.params?.requestId;
+          const driverId =
+            typeof driverIdValue === 'string' ? driverIdValue : 'unknown-driver';
+          const requestId =
+            typeof requestIdValue === 'string'
+              ? requestIdValue
+              : 'unknown-request';
+          const targetDirectory = join(
+            process.cwd(),
+            'uploads',
+            'driver-additional-charges',
+            driverId,
+            requestId,
+          );
+          mkdirSync(targetDirectory, { recursive: true });
+          callback(null, targetDirectory);
+        },
+        filename: (_req, file, callback) => {
+          const randomSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const extension =
+            extname(file.originalname || '').toLowerCase() || '.bin';
+          callback(null, `invoice-${randomSuffix}${extension}`);
+        },
+      }),
+      limits: {
+        fileSize: MAX_PDF_BYTES,
+      },
+      fileFilter: (_req, file, callback) => {
+        if (!DOCUMENT_MIME_TYPES.has(file.mimetype)) {
+          callback(
+            new BadRequestException(
+              'Invoice must be JPEG, PNG, WEBP, or PDF.',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async createAdditionalCharge(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+    @Body() dto: CreateAdditionalChargeDto,
+    @UploadedFile() invoiceFile: MulterFile | undefined,
+  ): Promise<AdditionalChargeResponseDto> {
+    if (!invoiceFile) {
+      throw new BadRequestException('invoice is required.');
+    }
+
+    const charge = await this.paymentsService.createAdditionalCharge({
+      driverUserId: request.user.id,
+      requestId,
+      amount: dto.amount,
+      reason: dto.reason,
+      equipmentType: dto.equipmentType,
+      invoiceFile,
+    });
+
+    this.tripsGateway.emitAdditionalChargeAdded(charge.customerId, charge);
+    return charge;
+  }
+
   @Get('jobs/accepted')
   async getAcceptedJobs(
     @Req() request: AuthenticatedRequest,
@@ -397,6 +472,9 @@ export class DriverController {
     });
 
     this.tripsGateway.emitItemDelivered(result.delivered, result.status);
+    if (result.payment) {
+      this.tripsGateway.emitPaymentCaptured(result.payment.customerId, result.payment);
+    }
 
     return result.response;
   }

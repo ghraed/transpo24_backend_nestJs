@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 
 import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
+import { AcceptDriverOfferDto } from '../customer-requests/dto/accept-driver-offer.dto';
 import { CustomerAcceptOfferResponseDto } from '../customer-requests/dto/customer-accept-offer-response.dto';
 import { CustomerRequestsService } from '../customer-requests/customer-requests.service';
 import {
@@ -36,12 +37,15 @@ export class TripsController {
     @Req() request: AuthenticatedRequest,
     @Param('tripId') tripId: string,
     @Param('offerId') offerId: string,
+    @Body() dto: AcceptDriverOfferDto,
   ): Promise<CustomerAcceptOfferResponseDto> {
     const accepted = await this.customerRequestsService.acceptDriverOffer({
       customerId: request.user.id,
       requestId: tripId,
       offerId,
-      confirm: true,
+      confirm: dto.confirm ?? true,
+      paymentMethod: dto.paymentMethod,
+      stripePaymentMethodId: dto.stripePaymentMethodId,
     });
 
     const offerAcceptedPayload =
