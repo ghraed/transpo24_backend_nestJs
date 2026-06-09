@@ -15,7 +15,10 @@ export interface DriverProfileResponseDto {
   phone: string;
   countryCode: string | null;
   city: string | null;
+  coverageAreas: string[];
+  fullNameOnId: string | null;
   dateOfBirth: string | null;
+  idOrResidencyNumberMasked: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
   postalCode: string | null;

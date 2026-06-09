@@ -24,6 +24,11 @@ export class AuthController {
     return this.authService.registerDriver(dto);
   }
 
+  @Post('driver/login')
+  loginDriver(@Body() dto: LoginDto): Promise<LoginResponseDto> {
+    return this.authService.loginDriver(dto);
+  }
+
   @Post('login')
   login(@Body() dto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.login(dto);

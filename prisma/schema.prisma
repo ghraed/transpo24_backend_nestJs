@@ -424,7 +424,10 @@ model DriverProfile {
   phone                 String             @unique
   countryCode           String?
   city                  String?
+  coverageAreas         String[]           @default([])
+  fullNameOnId          String?
   dateOfBirth           DateTime?
+  idOrResidencyNumber   String?            @unique
   addressLine1          String?
   addressLine2          String?
   postalCode            String?

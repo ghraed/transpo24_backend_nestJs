@@ -1,5 +1,7 @@
 import {
+  ArrayUnique,
   IsDateString,
+  IsArray,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -30,8 +32,25 @@ export class UpdateDriverProfileDto {
   city?: string;
 
   @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  coverageAreas?: string[];
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  fullNameOnId?: string;
+
+  @IsOptional()
   @IsDateString()
   dateOfBirth?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  idOrResidencyNumber?: string;
 
   @IsOptional()
   @IsString()

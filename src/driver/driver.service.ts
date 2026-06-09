@@ -31,6 +31,10 @@ import { TripsGateway } from '../trips/trips.gateway';
 import { DriverAvailabilityDayDto } from './dto/update-driver-availability.dto';
 import { DriverAvailabilityResponseDto } from './dto/driver-availability-response.dto';
 import {
+  DriverOnboardingNextStep,
+  DriverOnboardingResponseDto,
+} from './dto/driver-onboarding-response.dto';
+import {
   DriverMeResponseDto,
   DriverNextStep,
   DriverProfileResponseDto,
@@ -75,16 +79,32 @@ interface UpdateDriverProfileInput {
   firstName: string;
   lastName: string;
   phone: string;
-  countryCode?: string;
-  city?: string;
-  dateOfBirth?: Date;
-  addressLine1?: string;
-  addressLine2?: string;
-  postalCode?: string;
-  preferredLanguage?: PreferredLanguage;
-  emergencyContactName?: string;
-  emergencyContactPhone?: string;
-  profilePhotoUrl?: string;
+  countryCode?: string | null;
+  city?: string | null;
+  coverageAreas?: string[] | null;
+  fullNameOnId?: string | null;
+  dateOfBirth?: Date | null;
+  idOrResidencyNumber?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  postalCode?: string | null;
+  preferredLanguage?: PreferredLanguage | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  profilePhotoUrl?: string | null;
+}
+
+interface GetDriverOnboardingStatusInput {
+  userId: string;
+}
+
+interface UpsertDriverPersonalInfoInput {
+  userId: string;
+  fullNameOnId: string;
+  dateOfBirth: Date;
+  idOrResidencyNumber: string;
+  coverageCity?: string;
+  coverageAreas?: string[];
 }
 
 interface CreateDriverVehicleInput {
@@ -194,7 +214,10 @@ type DriverProfileSource = {
   phone: string;
   countryCode: string | null;
   city: string | null;
+  coverageAreas: string[];
+  fullNameOnId: string | null;
   dateOfBirth: Date | null;
+  idOrResidencyNumber: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
   postalCode: string | null;
@@ -454,7 +477,10 @@ const DRIVER_ME_SELECT = {
       phone: true,
       countryCode: true,
       city: true,
+      coverageAreas: true,
+      fullNameOnId: true,
       dateOfBirth: true,
+      idOrResidencyNumber: true,
       addressLine1: true,
       addressLine2: true,
       postalCode: true,
@@ -691,6 +717,68 @@ export class DriverService {
     return this.toDriverMeResponse(user, availability);
   }
 
+  async getOnboardingStatus(
+    input: GetDriverOnboardingStatusInput,
+  ): Promise<DriverOnboardingResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: input.userId },
+      select: DRIVER_ME_SELECT,
+    });
+
+    if (!user || user.role !== UserRole.DRIVER) {
+      throw new NotFoundException('Driver account not found.');
+    }
+
+    if (!user.driverProfile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    return this.toDriverOnboardingResponse(user.driverProfile);
+  }
+
+  async upsertPersonalInfo(
+    input: UpsertDriverPersonalInfoInput,
+  ): Promise<DriverOnboardingResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: input.userId },
+      select: DRIVER_ME_SELECT,
+    });
+
+    if (!user || user.role !== UserRole.DRIVER) {
+      throw new NotFoundException('Driver account not found.');
+    }
+
+    if (!user.driverProfile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    const normalizedCoverageCity =
+      input.coverageCity?.trim() || user.driverProfile.city;
+    const normalizedCoverageAreas = this.normalizeCoverageAreas(
+      input.coverageAreas ?? user.driverProfile.coverageAreas,
+    );
+
+    if (!normalizedCoverageCity && normalizedCoverageAreas.length === 0) {
+      throw new BadRequestException(
+        'At least one coverage city or area is required.',
+      );
+    }
+
+    const updatedProfile = await this.persistDriverProfileUpdate({
+      userId: input.userId,
+      existingProfile: user.driverProfile,
+      changes: {
+        fullNameOnId: input.fullNameOnId,
+        dateOfBirth: input.dateOfBirth,
+        idOrResidencyNumber: input.idOrResidencyNumber,
+        city: input.coverageCity,
+        coverageAreas: input.coverageAreas,
+      },
+    });
+
+    return this.toDriverOnboardingResponse(updatedProfile);
+  }
+
   async updateProfile(
     input: UpdateDriverProfileInput,
   ): Promise<DriverMeResponseDto> {
@@ -709,60 +797,10 @@ export class DriverService {
       throw new NotFoundException('Driver profile not found.');
     }
 
-    if (input.dateOfBirth) {
-      const adulthoodDate = new Date(input.dateOfBirth);
-      adulthoodDate.setFullYear(adulthoodDate.getFullYear() + 18);
-
-      if (adulthoodDate.getTime() > Date.now()) {
-        throw new BadRequestException('Driver must be at least 18 years old.');
-      }
-    }
-
-    const normalizedPhone = input.phone.trim();
-    const existingPhone = await this.prisma.driverProfile.findUnique({
-      where: { phone: normalizedPhone },
-      select: { userId: true },
-    });
-
-    if (existingPhone && existingPhone.userId !== input.userId) {
-      throw new ConflictException('Phone is already in use.');
-    }
-
-    const requiredCountryCode = input.countryCode?.trim() ?? null;
-    const requiredCity = input.city?.trim() ?? null;
-
-    const isProfileCompleted =
-      input.firstName.trim().length > 0 &&
-      input.lastName.trim().length > 0 &&
-      normalizedPhone.length > 0 &&
-      (requiredCountryCode?.length ?? 0) > 0 &&
-      (requiredCity?.length ?? 0) > 0;
-
-    const nextStatus = this.resolveNextStatus(
-      existingProfile.status,
-      isProfileCompleted,
-    );
-
-    const updatedProfile = await this.prisma.driverProfile.update({
-      where: { userId: input.userId },
-      data: {
-        firstName: input.firstName.trim(),
-        lastName: input.lastName.trim(),
-        phone: normalizedPhone,
-        countryCode: requiredCountryCode,
-        city: requiredCity,
-        dateOfBirth: input.dateOfBirth ?? null,
-        addressLine1: input.addressLine1?.trim() || null,
-        addressLine2: input.addressLine2?.trim() || null,
-        postalCode: input.postalCode?.trim() || null,
-        preferredLanguage: input.preferredLanguage ?? null,
-        emergencyContactName: input.emergencyContactName?.trim() || null,
-        emergencyContactPhone: input.emergencyContactPhone?.trim() || null,
-        profilePhotoUrl: input.profilePhotoUrl?.trim() || null,
-        isProfileCompleted,
-        status: nextStatus,
-      },
-      select: DRIVER_ME_SELECT.driverProfile.select,
+    const updatedProfile = await this.persistDriverProfileUpdate({
+      userId: input.userId,
+      existingProfile,
+      changes: input,
     });
 
     const mappedUser: DriverMeSource = {
@@ -2188,6 +2226,239 @@ export class DriverService {
     return currentStatus;
   }
 
+  private async persistDriverProfileUpdate(input: {
+    userId: string;
+    existingProfile: DriverProfileSource;
+    changes: Partial<UpdateDriverProfileInput>;
+  }): Promise<DriverProfileSource> {
+    const nextFirstName =
+      input.changes.firstName !== undefined
+        ? input.changes.firstName.trim()
+        : input.existingProfile.firstName;
+    const nextLastName =
+      input.changes.lastName !== undefined
+        ? input.changes.lastName.trim()
+        : input.existingProfile.lastName;
+    const nextPhone =
+      input.changes.phone !== undefined
+        ? input.changes.phone.trim()
+        : input.existingProfile.phone;
+    const nextCountryCode =
+      input.changes.countryCode !== undefined
+        ? input.changes.countryCode?.trim() || null
+        : input.existingProfile.countryCode;
+    const nextCity =
+      input.changes.city !== undefined
+        ? input.changes.city?.trim() || null
+        : input.existingProfile.city;
+    const nextCoverageAreas =
+      input.changes.coverageAreas !== undefined
+        ? this.normalizeCoverageAreas(input.changes.coverageAreas ?? [])
+        : input.existingProfile.coverageAreas;
+    const nextFullNameOnId =
+      input.changes.fullNameOnId !== undefined
+        ? input.changes.fullNameOnId?.trim() || null
+        : input.existingProfile.fullNameOnId;
+    const nextDateOfBirth =
+      input.changes.dateOfBirth !== undefined
+        ? input.changes.dateOfBirth
+        : input.existingProfile.dateOfBirth;
+    const nextIdOrResidencyNumber =
+      input.changes.idOrResidencyNumber !== undefined
+        ? input.changes.idOrResidencyNumber?.trim() || null
+        : input.existingProfile.idOrResidencyNumber;
+    const nextAddressLine1 =
+      input.changes.addressLine1 !== undefined
+        ? input.changes.addressLine1?.trim() || null
+        : input.existingProfile.addressLine1;
+    const nextAddressLine2 =
+      input.changes.addressLine2 !== undefined
+        ? input.changes.addressLine2?.trim() || null
+        : input.existingProfile.addressLine2;
+    const nextPostalCode =
+      input.changes.postalCode !== undefined
+        ? input.changes.postalCode?.trim() || null
+        : input.existingProfile.postalCode;
+    const nextPreferredLanguage =
+      input.changes.preferredLanguage !== undefined
+        ? input.changes.preferredLanguage ?? null
+        : input.existingProfile.preferredLanguage;
+    const nextEmergencyContactName =
+      input.changes.emergencyContactName !== undefined
+        ? input.changes.emergencyContactName?.trim() || null
+        : input.existingProfile.emergencyContactName;
+    const nextEmergencyContactPhone =
+      input.changes.emergencyContactPhone !== undefined
+        ? input.changes.emergencyContactPhone?.trim() || null
+        : input.existingProfile.emergencyContactPhone;
+    const nextProfilePhotoUrl =
+      input.changes.profilePhotoUrl !== undefined
+        ? input.changes.profilePhotoUrl?.trim() || null
+        : input.existingProfile.profilePhotoUrl;
+
+    if (nextPhone.length === 0) {
+      throw new BadRequestException('phone must not be empty.');
+    }
+
+    if (nextDateOfBirth) {
+      this.assertMinimumDriverAge(nextDateOfBirth);
+    }
+
+    const [existingPhone, existingIdOrResidencyNumber] = await Promise.all([
+      this.prisma.driverProfile.findUnique({
+        where: { phone: nextPhone },
+        select: { userId: true },
+      }),
+      nextIdOrResidencyNumber
+        ? this.prisma.driverProfile.findUnique({
+            where: { idOrResidencyNumber: nextIdOrResidencyNumber },
+            select: { userId: true },
+          })
+        : null,
+    ]);
+
+    if (existingPhone && existingPhone.userId !== input.userId) {
+      throw new ConflictException('Phone is already in use.');
+    }
+
+    if (
+      existingIdOrResidencyNumber &&
+      existingIdOrResidencyNumber.userId !== input.userId
+    ) {
+      throw new ConflictException(
+        'ID or residency number is already in use.',
+      );
+    }
+
+    const isProfileCompleted = this.isDriverPersonalInfoComplete({
+      firstName: nextFirstName,
+      lastName: nextLastName,
+      phone: nextPhone,
+      city: nextCity,
+      coverageAreas: nextCoverageAreas,
+      fullNameOnId: nextFullNameOnId,
+      dateOfBirth: nextDateOfBirth,
+      idOrResidencyNumber: nextIdOrResidencyNumber,
+    });
+
+    const nextStatus = this.resolveNextStatus(
+      input.existingProfile.status,
+      isProfileCompleted,
+    );
+
+    return this.prisma.driverProfile.update({
+      where: { userId: input.userId },
+      data: {
+        firstName: nextFirstName,
+        lastName: nextLastName,
+        phone: nextPhone,
+        countryCode: nextCountryCode,
+        city: nextCity,
+        coverageAreas: nextCoverageAreas,
+        fullNameOnId: nextFullNameOnId,
+        dateOfBirth: nextDateOfBirth ?? null,
+        idOrResidencyNumber: nextIdOrResidencyNumber,
+        addressLine1: nextAddressLine1,
+        addressLine2: nextAddressLine2,
+        postalCode: nextPostalCode,
+        preferredLanguage: nextPreferredLanguage,
+        emergencyContactName: nextEmergencyContactName,
+        emergencyContactPhone: nextEmergencyContactPhone,
+        profilePhotoUrl: nextProfilePhotoUrl,
+        isProfileCompleted,
+        status: nextStatus,
+      },
+      select: DRIVER_ME_SELECT.driverProfile.select,
+    });
+  }
+
+  private assertMinimumDriverAge(dateOfBirth: Date): void {
+    const minimumAgeYears = this.getDriverMinimumAgeYears();
+    const adulthoodDate = new Date(dateOfBirth);
+    adulthoodDate.setFullYear(adulthoodDate.getFullYear() + minimumAgeYears);
+
+    if (adulthoodDate.getTime() > Date.now()) {
+      throw new BadRequestException(
+        `Driver must be at least ${minimumAgeYears} years old.`,
+      );
+    }
+  }
+
+  private getDriverMinimumAgeYears(): number {
+    const configuredAge = Number.parseInt(
+      process.env.DRIVER_MINIMUM_AGE_YEARS ?? '18',
+      10,
+    );
+
+    return Number.isFinite(configuredAge) && configuredAge >= 18
+      ? configuredAge
+      : 18;
+  }
+
+  private normalizeCoverageAreas(coverageAreas: string[]): string[] {
+    return [
+      ...new Set(coverageAreas.map((area) => area.trim()).filter(Boolean)),
+    ];
+  }
+
+  private isDriverPersonalInfoComplete(input: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    city: string | null;
+    coverageAreas: string[];
+    fullNameOnId: string | null;
+    dateOfBirth: Date | null;
+    idOrResidencyNumber: string | null;
+  }): boolean {
+    return (
+      input.firstName.trim().length > 0 &&
+      input.lastName.trim().length > 0 &&
+      input.phone.trim().length > 0 &&
+      (input.city?.trim().length ?? 0) + input.coverageAreas.length > 0 &&
+      (input.fullNameOnId?.trim().length ?? 0) > 0 &&
+      Boolean(input.dateOfBirth) &&
+      (input.idOrResidencyNumber?.trim().length ?? 0) > 0
+    );
+  }
+
+  private maskIdOrResidencyNumber(value: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const trimmedValue = value.trim();
+    const visibleCharacters = trimmedValue.slice(-4);
+    const maskedPrefix = '*'.repeat(Math.max(0, trimmedValue.length - 4));
+
+    return `${maskedPrefix}${visibleCharacters}`;
+  }
+
+  private getOnboardingNextStep(
+    profile: DriverProfileSource,
+  ): DriverOnboardingNextStep {
+    if (
+      !profile.isProfileCompleted ||
+      profile.status === DriverStatus.PENDING_PROFILE
+    ) {
+      return 'COMPLETE_PROFILE';
+    }
+
+    if (profile.status === DriverStatus.PENDING_DOCUMENTS) {
+      return 'UPLOAD_DOCUMENTS';
+    }
+
+    if (
+      profile.status === DriverStatus.PENDING_REVIEW ||
+      profile.status === DriverStatus.SUSPENDED ||
+      profile.status === DriverStatus.REJECTED
+    ) {
+      return 'WAITING_APPROVAL';
+    }
+
+    return 'HOME';
+  }
+
   private getNextStep(
     profile: DriverProfileSource,
     availability?: AvailabilitySource | null,
@@ -3348,9 +3619,14 @@ export class DriverService {
       phone: profile.phone,
       countryCode: profile.countryCode,
       city: profile.city,
+      coverageAreas: profile.coverageAreas,
+      fullNameOnId: profile.fullNameOnId,
       dateOfBirth: profile.dateOfBirth
         ? profile.dateOfBirth.toISOString()
         : null,
+      idOrResidencyNumberMasked: this.maskIdOrResidencyNumber(
+        profile.idOrResidencyNumber,
+      ),
       addressLine1: profile.addressLine1,
       addressLine2: profile.addressLine2,
       postalCode: profile.postalCode,
@@ -3362,6 +3638,26 @@ export class DriverService {
       isProfileCompleted: profile.isProfileCompleted,
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
+    };
+  }
+
+  private toDriverOnboardingResponse(
+    profile: DriverProfileSource,
+  ): DriverOnboardingResponseDto {
+    return {
+      driverId: profile.id,
+      fullNameOnId: profile.fullNameOnId,
+      dateOfBirth: profile.dateOfBirth
+        ? profile.dateOfBirth.toISOString()
+        : null,
+      coverageCity: profile.city,
+      coverageAreas: profile.coverageAreas,
+      idOrResidencyNumberMasked: this.maskIdOrResidencyNumber(
+        profile.idOrResidencyNumber,
+      ),
+      onboardingStatus: profile.status,
+      isPersonalInfoCompleted: profile.isProfileCompleted,
+      nextStep: this.getOnboardingNextStep(profile),
     };
   }
 

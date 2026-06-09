@@ -16,5 +16,5 @@ export interface LoginResponseDto {
     status: string;
     isProfileCompleted: boolean;
   };
-  nextStep?: 'COMPLETE_PROFILE' | 'ADD_VEHICLE_DOCUMENTS';
+  nextStep?: 'COMPLETE_PROFILE' | 'ADD_VEHICLE_DOCUMENTS' | 'UPLOAD_DOCUMENTS';
 }

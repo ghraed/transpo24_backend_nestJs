@@ -45,6 +45,8 @@ import {
   UpdateDriverAvailabilityDto,
   UpdateDriverOnlineStatusDto,
 } from './dto/update-driver-availability.dto';
+import { DriverOnboardingResponseDto } from './dto/driver-onboarding-response.dto';
+import { UpsertDriverPersonalInfoDto } from './dto/upsert-driver-personal-info.dto';
 import { UpdateDriverProfileDto } from './dto/update-driver-profile.dto';
 import { DriverService } from './driver.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -118,6 +120,30 @@ export class DriverController {
     return this.driverService.getMe({ userId: request.user.id });
   }
 
+  @Get('profile/onboarding')
+  async getOnboardingStatus(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<DriverOnboardingResponseDto> {
+    return this.driverService.getOnboardingStatus({
+      userId: request.user.id,
+    });
+  }
+
+  @Post('profile/onboarding/personal-info')
+  async upsertPersonalInfo(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpsertDriverPersonalInfoDto,
+  ): Promise<DriverOnboardingResponseDto> {
+    return this.driverService.upsertPersonalInfo({
+      userId: request.user.id,
+      fullNameOnId: dto.fullNameOnId,
+      dateOfBirth: new Date(dto.dateOfBirth),
+      idOrResidencyNumber: dto.idOrResidencyNumber,
+      coverageCity: dto.coverageCity,
+      coverageAreas: dto.coverageAreas,
+    });
+  }
+
   @Patch('me/profile')
   async updateMyProfile(
     @Req() request: AuthenticatedRequest,
@@ -128,16 +154,19 @@ export class DriverController {
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone,
-      countryCode: dto.countryCode,
-      city: dto.city,
-      dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-      addressLine1: dto.addressLine1,
-      addressLine2: dto.addressLine2,
-      postalCode: dto.postalCode,
-      preferredLanguage: dto.preferredLanguage,
-      emergencyContactName: dto.emergencyContactName,
-      emergencyContactPhone: dto.emergencyContactPhone,
-      profilePhotoUrl: dto.profilePhotoUrl,
+      countryCode: dto.countryCode ?? null,
+      city: dto.city ?? null,
+      coverageAreas: dto.coverageAreas ?? null,
+      fullNameOnId: dto.fullNameOnId ?? null,
+      dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+      idOrResidencyNumber: dto.idOrResidencyNumber ?? null,
+      addressLine1: dto.addressLine1 ?? null,
+      addressLine2: dto.addressLine2 ?? null,
+      postalCode: dto.postalCode ?? null,
+      preferredLanguage: dto.preferredLanguage ?? null,
+      emergencyContactName: dto.emergencyContactName ?? null,
+      emergencyContactPhone: dto.emergencyContactPhone ?? null,
+      profilePhotoUrl: dto.profilePhotoUrl ?? null,
     });
   }
 

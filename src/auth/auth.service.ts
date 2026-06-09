@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { DriverStatus, UserRole } from '@prisma/client';
@@ -256,6 +257,22 @@ export class AuthService {
           }
         : undefined,
       nextStep,
+    };
+  }
+
+  async loginDriver(dto: LoginDto): Promise<LoginResponseDto> {
+    const response = await this.login(dto);
+
+    if (response.user.role !== UserRole.DRIVER || !response.driver) {
+      throw new ForbiddenException('Driver access is required.');
+    }
+
+    return {
+      ...response,
+      nextStep:
+        response.nextStep === 'ADD_VEHICLE_DOCUMENTS'
+          ? 'UPLOAD_DOCUMENTS'
+          : response.nextStep,
     };
   }
 
