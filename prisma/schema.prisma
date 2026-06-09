@@ -109,6 +109,11 @@ enum PreferredLanguage {
   it
 }
 
+enum IdentityDocumentKind {
+  NATIONAL_ID
+  RESIDENCY_CARD
+}
+
 enum VehicleType {
   CAR_CARRIER
   FLATBED_TRUCK
@@ -122,6 +127,11 @@ enum VehicleType {
 }
 
 enum DriverDocumentType {
+  PERSONAL_SELFIE
+  ID_FRONT
+  ID_BACK
+  DRIVING_LICENSE
+  SELF_IDENTITY_VERIFICATION
   DRIVER_LICENSE_FRONT
   DRIVER_LICENSE_BACK
   IDENTITY_DOCUMENT
@@ -134,6 +144,8 @@ enum DriverDocumentType {
 }
 
 enum DocumentStatus {
+  UPLOADED
+  UNDER_REVIEW
   PENDING_REVIEW
   APPROVED
   REJECTED
@@ -431,10 +443,12 @@ model DriverProfile {
   addressLine1          String?
   addressLine2          String?
   postalCode            String?
+  identityDocumentKind  IdentityDocumentKind?
   profilePhotoUrl       String?
   preferredLanguage     PreferredLanguage?
   emergencyContactName  String?
   emergencyContactPhone String?
+  submittedForReviewAt  DateTime?
   status                DriverStatus       @default(PENDING_PROFILE)
   isProfileCompleted    Boolean            @default(false)
   averageRating         Decimal?           @db.Decimal(3, 2)
@@ -535,6 +549,7 @@ model DriverDocument {
   status          DocumentStatus     @default(PENDING_REVIEW)
   rejectionReason String?
   expiresAt       DateTime?
+  reviewedAt      DateTime?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 

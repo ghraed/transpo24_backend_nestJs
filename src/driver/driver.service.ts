@@ -13,6 +13,7 @@ import {
   DriverRequestAlertStatus,
   DriverDocumentType,
   DriverStatus,
+  IdentityDocumentKind,
   ItemType,
   TransportRequestStatus,
   ServiceKey,
@@ -23,7 +24,7 @@ import {
   VehicleType,
 } from '@prisma/client';
 import { unlink } from 'node:fs/promises';
-import { relative } from 'node:path';
+import { join, relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,6 +35,10 @@ import {
   DriverOnboardingNextStep,
   DriverOnboardingResponseDto,
 } from './dto/driver-onboarding-response.dto';
+import {
+  DriverOnboardingDocumentResponseDto,
+  DriverOnboardingDocumentsStatusResponseDto,
+} from './dto/driver-onboarding-documents.dto';
 import {
   DriverMeResponseDto,
   DriverNextStep,
@@ -186,6 +191,28 @@ interface UploadDriverVehicleDocumentsInput {
   };
 }
 
+interface GetDriverOnboardingDocumentsInput {
+  userId: string;
+}
+
+interface SubmitDriverOnboardingDocumentsReviewInput {
+  userId: string;
+}
+
+interface UploadDriverOnboardingDocumentsInput {
+  userId: string;
+  idDocumentKind?: IdentityDocumentKind;
+  idExpiryDate?: Date;
+  drivingLicenseExpiryDate?: Date;
+  files: {
+    personalSelfie?: MulterFile[];
+    idFront?: MulterFile[];
+    idBack?: MulterFile[];
+    drivingLicense?: MulterFile[];
+    selfIdentityVerification?: MulterFile[];
+  };
+}
+
 interface SendDriverPriceOfferInput {
   userId: string;
   requestId: string;
@@ -225,6 +252,8 @@ type DriverProfileSource = {
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   profilePhotoUrl: string | null;
+  identityDocumentKind: IdentityDocumentKind | null;
+  submittedForReviewAt: Date | null;
   status: DriverStatus;
   isProfileCompleted: boolean;
   createdAt: Date;
@@ -267,6 +296,7 @@ type DocumentSource = {
   status: DocumentStatus;
   rejectionReason: string | null;
   expiresAt: Date | null;
+  reviewedAt: Date | null;
   createdAt: Date;
 };
 
@@ -292,6 +322,22 @@ type AvailabilitySource = {
   updatedAt: Date;
   schedule: AvailabilityScheduleSource[];
 };
+
+const DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES: DriverDocumentType[] = [
+  DriverDocumentType.PERSONAL_SELFIE,
+  DriverDocumentType.ID_FRONT,
+  DriverDocumentType.ID_BACK,
+  DriverDocumentType.DRIVING_LICENSE,
+];
+
+const DRIVER_ONBOARDING_OPTIONAL_DOCUMENT_TYPES: DriverDocumentType[] = [
+  DriverDocumentType.SELF_IDENTITY_VERIFICATION,
+];
+
+const DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES: DriverDocumentType[] = [
+  ...DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES,
+  ...DRIVER_ONBOARDING_OPTIONAL_DOCUMENT_TYPES,
+];
 
 type RequestAlertSource = {
   id: string;
@@ -488,6 +534,8 @@ const DRIVER_ME_SELECT = {
       emergencyContactName: true,
       emergencyContactPhone: true,
       profilePhotoUrl: true,
+      identityDocumentKind: true,
+      submittedForReviewAt: true,
       status: true,
       isProfileCompleted: true,
       createdAt: true,
@@ -525,6 +573,7 @@ const DRIVER_DOCUMENT_SELECT = {
   status: true,
   rejectionReason: true,
   expiresAt: true,
+  reviewedAt: true,
   createdAt: true,
 } satisfies Prisma.DriverDocumentSelect;
 
@@ -734,6 +783,252 @@ export class DriverService {
     }
 
     return this.toDriverOnboardingResponse(user.driverProfile);
+  }
+
+  async getOnboardingDocumentsStatus(
+    input: GetDriverOnboardingDocumentsInput,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: input.userId },
+      select: DRIVER_ME_SELECT,
+    });
+
+    if (!user || user.role !== UserRole.DRIVER) {
+      throw new NotFoundException('Driver account not found.');
+    }
+
+    if (!user.driverProfile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    const documents = await this.prisma.driverDocument.findMany({
+      where: {
+        driverId: user.driverProfile.id,
+        vehicleId: null,
+        type: { in: DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: DRIVER_DOCUMENT_SELECT,
+    });
+
+    return this.toOnboardingDocumentsStatusResponse(user.driverProfile, documents);
+  }
+
+  async uploadOnboardingDocuments(
+    input: UploadDriverOnboardingDocumentsInput,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    const profile = await this.getDriverProfileForOnboardingDocuments(input.userId);
+    const files = input.files;
+    const uploadedFiles = this.flattenAnyUploadFiles(files);
+
+    if (uploadedFiles.length === 0) {
+      throw new BadRequestException('At least one onboarding document is required.');
+    }
+
+    if (!profile.isProfileCompleted) {
+      await this.cleanupFiles(uploadedFiles);
+      throw new BadRequestException(
+        'Driver profile must be completed before uploading onboarding documents.',
+      );
+    }
+
+    if (input.idExpiryDate) {
+      this.assertExpiryDateNotPast(input.idExpiryDate, 'ID expiry date');
+    }
+
+    if (input.drivingLicenseExpiryDate) {
+      this.assertExpiryDateNotPast(
+        input.drivingLicenseExpiryDate,
+        'Driving license expiry date',
+      );
+    }
+
+    const isUploadingIdentityDocument =
+      Boolean(files.idFront?.length) || Boolean(files.idBack?.length);
+
+    if (isUploadingIdentityDocument && !input.idDocumentKind) {
+      await this.cleanupFiles(uploadedFiles);
+      throw new BadRequestException('Choose whether you are uploading an ID or residency card.');
+    }
+
+    if (
+      isUploadingIdentityDocument &&
+      input.idDocumentKind === IdentityDocumentKind.RESIDENCY_CARD &&
+      !input.idExpiryDate
+    ) {
+      await this.cleanupFiles(uploadedFiles);
+      throw new BadRequestException('Residency expiry date is required.');
+    }
+
+    const newRows = this.buildOnboardingDocumentRows(profile.id, input);
+    const replaceableTypes = [...new Set(newRows.map((row) => row.type))];
+    const existingDocuments =
+      replaceableTypes.length > 0
+        ? await this.prisma.driverDocument.findMany({
+            where: {
+              driverId: profile.id,
+              vehicleId: null,
+              type: { in: replaceableTypes },
+            },
+            select: {
+              id: true,
+              storageKey: true,
+            },
+          })
+        : [];
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (existingDocuments.length > 0) {
+          await tx.driverDocument.deleteMany({
+            where: {
+              id: { in: existingDocuments.map((document) => document.id) },
+            },
+          });
+        }
+
+        if (newRows.length > 0) {
+          await tx.driverDocument.createMany({
+            data: newRows,
+          });
+        }
+
+        if (isUploadingIdentityDocument) {
+          await tx.driverProfile.update({
+            where: { id: profile.id },
+            data: {
+              identityDocumentKind: input.idDocumentKind,
+            },
+          });
+          profile.identityDocumentKind = input.idDocumentKind ?? null;
+        }
+
+        if (profile.status === DriverStatus.PENDING_REVIEW) {
+          await tx.driverProfile.update({
+            where: { id: profile.id },
+            data: {
+              status: DriverStatus.PENDING_DOCUMENTS,
+              submittedForReviewAt: null,
+            },
+          });
+          profile.status = DriverStatus.PENDING_DOCUMENTS;
+          profile.submittedForReviewAt = null;
+        }
+      });
+    } catch (error) {
+      await this.cleanupFiles(uploadedFiles);
+      throw error;
+    }
+
+    await this.cleanupStorageKeys(
+      existingDocuments
+        .map((document) => document.storageKey)
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    const documents = await this.prisma.driverDocument.findMany({
+      where: {
+        driverId: profile.id,
+        vehicleId: null,
+        type: { in: DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: DRIVER_DOCUMENT_SELECT,
+    });
+
+    return this.toOnboardingDocumentsStatusResponse(profile, documents);
+  }
+
+  async submitOnboardingDocumentsForReview(
+    input: SubmitDriverOnboardingDocumentsReviewInput,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    const profile = await this.getDriverProfileForOnboardingDocuments(input.userId);
+
+    if (!profile.isProfileCompleted) {
+      throw new BadRequestException(
+        'Driver profile must be completed before submitting documents for review.',
+      );
+    }
+
+    if (profile.status === DriverStatus.SUSPENDED) {
+      throw new ForbiddenException('Suspended drivers cannot submit documents for review.');
+    }
+
+    const documents = await this.prisma.driverDocument.findMany({
+      where: {
+        driverId: profile.id,
+        vehicleId: null,
+        type: { in: DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: DRIVER_DOCUMENT_SELECT,
+    });
+
+    const latestDocuments = this.uniqueLatestDocumentsByType(documents);
+    const missingDocuments = this.getMissingOnboardingDocuments(latestDocuments);
+    if (missingDocuments.length > 0) {
+      throw new BadRequestException(
+        `Missing required documents: ${missingDocuments.join(', ')}.`,
+      );
+    }
+
+    const expiredDocument = latestDocuments.find(
+      (document) =>
+        document.expiresAt &&
+        DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES.includes(document.type) &&
+        document.expiresAt.getTime() < Date.now(),
+    );
+
+    if (expiredDocument) {
+      throw new BadRequestException(
+        `${expiredDocument.type} is expired and cannot be submitted for review.`,
+      );
+    }
+
+    const submittedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.driverDocument.updateMany({
+        where: {
+          driverId: profile.id,
+          vehicleId: null,
+          type: { in: DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES },
+          status: {
+            in: [
+              DocumentStatus.UPLOADED,
+              DocumentStatus.REJECTED,
+              DocumentStatus.PENDING_REVIEW,
+            ],
+          },
+        },
+        data: {
+          status: DocumentStatus.UNDER_REVIEW,
+          rejectionReason: null,
+          reviewedAt: null,
+        },
+      }),
+      this.prisma.driverProfile.update({
+        where: { id: profile.id },
+        data: {
+          status: DriverStatus.PENDING_REVIEW,
+          submittedForReviewAt: submittedAt,
+        },
+      }),
+    ]);
+
+    profile.status = DriverStatus.PENDING_REVIEW;
+    profile.submittedForReviewAt = submittedAt;
+
+    const updatedDocuments = await this.prisma.driverDocument.findMany({
+      where: {
+        driverId: profile.id,
+        vehicleId: null,
+        type: { in: DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: DRIVER_DOCUMENT_SELECT,
+    });
+
+    return this.toOnboardingDocumentsStatusResponse(profile, updatedDocuments);
   }
 
   async upsertPersonalInfo(
@@ -2226,6 +2521,112 @@ export class DriverService {
     return currentStatus;
   }
 
+  private async getDriverProfileForOnboardingDocuments(
+    userId: string,
+  ): Promise<DriverProfileSource> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: DRIVER_ME_SELECT,
+    });
+
+    if (!user || user.role !== UserRole.DRIVER) {
+      throw new NotFoundException('Driver account not found.');
+    }
+
+    if (!user.driverProfile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    return user.driverProfile;
+  }
+
+  private assertExpiryDateNotPast(value: Date, label: string): void {
+    if (Number.isNaN(value.getTime())) {
+      throw new BadRequestException(`${label} must be a valid date.`);
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const normalized = new Date(value);
+    normalized.setHours(0, 0, 0, 0);
+
+    if (normalized.getTime() < today.getTime()) {
+      throw new BadRequestException(`${label} must not be in the past.`);
+    }
+  }
+
+  private buildOnboardingDocumentRows(
+    driverId: string,
+    input: UploadDriverOnboardingDocumentsInput,
+  ): Array<{
+    driverId: string;
+    vehicleId: null;
+    type: DriverDocumentType;
+    url: string;
+    storageKey: string;
+    originalName: string | null;
+    mimeType: string;
+    sizeBytes: number;
+    status: DocumentStatus;
+    expiresAt: Date | null;
+  }> {
+    const rows: Array<{
+      driverId: string;
+      vehicleId: null;
+      type: DriverDocumentType;
+      url: string;
+      storageKey: string;
+      originalName: string | null;
+      mimeType: string;
+      sizeBytes: number;
+      status: DocumentStatus;
+      expiresAt: Date | null;
+    }> = [];
+
+    const mapSingle = (
+      fieldFiles: MulterFile[] | undefined,
+      type: DriverDocumentType,
+      expiresAt?: Date,
+    ): void => {
+      const file = fieldFiles?.[0];
+      if (!file) return;
+
+      const storageKey = relative(process.cwd(), file.path).replace(/\\/g, '/');
+      rows.push({
+        driverId,
+        vehicleId: null,
+        type,
+        url: `/${storageKey}`,
+        storageKey,
+        originalName: file.originalname || null,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        status: DocumentStatus.UPLOADED,
+        expiresAt: expiresAt ?? null,
+      });
+    };
+
+    mapSingle(input.files.personalSelfie, DriverDocumentType.PERSONAL_SELFIE);
+    const identityExpiryDate =
+      input.idDocumentKind === IdentityDocumentKind.RESIDENCY_CARD
+        ? input.idExpiryDate
+        : undefined;
+    mapSingle(input.files.idFront, DriverDocumentType.ID_FRONT, identityExpiryDate);
+    mapSingle(input.files.idBack, DriverDocumentType.ID_BACK, identityExpiryDate);
+    mapSingle(
+      input.files.drivingLicense,
+      DriverDocumentType.DRIVING_LICENSE,
+      input.drivingLicenseExpiryDate,
+    );
+    mapSingle(
+      input.files.selfIdentityVerification,
+      DriverDocumentType.SELF_IDENTITY_VERIFICATION,
+    );
+
+    return rows;
+  }
+
   private async persistDriverProfileUpdate(input: {
     userId: string;
     existingProfile: DriverProfileSource;
@@ -3437,9 +3838,25 @@ export class DriverService {
     return Object.values(files ?? {}).flatMap((group) => group ?? []);
   }
 
+  private flattenAnyUploadFiles(
+    files:
+      | UploadDriverVehicleDocumentsInput['files']
+      | UploadDriverOnboardingDocumentsInput['files'],
+  ): MulterFile[] {
+    return Object.values(files ?? {}).flatMap((group) => group ?? []);
+  }
+
   private async cleanupFiles(files: MulterFile[]): Promise<void> {
     await Promise.all(
       files.map(async (file) => unlink(file.path).catch(() => undefined)),
+    );
+  }
+
+  private async cleanupStorageKeys(storageKeys: string[]): Promise<void> {
+    await Promise.all(
+      storageKeys.map(async (storageKey) =>
+        unlink(join(process.cwd(), storageKey)).catch(() => undefined),
+      ),
     );
   }
 
@@ -3478,6 +3895,99 @@ export class DriverService {
       expiresAt: document.expiresAt ? document.expiresAt.toISOString() : null,
       createdAt: document.createdAt.toISOString(),
     };
+  }
+
+  private toOnboardingDocumentResponse(
+    document: DocumentSource,
+  ): DriverOnboardingDocumentResponseDto {
+    return {
+      id: document.id,
+      type: document.type,
+      url: document.url,
+      mimeType: document.mimeType,
+      sizeBytes: document.sizeBytes,
+      status: document.status,
+      rejectionReason: document.rejectionReason,
+      expiresAt: document.expiresAt ? document.expiresAt.toISOString() : null,
+      reviewedAt: document.reviewedAt ? document.reviewedAt.toISOString() : null,
+      uploadedAt: document.createdAt.toISOString(),
+    };
+  }
+
+  private uniqueLatestDocumentsByType(
+    documents: DocumentSource[],
+  ): DocumentSource[] {
+    const map = new Map<DriverDocumentType, DocumentSource>();
+
+    for (const document of documents) {
+      if (!map.has(document.type)) {
+        map.set(document.type, document);
+      }
+    }
+
+    return [...map.values()];
+  }
+
+  private getMissingOnboardingDocuments(
+    documents: DocumentSource[],
+  ): DriverDocumentType[] {
+    return DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES.filter(
+      (requiredType) =>
+        !documents.some(
+          (document) =>
+            document.type === requiredType &&
+            document.status !== DocumentStatus.REJECTED,
+        ),
+    );
+  }
+
+  private toOnboardingDocumentsStatusResponse(
+    profile: DriverProfileSource,
+    documents: DocumentSource[],
+  ): DriverOnboardingDocumentsStatusResponseDto {
+    const latestDocuments = this.uniqueLatestDocumentsByType(documents);
+    const missingDocuments = this.getMissingOnboardingDocuments(latestDocuments);
+    const canSubmitForReview =
+      profile.isProfileCompleted &&
+      missingDocuments.length === 0 &&
+      profile.status !== DriverStatus.PENDING_REVIEW &&
+      profile.status !== DriverStatus.APPROVED &&
+      profile.status !== DriverStatus.SUSPENDED;
+
+    return {
+      onboardingStatus: profile.status,
+      identityDocumentKind: profile.identityDocumentKind,
+      requiredDocuments: DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES,
+      uploadedDocuments: latestDocuments.map((document) =>
+        this.toOnboardingDocumentResponse(document),
+      ),
+      missingDocuments,
+      missingDocumentLabels: missingDocuments.map((documentType) =>
+        this.toOnboardingDocumentLabel(documentType),
+      ),
+      canSubmitForReview,
+      submittedForReviewAt: profile.submittedForReviewAt
+        ? profile.submittedForReviewAt.toISOString()
+        : null,
+      nextStep: this.getOnboardingNextStep(profile),
+    };
+  }
+
+  private toOnboardingDocumentLabel(type: DriverDocumentType): string {
+    switch (type) {
+      case DriverDocumentType.PERSONAL_SELFIE:
+        return 'Personal selfie';
+      case DriverDocumentType.ID_FRONT:
+        return 'ID or residency card front';
+      case DriverDocumentType.ID_BACK:
+        return 'ID or residency card back';
+      case DriverDocumentType.DRIVING_LICENSE:
+        return 'Driving license';
+      case DriverDocumentType.SELF_IDENTITY_VERIFICATION:
+        return 'Self-identity verification';
+      default:
+        return type;
+    }
   }
 
   private toDriverOfferResponse(

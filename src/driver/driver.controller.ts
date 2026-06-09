@@ -46,6 +46,10 @@ import {
   UpdateDriverOnlineStatusDto,
 } from './dto/update-driver-availability.dto';
 import { DriverOnboardingResponseDto } from './dto/driver-onboarding-response.dto';
+import {
+  DriverOnboardingDocumentsStatusResponseDto,
+  UploadDriverOnboardingDocumentsDto,
+} from './dto/driver-onboarding-documents.dto';
 import { UpsertDriverPersonalInfoDto } from './dto/upsert-driver-personal-info.dto';
 import { UpdateDriverProfileDto } from './dto/update-driver-profile.dto';
 import { DriverService } from './driver.service';
@@ -89,6 +93,14 @@ type DriverDocumentUploadFields = {
   vehicleRegistration?: MulterFile[];
   vehicleInsurance?: MulterFile[];
   vehiclePhotos?: MulterFile[];
+};
+
+type DriverOnboardingDocumentUploadFields = {
+  personalSelfie?: MulterFile[];
+  idFront?: MulterFile[];
+  idBack?: MulterFile[];
+  drivingLicense?: MulterFile[];
+  selfIdentityVerification?: MulterFile[];
 };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -141,6 +153,124 @@ export class DriverController {
       idOrResidencyNumber: dto.idOrResidencyNumber,
       coverageCity: dto.coverageCity,
       coverageAreas: dto.coverageAreas,
+    });
+  }
+
+  @Get('onboarding/documents')
+  async getOnboardingDocumentsStatus(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    return this.driverService.getOnboardingDocumentsStatus({
+      userId: request.user.id,
+    });
+  }
+
+  @Post('onboarding/submit-review')
+  async submitOnboardingDocumentsForReview(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    return this.driverService.submitOnboardingDocumentsForReview({
+      userId: request.user.id,
+    });
+  }
+
+  @Post('onboarding/documents')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'personalSelfie', maxCount: 1 },
+        { name: 'idFront', maxCount: 1 },
+        { name: 'idBack', maxCount: 1 },
+        { name: 'drivingLicense', maxCount: 1 },
+        { name: 'selfIdentityVerification', maxCount: 1 },
+      ],
+      {
+        storage: diskStorage({
+          destination: (req, _file, callback) => {
+            const driverIdValue = req.user?.id;
+            const driverId =
+              typeof driverIdValue === 'string'
+                ? driverIdValue
+                : 'unknown-driver';
+            const targetDirectory = join(
+              process.cwd(),
+              'uploads',
+              'drivers',
+              driverId,
+              'onboarding',
+            );
+            mkdirSync(targetDirectory, { recursive: true });
+            callback(null, targetDirectory);
+          },
+          filename: (_req, file, callback) => {
+            const randomSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+            const extension =
+              extname(file.originalname || '').toLowerCase() || '.bin';
+            callback(null, `onboarding-${randomSuffix}${extension}`);
+          },
+        }),
+        fileFilter: (_req, file, callback) => {
+          const isImage = IMAGE_MIME_TYPES.has(file.mimetype);
+          const isDocument = DOCUMENT_MIME_TYPES.has(file.mimetype);
+          const field = file.fieldname;
+
+          if (
+            field === 'personalSelfie' ||
+            field === 'selfIdentityVerification'
+          ) {
+            if (!isImage) {
+              callback(
+                new BadRequestException(
+                  'Personal selfie and self-identity verification files must be JPEG, PNG, or WEBP.',
+                ),
+                false,
+              );
+              return;
+            }
+          } else if (!isDocument) {
+            callback(
+              new BadRequestException(
+                'Onboarding documents must be JPEG, PNG, WEBP, or PDF.',
+              ),
+              false,
+            );
+            return;
+          }
+
+          callback(null, true);
+        },
+      },
+    ),
+  )
+  async uploadOnboardingDocuments(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UploadDriverOnboardingDocumentsDto,
+    @UploadedFiles() files: DriverOnboardingDocumentUploadFields,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    const allFiles = Object.values(files ?? {}).flatMap((group) => group ?? []);
+    const oversizedFile = allFiles.find((file) => {
+      if (file.mimetype === 'application/pdf') {
+        return file.size > MAX_PDF_BYTES;
+      }
+      return file.size > MAX_IMAGE_BYTES;
+    });
+
+    if (oversizedFile) {
+      throw new BadRequestException(
+        oversizedFile.mimetype === 'application/pdf'
+          ? 'PDF documents must be 10 MB or smaller.'
+          : 'Image files must be 5 MB or smaller.',
+      );
+    }
+
+    return this.driverService.uploadOnboardingDocuments({
+      userId: request.user.id,
+      files,
+      idDocumentKind: dto.idDocumentKind,
+      idExpiryDate: dto.idExpiryDate ? new Date(dto.idExpiryDate) : undefined,
+      drivingLicenseExpiryDate: dto.drivingLicenseExpiryDate
+        ? new Date(dto.drivingLicenseExpiryDate)
+        : undefined,
     });
   }
 
