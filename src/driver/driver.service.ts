@@ -13,6 +13,8 @@ import {
   DriverRequestAlertStatus,
   DriverDocumentType,
   DriverStatus,
+  DriverVehicleCondition,
+  DriverVehicleReviewStatus,
   IdentityDocumentKind,
   ItemType,
   TransportRequestStatus,
@@ -59,6 +61,7 @@ import {
   SendDriverPriceOfferResponseDto,
 } from './dto/driver-offer.dto';
 import {
+  CanonicalVehicleType,
   DriverDocumentResponseDto,
   DriverVehicleDocumentsResponseDto,
   DriverVehiclesListResponseDto,
@@ -115,20 +118,52 @@ interface UpsertDriverPersonalInfoInput {
 interface CreateDriverVehicleInput {
   userId: string;
   vehicleType: VehicleType;
-  make: string;
+  brand: string;
   model: string;
   year: number;
-  plateNumber: string;
+  licensePlateNumber: string;
+  condition: DriverVehicleCondition;
   color?: string;
   capacityKg?: number;
   lengthCm?: number;
   widthCm?: number;
   heightCm?: number;
   hasTrailer: boolean;
+  insuranceExpiryDate?: Date;
+  registrationExpiryDate?: Date;
 }
 
 interface ListDriverVehiclesInput {
   userId: string;
+}
+
+interface GetDriverVehicleInput {
+  userId: string;
+  vehicleId: string;
+}
+
+interface UpdateDriverVehicleInput {
+  userId: string;
+  vehicleId: string;
+  vehicleType?: VehicleType;
+  brand?: string;
+  model?: string;
+  year?: number;
+  licensePlateNumber?: string;
+  condition?: DriverVehicleCondition;
+  color?: string;
+  capacityKg?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  hasTrailer?: boolean;
+  insuranceExpiryDate?: Date;
+  registrationExpiryDate?: Date;
+}
+
+interface DeactivateDriverVehicleInput {
+  userId: string;
+  vehicleId: string;
 }
 
 interface GetDriverAvailabilityInput {
@@ -181,7 +216,16 @@ interface UpdateDriverRequestAlertInput {
 interface UploadDriverVehicleDocumentsInput {
   userId: string;
   vehicleId: string;
+  insuranceExpiryDate?: Date;
+  registrationExpiryDate?: Date;
   files: {
+    frontPhoto?: MulterFile[];
+    rearPhoto?: MulterFile[];
+    sidePhoto?: MulterFile[];
+    licensePlatePhoto?: MulterFile[];
+    registrationFrontDocument?: MulterFile[];
+    registrationBackDocument?: MulterFile[];
+    insuranceDocument?: MulterFile[];
     driverLicenseFront?: MulterFile[];
     driverLicenseBack?: MulterFile[];
     identityDocument?: MulterFile[];
@@ -275,12 +319,17 @@ type VehicleSource = {
   model: string;
   year: number;
   plateNumber: string;
+  condition: DriverVehicleCondition;
   color: string | null;
   capacityKg: number | null;
   lengthCm: number | null;
   widthCm: number | null;
   heightCm: number | null;
   hasTrailer: boolean;
+  insuranceExpiryDate: Date | null;
+  registrationExpiryDate: Date | null;
+  status: DriverVehicleReviewStatus;
+  rejectionReason: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -552,12 +601,17 @@ const DRIVER_VEHICLE_SELECT = {
   model: true,
   year: true,
   plateNumber: true,
+  condition: true,
   color: true,
   capacityKg: true,
   lengthCm: true,
   widthCm: true,
   heightCm: true,
   hasTrailer: true,
+  insuranceExpiryDate: true,
+  registrationExpiryDate: true,
+  status: true,
+  rejectionReason: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
@@ -700,16 +754,6 @@ const DRIVER_OFFER_SELECT = {
   updatedAt: true,
 } satisfies Prisma.DriverOfferSelect;
 
-const REQUIRED_DOCUMENT_FIELDS: Array<
-  keyof UploadDriverVehicleDocumentsInput['files']
-> = [
-  'driverLicenseFront',
-  'driverLicenseBack',
-  'identityDocument',
-  'vehicleRegistration',
-  'vehicleInsurance',
-];
-
 const MAX_VEHICLE_PHOTOS = 8;
 const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const WEEK_DAYS_ORDER: DayOfWeek[] = [
@@ -736,6 +780,40 @@ const ACCEPTED_JOB_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.DRIVER_ARRIVED_PICKUP,
   TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
 ];
+
+const CANONICAL_VEHICLE_DOCUMENT_TYPES = {
+  frontPhoto: DriverDocumentType.VEHICLE_FRONT_PHOTO,
+  rearPhoto: DriverDocumentType.VEHICLE_REAR_PHOTO,
+  sidePhoto: DriverDocumentType.VEHICLE_SIDE_PHOTO,
+  licensePlatePhoto: DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
+  registrationFrontDocument: DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
+  registrationBackDocument: DriverDocumentType.VEHICLE_REGISTRATION_BACK,
+  insuranceDocument: DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
+} as const;
+
+const LEGACY_COMPATIBLE_VEHICLE_DOCUMENT_TYPES = {
+  registration: DriverDocumentType.VEHICLE_REGISTRATION,
+  insurance: DriverDocumentType.VEHICLE_INSURANCE,
+  photo: DriverDocumentType.VEHICLE_PHOTO,
+} as const;
+
+const CANONICAL_VEHICLE_TYPE_MAP: Record<VehicleType, CanonicalVehicleType> = {
+  CAR_CARRIER: 'FLATBED_ENCLOSED',
+  FLATBED_TRUCK: 'FLATBED_OPEN',
+  TOW_TRUCK: 'TOW_TRUCK',
+  VAN: 'VAN',
+  BOX_TRUCK: 'MEDIUM_TRUCK',
+  PICKUP_TRUCK: 'PICKUP',
+  MOTORCYCLE_TRAILER: 'MOTORCYCLE',
+  FURNITURE_TRUCK: 'MEDIUM_TRUCK',
+  OTHER: 'SMALL_TRUCK',
+  FLATBED_OPEN: 'FLATBED_OPEN',
+  FLATBED_ENCLOSED: 'FLATBED_ENCLOSED',
+  SMALL_TRUCK: 'SMALL_TRUCK',
+  MEDIUM_TRUCK: 'MEDIUM_TRUCK',
+  PICKUP: 'PICKUP',
+  MOTORCYCLE: 'MOTORCYCLE',
+};
 
 @Injectable()
 export class DriverService {
@@ -1940,11 +2018,24 @@ export class DriverService {
       driverStatus: profile.status,
       nextStep: this.getVehicleDocumentsNextStep(profile.status, vehicles),
       vehicles: vehicles.map((vehicle) => ({
-        vehicle: this.toVehicleResponse(vehicle),
+        vehicle: this.toVehicleResponse(vehicle, vehicle.documents),
         documents: vehicle.documents.map((document) =>
           this.toDocumentResponse(document),
         ),
       })),
+    };
+  }
+
+  async getVehicle(
+    input: GetDriverVehicleInput,
+  ): Promise<DriverVehicleDocumentsResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+
+    return {
+      vehicle: this.toVehicleResponse(vehicle, vehicle.documents),
+      documents: vehicle.documents.map((document) => this.toDocumentResponse(document)),
+      nextStep: this.getVehicleDocumentsNextStep(profile.status, [vehicle]),
     };
   }
 
@@ -2344,7 +2435,18 @@ export class DriverService {
       );
     }
 
-    const plateNumber = input.plateNumber.trim();
+    if (input.insuranceExpiryDate) {
+      this.assertExpiryDateNotPast(input.insuranceExpiryDate, 'Insurance expiry date');
+    }
+
+    if (input.registrationExpiryDate) {
+      this.assertExpiryDateNotPast(
+        input.registrationExpiryDate,
+        'Registration expiry date',
+      );
+    }
+
+    const plateNumber = input.licensePlateNumber.trim();
 
     const existingVehicle = await this.prisma.driverVehicle.findUnique({
       where: { plateNumber },
@@ -2359,26 +2461,147 @@ export class DriverService {
       data: {
         driverId: profile.id,
         vehicleType: input.vehicleType,
-        make: input.make.trim(),
+        make: input.brand.trim(),
         model: input.model.trim(),
         year: input.year,
         plateNumber,
+        condition: input.condition,
         color: input.color?.trim() || null,
         capacityKg: input.capacityKg ?? null,
         lengthCm: input.lengthCm ?? null,
         widthCm: input.widthCm ?? null,
         heightCm: input.heightCm ?? null,
         hasTrailer: input.hasTrailer,
+        insuranceExpiryDate: input.insuranceExpiryDate ?? null,
+        registrationExpiryDate: input.registrationExpiryDate ?? null,
+        status: DriverVehicleReviewStatus.APPROVED,
         isActive: true,
       },
       select: DRIVER_VEHICLE_SELECT,
     });
 
     return {
-      vehicle: this.toVehicleResponse(vehicle),
+      vehicle: this.toVehicleResponse(vehicle, []),
       documents: [],
       nextStep: 'ADD_VEHICLE_DOCUMENTS',
     };
+  }
+
+  async updateVehicle(
+    input: UpdateDriverVehicleInput,
+  ): Promise<DriverVehicleDocumentsResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const existingVehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
+
+    if (input.year !== undefined) {
+      const currentYear = new Date().getFullYear();
+      if (input.year < 1980 || input.year > currentYear + 1) {
+        throw new BadRequestException(
+          `year must be between 1980 and ${currentYear + 1}.`,
+        );
+      }
+    }
+
+    if (input.insuranceExpiryDate) {
+      this.assertExpiryDateNotPast(input.insuranceExpiryDate, 'Insurance expiry date');
+    }
+
+    if (input.registrationExpiryDate) {
+      this.assertExpiryDateNotPast(
+        input.registrationExpiryDate,
+        'Registration expiry date',
+      );
+    }
+
+    const normalizedPlateNumber =
+      input.licensePlateNumber !== undefined
+        ? input.licensePlateNumber.trim()
+        : existingVehicle.plateNumber;
+
+    if (normalizedPlateNumber !== existingVehicle.plateNumber) {
+      const duplicateVehicle = await this.prisma.driverVehicle.findUnique({
+        where: { plateNumber: normalizedPlateNumber },
+        select: { id: true },
+      });
+
+      if (duplicateVehicle && duplicateVehicle.id !== existingVehicle.id) {
+        throw new ConflictException('plateNumber is already in use.');
+      }
+    }
+
+    const vehicle = await this.prisma.driverVehicle.update({
+      where: { id: existingVehicle.id },
+      data: {
+        vehicleType: input.vehicleType ?? existingVehicle.vehicleType,
+        make:
+          input.brand !== undefined ? input.brand.trim() : existingVehicle.make,
+        model:
+          input.model !== undefined ? input.model.trim() : existingVehicle.model,
+        year: input.year ?? existingVehicle.year,
+        plateNumber: normalizedPlateNumber,
+        condition: input.condition ?? existingVehicle.condition,
+        color:
+          input.color !== undefined ? input.color?.trim() || null : existingVehicle.color,
+        capacityKg:
+          input.capacityKg !== undefined ? input.capacityKg : existingVehicle.capacityKg,
+        lengthCm:
+          input.lengthCm !== undefined ? input.lengthCm : existingVehicle.lengthCm,
+        widthCm:
+          input.widthCm !== undefined ? input.widthCm : existingVehicle.widthCm,
+        heightCm:
+          input.heightCm !== undefined ? input.heightCm : existingVehicle.heightCm,
+        hasTrailer:
+          input.hasTrailer !== undefined ? input.hasTrailer : existingVehicle.hasTrailer,
+        insuranceExpiryDate:
+          input.insuranceExpiryDate !== undefined
+            ? input.insuranceExpiryDate
+            : existingVehicle.insuranceExpiryDate,
+        registrationExpiryDate:
+          input.registrationExpiryDate !== undefined
+            ? input.registrationExpiryDate
+            : existingVehicle.registrationExpiryDate,
+      },
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+
+    return {
+      vehicle: this.toVehicleResponse(vehicle, vehicle.documents),
+      documents: vehicle.documents.map((document) => this.toDocumentResponse(document)),
+      nextStep: this.getVehicleDocumentsNextStep(profile.status, [vehicle]),
+    };
+  }
+
+  async deactivateVehicle(
+    input: DeactivateDriverVehicleInput,
+  ): Promise<VehicleResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+
+    const updatedVehicle = await this.prisma.driverVehicle.update({
+      where: { id: vehicle.id },
+      data: {
+        isActive: false,
+        status: DriverVehicleReviewStatus.INACTIVE,
+      },
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+
+    return this.toVehicleResponse(updatedVehicle, updatedVehicle.documents);
   }
 
   async uploadVehicleDocuments(
@@ -2398,7 +2621,13 @@ export class DriverService {
         id: input.vehicleId,
         driverId: profile.id,
       },
-      select: DRIVER_VEHICLE_SELECT,
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
     });
 
     if (!vehicle) {
@@ -2406,61 +2635,82 @@ export class DriverService {
       throw new NotFoundException('Vehicle not found.');
     }
 
+    if (input.insuranceExpiryDate) {
+      this.assertExpiryDateNotPast(input.insuranceExpiryDate, 'Insurance expiry date');
+    }
+
+    if (input.registrationExpiryDate) {
+      this.assertExpiryDateNotPast(
+        input.registrationExpiryDate,
+        'Registration expiry date',
+      );
+    }
+
     const driverFiles = input.files;
 
-    for (const field of REQUIRED_DOCUMENT_FIELDS) {
-      const uploaded = driverFiles[field];
-      if (!uploaded || uploaded.length === 0) {
-        await this.cleanupFiles(this.flattenUploadFiles(input.files));
-        throw new BadRequestException(`${field} is required.`);
-      }
-    }
-
-    const vehiclePhotos = driverFiles.vehiclePhotos ?? [];
-    if (vehiclePhotos.length === 0) {
+    const documentRows = this.buildDocumentRows(profile.id, vehicle.id, driverFiles);
+    if (documentRows.length === 0) {
       await this.cleanupFiles(this.flattenUploadFiles(input.files));
-      throw new BadRequestException('At least one vehicle photo is required.');
+      throw new BadRequestException('At least one vehicle document or photo is required.');
     }
 
-    if (vehiclePhotos.length > MAX_VEHICLE_PHOTOS) {
+    const requiredMissing = this.getMissingCanonicalVehicleUploads(driverFiles, vehicle);
+    if (requiredMissing.length > 0) {
       await this.cleanupFiles(this.flattenUploadFiles(input.files));
       throw new BadRequestException(
-        `vehiclePhotos can include at most ${MAX_VEHICLE_PHOTOS} files.`,
+        `Missing required vehicle files: ${requiredMissing.join(', ')}.`,
       );
     }
 
-    const existingVehiclePhotosCount = await this.prisma.driverDocument.count({
-      where: {
-        driverId: profile.id,
-        vehicleId: vehicle.id,
-        type: DriverDocumentType.VEHICLE_PHOTO,
-      },
-    });
-
-    if (
-      existingVehiclePhotosCount + vehiclePhotos.length >
-      MAX_VEHICLE_PHOTOS
-    ) {
-      await this.cleanupFiles(this.flattenUploadFiles(input.files));
-      throw new BadRequestException(
-        `A vehicle can have up to ${MAX_VEHICLE_PHOTOS} photos.`,
-      );
-    }
-
-    const documentRows = this.buildDocumentRows(
-      profile.id,
-      vehicle.id,
-      driverFiles,
-    );
+    const replaceableTypes = [...new Set(documentRows.map((row) => row.type))];
+    const existingDocuments =
+      replaceableTypes.length > 0
+        ? await this.prisma.driverDocument.findMany({
+            where: {
+              driverId: profile.id,
+              vehicleId: vehicle.id,
+              type: { in: replaceableTypes },
+            },
+            select: {
+              id: true,
+              storageKey: true,
+            },
+          })
+        : [];
 
     try {
-      await this.prisma.driverDocument.createMany({
-        data: documentRows,
+      await this.prisma.$transaction(async (tx) => {
+        if (existingDocuments.length > 0) {
+          await tx.driverDocument.deleteMany({
+            where: {
+              id: { in: existingDocuments.map((document) => document.id) },
+            },
+          });
+        }
+
+        await tx.driverDocument.createMany({
+          data: documentRows,
+        });
+
+        await tx.driverVehicle.update({
+          where: { id: vehicle.id },
+          data: {
+            insuranceExpiryDate: input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
+            registrationExpiryDate:
+              input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
+          },
+        });
       });
     } catch (error) {
       await this.cleanupFiles(this.flattenUploadFiles(input.files));
       throw error;
     }
+
+    await this.cleanupStorageKeys(
+      existingDocuments
+        .map((document) => document.storageKey)
+        .filter((value): value is string => Boolean(value)),
+    );
 
     const documents = await this.prisma.driverDocument.findMany({
       where: {
@@ -2486,7 +2736,15 @@ export class DriverService {
     }
 
     return {
-      vehicle: this.toVehicleResponse(vehicle),
+      vehicle: this.toVehicleResponse(
+        {
+          ...vehicle,
+          insuranceExpiryDate: input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
+          registrationExpiryDate:
+            input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
+        },
+        documents,
+      ),
       documents: documents.map((document) => this.toDocumentResponse(document)),
       nextStep: hasRequired ? 'SET_AVAILABILITY' : 'ADD_VEHICLE_DOCUMENTS',
     };
@@ -2941,6 +3199,28 @@ export class DriverService {
   private hasRequiredVehicleDocuments(
     documents: Array<{ type: DriverDocumentType }>,
   ): boolean {
+    const hasCanonicalPhotoSet =
+      documents.some((doc) => doc.type === DriverDocumentType.VEHICLE_FRONT_PHOTO) &&
+      documents.some((doc) => doc.type === DriverDocumentType.VEHICLE_REAR_PHOTO) &&
+      documents.some((doc) => doc.type === DriverDocumentType.VEHICLE_SIDE_PHOTO) &&
+      documents.some(
+        (doc) => doc.type === DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
+      );
+    const hasCanonicalDocumentSet =
+      documents.some(
+        (doc) => doc.type === DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
+      ) &&
+      documents.some(
+        (doc) => doc.type === DriverDocumentType.VEHICLE_REGISTRATION_BACK,
+      ) &&
+      documents.some(
+        (doc) => doc.type === DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
+      );
+
+    if (hasCanonicalPhotoSet && hasCanonicalDocumentSet) {
+      return true;
+    }
+
     const hasLicenseFront = documents.some(
       (doc) => doc.type === DriverDocumentType.DRIVER_LICENSE_FRONT,
     );
@@ -2972,6 +3252,74 @@ export class DriverService {
     );
   }
 
+  private getMissingCanonicalVehicleUploads(
+    files: UploadDriverVehicleDocumentsInput['files'],
+    vehicle: VehicleSource,
+  ): string[] {
+    const latestExistingDocuments = new Set(
+      (vehicle as VehicleSource & { documents?: DocumentSource[] }).documents?.map(
+        (document) => document.type,
+      ) ?? [],
+    );
+
+    const hasFieldFile = (field: keyof UploadDriverVehicleDocumentsInput['files']): boolean =>
+      Boolean(files[field]?.length);
+
+    const missing: string[] = [];
+    if (
+      !hasFieldFile('frontPhoto') &&
+      !latestExistingDocuments.has(DriverDocumentType.VEHICLE_FRONT_PHOTO)
+    ) {
+      missing.push('frontPhoto');
+    }
+    if (
+      !hasFieldFile('rearPhoto') &&
+      !latestExistingDocuments.has(DriverDocumentType.VEHICLE_REAR_PHOTO)
+    ) {
+      missing.push('rearPhoto');
+    }
+    if (
+      !hasFieldFile('sidePhoto') &&
+      !latestExistingDocuments.has(DriverDocumentType.VEHICLE_SIDE_PHOTO)
+    ) {
+      missing.push('sidePhoto');
+    }
+    if (
+      !hasFieldFile('licensePlatePhoto') &&
+      !latestExistingDocuments.has(
+        DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
+      )
+    ) {
+      missing.push('licensePlatePhoto');
+    }
+    if (
+      !hasFieldFile('registrationFrontDocument') &&
+      !latestExistingDocuments.has(
+        DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
+      )
+    ) {
+      missing.push('registrationFrontDocument');
+    }
+    if (
+      !hasFieldFile('registrationBackDocument') &&
+      !latestExistingDocuments.has(
+        DriverDocumentType.VEHICLE_REGISTRATION_BACK,
+      )
+    ) {
+      missing.push('registrationBackDocument');
+    }
+    if (
+      !hasFieldFile('insuranceDocument') &&
+      !latestExistingDocuments.has(
+        DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
+      )
+    ) {
+      missing.push('insuranceDocument');
+    }
+
+    return missing;
+  }
+
   private buildDocumentRows(
     driverId: string,
     vehicleId: string,
@@ -2982,11 +3330,12 @@ export class DriverService {
     type: DriverDocumentType;
     url: string;
     storageKey: string;
-    originalName: string | null;
-    mimeType: string;
-    sizeBytes: number;
-    status: DocumentStatus;
-  }> {
+      originalName: string | null;
+      mimeType: string;
+      sizeBytes: number;
+      status: DocumentStatus;
+      expiresAt?: Date | null;
+    }> {
     const rows: Array<{
       driverId: string;
       vehicleId: string;
@@ -2997,11 +3346,13 @@ export class DriverService {
       mimeType: string;
       sizeBytes: number;
       status: DocumentStatus;
+      expiresAt?: Date | null;
     }> = [];
 
     const mapSingle = (
       fieldFiles: MulterFile[] | undefined,
       type: DriverDocumentType,
+      expiresAt?: Date | null,
     ): void => {
       const file = fieldFiles?.[0];
       if (!file) return;
@@ -3017,33 +3368,63 @@ export class DriverService {
         mimeType: file.mimetype,
         sizeBytes: file.size,
         status: DocumentStatus.PENDING_REVIEW,
+        expiresAt: expiresAt ?? null,
       });
     };
 
+    mapSingle(files.frontPhoto, DriverDocumentType.VEHICLE_FRONT_PHOTO);
+    mapSingle(files.rearPhoto, DriverDocumentType.VEHICLE_REAR_PHOTO);
+    mapSingle(files.sidePhoto, DriverDocumentType.VEHICLE_SIDE_PHOTO);
     mapSingle(
-      files.driverLicenseFront,
-      DriverDocumentType.DRIVER_LICENSE_FRONT,
+      files.licensePlatePhoto,
+      DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
     );
-    mapSingle(files.driverLicenseBack, DriverDocumentType.DRIVER_LICENSE_BACK);
-    mapSingle(files.identityDocument, DriverDocumentType.IDENTITY_DOCUMENT);
     mapSingle(
-      files.vehicleRegistration,
-      DriverDocumentType.VEHICLE_REGISTRATION,
+      files.registrationFrontDocument,
+      DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
+      files.registrationFrontDocument?.[0] ? null : undefined,
     );
-    mapSingle(files.vehicleInsurance, DriverDocumentType.VEHICLE_INSURANCE);
+    mapSingle(
+      files.registrationBackDocument,
+      DriverDocumentType.VEHICLE_REGISTRATION_BACK,
+      files.registrationBackDocument?.[0] ? null : undefined,
+    );
+    mapSingle(
+      files.insuranceDocument,
+      DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
+    );
 
-    for (const file of files.vehiclePhotos ?? []) {
+    if (!files.registrationFrontDocument?.length && files.vehicleRegistration?.length) {
+      mapSingle(files.vehicleRegistration, DriverDocumentType.VEHICLE_REGISTRATION);
+    }
+
+    if (!files.insuranceDocument?.length && files.vehicleInsurance?.length) {
+      mapSingle(files.vehicleInsurance, DriverDocumentType.VEHICLE_INSURANCE);
+    }
+
+    for (const [index, file] of (files.vehiclePhotos ?? []).entries()) {
       const storageKey = relative(process.cwd(), file.path).replace(/\\/g, '/');
+      const fallbackType =
+        index === 0
+          ? DriverDocumentType.VEHICLE_FRONT_PHOTO
+          : index === 1
+            ? DriverDocumentType.VEHICLE_REAR_PHOTO
+            : index === 2
+              ? DriverDocumentType.VEHICLE_SIDE_PHOTO
+              : index === 3
+                ? DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO
+                : DriverDocumentType.VEHICLE_PHOTO;
       rows.push({
         driverId,
         vehicleId,
-        type: DriverDocumentType.VEHICLE_PHOTO,
+        type: fallbackType,
         url: `/${storageKey}`,
         storageKey,
         originalName: file.originalname || null,
         mimeType: file.mimetype,
         sizeBytes: file.size,
         status: DocumentStatus.PENDING_REVIEW,
+        expiresAt: null,
       });
     }
 
@@ -3088,6 +3469,7 @@ export class DriverService {
       where: {
         driverId,
         isActive: true,
+        status: DriverVehicleReviewStatus.APPROVED,
       },
       select: {
         vehicleType: true,
@@ -3109,6 +3491,7 @@ export class DriverService {
       where: {
         driverId,
         isActive: true,
+        status: DriverVehicleReviewStatus.APPROVED,
       },
       select: {
         vehicleType: true,
@@ -3191,10 +3574,35 @@ export class DriverService {
     vehicleTypes: Set<VehicleType>,
   ): boolean {
     const serviceVehicleTypeMap: Record<ServiceKey, VehicleType[]> = {
-      VEHICLE_TRANSPORT: ['CAR_CARRIER', 'FLATBED_TRUCK', 'TOW_TRUCK'],
-      MOTORCYCLE_TRANSPORT: ['MOTORCYCLE_TRAILER', 'VAN', 'PICKUP_TRUCK'],
-      GOODS_TRANSPORT: ['VAN', 'BOX_TRUCK', 'PICKUP_TRUCK'],
-      FURNITURE_TRANSPORT: ['FURNITURE_TRUCK', 'BOX_TRUCK', 'VAN'],
+      VEHICLE_TRANSPORT: [
+        'CAR_CARRIER',
+        'FLATBED_TRUCK',
+        'TOW_TRUCK',
+        'FLATBED_OPEN',
+        'FLATBED_ENCLOSED',
+      ],
+      MOTORCYCLE_TRANSPORT: [
+        'MOTORCYCLE_TRAILER',
+        'VAN',
+        'PICKUP_TRUCK',
+        'MOTORCYCLE',
+        'PICKUP',
+      ],
+      GOODS_TRANSPORT: [
+        'VAN',
+        'BOX_TRUCK',
+        'PICKUP_TRUCK',
+        'SMALL_TRUCK',
+        'MEDIUM_TRUCK',
+        'PICKUP',
+      ],
+      FURNITURE_TRANSPORT: [
+        'FURNITURE_TRUCK',
+        'BOX_TRUCK',
+        'VAN',
+        'SMALL_TRUCK',
+        'MEDIUM_TRUCK',
+      ],
     };
 
     const allowedTypes = serviceVehicleTypeMap[serviceKey];
@@ -3467,6 +3875,7 @@ export class DriverService {
       where: {
         driverId,
         isActive: true,
+        status: DriverVehicleReviewStatus.APPROVED,
       },
       select: {
         id: true,
@@ -3860,20 +4269,72 @@ export class DriverService {
     );
   }
 
-  private toVehicleResponse(vehicle: VehicleSource): VehicleResponseDto {
+  private toVehicleResponse(
+    vehicle: VehicleSource,
+    documents: DocumentSource[] = [],
+  ): VehicleResponseDto {
+    const latestDocumentsByType = new Map<DriverDocumentType, DocumentSource>();
+    for (const document of documents) {
+      if (!latestDocumentsByType.has(document.type)) {
+        latestDocumentsByType.set(document.type, document);
+      }
+    }
+
+    const readDocumentUrl = (
+      ...types: DriverDocumentType[]
+    ): string | null => {
+      for (const type of types) {
+        const document = latestDocumentsByType.get(type);
+        if (document) return document.url;
+      }
+      return null;
+    };
+
     return {
       id: vehicle.id,
-      vehicleType: vehicle.vehicleType,
+      driverId: vehicle.driverId,
+      vehicleType: CANONICAL_VEHICLE_TYPE_MAP[vehicle.vehicleType],
+      brand: vehicle.make,
       make: vehicle.make,
       model: vehicle.model,
       year: vehicle.year,
+      licensePlateNumber: vehicle.plateNumber,
       plateNumber: vehicle.plateNumber,
+      condition: vehicle.condition,
       color: vehicle.color,
       capacityKg: vehicle.capacityKg,
       lengthCm: vehicle.lengthCm,
       widthCm: vehicle.widthCm,
       heightCm: vehicle.heightCm,
       hasTrailer: vehicle.hasTrailer,
+      frontPhotoUrl: readDocumentUrl(
+        DriverDocumentType.VEHICLE_FRONT_PHOTO,
+        DriverDocumentType.VEHICLE_PHOTO,
+      ),
+      rearPhotoUrl: readDocumentUrl(DriverDocumentType.VEHICLE_REAR_PHOTO),
+      sidePhotoUrl: readDocumentUrl(DriverDocumentType.VEHICLE_SIDE_PHOTO),
+      licensePlatePhotoUrl: readDocumentUrl(
+        DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
+      ),
+      registrationFrontDocumentUrl: readDocumentUrl(
+        DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
+        DriverDocumentType.VEHICLE_REGISTRATION,
+      ),
+      registrationBackDocumentUrl: readDocumentUrl(
+        DriverDocumentType.VEHICLE_REGISTRATION_BACK,
+      ),
+      insuranceDocumentUrl: readDocumentUrl(
+        DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
+        DriverDocumentType.VEHICLE_INSURANCE,
+      ),
+      insuranceExpiryDate: vehicle.insuranceExpiryDate
+        ? vehicle.insuranceExpiryDate.toISOString()
+        : null,
+      registrationExpiryDate: vehicle.registrationExpiryDate
+        ? vehicle.registrationExpiryDate.toISOString()
+        : null,
+      status: vehicle.status,
+      rejectionReason: vehicle.rejectionReason,
       isActive: vehicle.isActive,
       createdAt: vehicle.createdAt.toISOString(),
       updatedAt: vehicle.updatedAt.toISOString(),
@@ -3895,6 +4356,31 @@ export class DriverService {
       expiresAt: document.expiresAt ? document.expiresAt.toISOString() : null,
       createdAt: document.createdAt.toISOString(),
     };
+  }
+
+  private async getDriverVehicleWithDocuments(
+    driverId: string,
+    vehicleId: string,
+  ): Promise<VehicleSource & { documents: DocumentSource[] }> {
+    const vehicle = await this.prisma.driverVehicle.findFirst({
+      where: {
+        id: vehicleId,
+        driverId,
+      },
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found.');
+    }
+
+    return vehicle;
   }
 
   private toOnboardingDocumentResponse(

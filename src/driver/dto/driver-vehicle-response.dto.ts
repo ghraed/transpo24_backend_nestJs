@@ -2,8 +2,19 @@ import {
   DocumentStatus,
   DriverDocumentType,
   DriverStatus,
-  VehicleType,
+  DriverVehicleCondition,
+  DriverVehicleReviewStatus,
 } from '@prisma/client';
+
+export type CanonicalVehicleType =
+  | 'FLATBED_OPEN'
+  | 'FLATBED_ENCLOSED'
+  | 'SMALL_TRUCK'
+  | 'MEDIUM_TRUCK'
+  | 'PICKUP'
+  | 'VAN'
+  | 'TOW_TRUCK'
+  | 'MOTORCYCLE';
 
 export type DriverVehicleNextStep =
   | 'COMPLETE_PROFILE'
@@ -14,17 +25,32 @@ export type DriverVehicleNextStep =
 
 export interface VehicleResponseDto {
   id: string;
-  vehicleType: VehicleType;
+  driverId: string;
+  vehicleType: CanonicalVehicleType;
+  brand: string;
   make: string;
   model: string;
   year: number;
+  licensePlateNumber: string;
   plateNumber: string;
+  condition: DriverVehicleCondition;
   color: string | null;
   capacityKg: number | null;
   lengthCm: number | null;
   widthCm: number | null;
   heightCm: number | null;
   hasTrailer: boolean;
+  frontPhotoUrl: string | null;
+  rearPhotoUrl: string | null;
+  sidePhotoUrl: string | null;
+  licensePlatePhotoUrl: string | null;
+  registrationFrontDocumentUrl: string | null;
+  registrationBackDocumentUrl: string | null;
+  insuranceDocumentUrl: string | null;
+  insuranceExpiryDate: string | null;
+  registrationExpiryDate: string | null;
+  status: DriverVehicleReviewStatus;
+  rejectionReason: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

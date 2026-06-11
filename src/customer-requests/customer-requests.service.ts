@@ -613,10 +613,35 @@ const REQUEST_STATUS_SELECT = {
 } satisfies Prisma.TransportRequestSelect;
 
 const DRIVER_SERVICE_VEHICLE_TYPE_MAP: Record<ServiceKey, VehicleType[]> = {
-  VEHICLE_TRANSPORT: ['CAR_CARRIER', 'FLATBED_TRUCK', 'TOW_TRUCK'],
-  MOTORCYCLE_TRANSPORT: ['MOTORCYCLE_TRAILER', 'VAN', 'PICKUP_TRUCK'],
-  GOODS_TRANSPORT: ['VAN', 'BOX_TRUCK', 'PICKUP_TRUCK'],
-  FURNITURE_TRANSPORT: ['FURNITURE_TRUCK', 'BOX_TRUCK', 'VAN'],
+  VEHICLE_TRANSPORT: [
+    'CAR_CARRIER',
+    'FLATBED_TRUCK',
+    'TOW_TRUCK',
+    'FLATBED_OPEN',
+    'FLATBED_ENCLOSED',
+  ],
+  MOTORCYCLE_TRANSPORT: [
+    'MOTORCYCLE_TRAILER',
+    'VAN',
+    'PICKUP_TRUCK',
+    'MOTORCYCLE',
+    'PICKUP',
+  ],
+  GOODS_TRANSPORT: [
+    'VAN',
+    'BOX_TRUCK',
+    'PICKUP_TRUCK',
+    'SMALL_TRUCK',
+    'MEDIUM_TRUCK',
+    'PICKUP',
+  ],
+  FURNITURE_TRANSPORT: [
+    'FURNITURE_TRUCK',
+    'BOX_TRUCK',
+    'VAN',
+    'SMALL_TRUCK',
+    'MEDIUM_TRUCK',
+  ],
 };
 
 const STATUS_LABELS: Record<TransportRequestStatus, string> = {
@@ -2871,7 +2896,7 @@ export class CustomerRequestsService {
           },
         },
         vehicles: {
-          some: { isActive: true },
+          some: { isActive: true, status: 'APPROVED' },
         },
       },
       select: {
@@ -2891,7 +2916,7 @@ export class CustomerRequestsService {
           },
         },
         vehicles: {
-          where: { isActive: true },
+          where: { isActive: true, status: 'APPROVED' },
           select: {
             vehicleType: true,
           },

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -24,6 +25,7 @@ import { extname, join } from 'node:path';
 
 import { DriverAuthGuard } from '../auth/guards/driver-auth.guard';
 import { CreateDriverVehicleDto } from './dto/create-driver-vehicle.dto';
+import { UpdateDriverVehicleDto } from './dto/update-driver-vehicle.dto';
 import { DriverAvailabilityResponseDto } from './dto/driver-availability-response.dto';
 import { DriverMeResponseDto } from './dto/driver-me-response.dto';
 import {
@@ -38,8 +40,10 @@ import {
 import { SendDriverPriceOfferResponseDto } from './dto/driver-offer.dto';
 import {
   DriverVehicleDocumentsResponseDto,
+  VehicleResponseDto,
   DriverVehiclesListResponseDto,
 } from './dto/driver-vehicle-response.dto';
+import { UploadDriverVehicleDocumentsDto } from './dto/upload-driver-vehicle-documents.dto';
 import { SendDriverPriceOfferDto } from './dto/send-driver-price-offer.dto';
 import {
   UpdateDriverAvailabilityDto,
@@ -87,6 +91,13 @@ type AuthenticatedRequest = Request & {
 };
 
 type DriverDocumentUploadFields = {
+  frontPhoto?: MulterFile[];
+  rearPhoto?: MulterFile[];
+  sidePhoto?: MulterFile[];
+  licensePlatePhoto?: MulterFile[];
+  registrationFrontDocument?: MulterFile[];
+  registrationBackDocument?: MulterFile[];
+  insuranceDocument?: MulterFile[];
   driverLicenseFront?: MulterFile[];
   driverLicenseBack?: MulterFile[];
   identityDocument?: MulterFile[];
@@ -564,16 +575,75 @@ export class DriverController {
     return this.driverService.createVehicle({
       userId: request.user.id,
       vehicleType: dto.vehicleType,
-      make: dto.make,
+      brand: dto.brand,
       model: dto.model,
       year: dto.year,
-      plateNumber: dto.plateNumber,
+      licensePlateNumber: dto.licensePlateNumber,
+      condition: dto.condition,
+      color: dto.color,
+      capacityKg: dto.capacityKg,
+      lengthCm: dto.lengthCm,
+      widthCm: dto.widthCm,
+      heightCm: dto.heightCm,
+      hasTrailer: dto.hasTrailer ?? false,
+      insuranceExpiryDate: dto.insuranceExpiryDate
+        ? new Date(dto.insuranceExpiryDate)
+        : undefined,
+      registrationExpiryDate: dto.registrationExpiryDate
+        ? new Date(dto.registrationExpiryDate)
+        : undefined,
+    });
+  }
+
+  @Get('me/vehicles/:vehicleId')
+  async getVehicle(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+  ): Promise<DriverVehicleDocumentsResponseDto> {
+    return this.driverService.getVehicle({
+      userId: request.user.id,
+      vehicleId,
+    });
+  }
+
+  @Patch('me/vehicles/:vehicleId')
+  async updateVehicle(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+    @Body() dto: UpdateDriverVehicleDto,
+  ): Promise<DriverVehicleDocumentsResponseDto> {
+    return this.driverService.updateVehicle({
+      userId: request.user.id,
+      vehicleId,
+      vehicleType: dto.vehicleType,
+      brand: dto.brand,
+      model: dto.model,
+      year: dto.year,
+      licensePlateNumber: dto.licensePlateNumber,
+      condition: dto.condition,
       color: dto.color,
       capacityKg: dto.capacityKg,
       lengthCm: dto.lengthCm,
       widthCm: dto.widthCm,
       heightCm: dto.heightCm,
       hasTrailer: dto.hasTrailer,
+      insuranceExpiryDate: dto.insuranceExpiryDate
+        ? new Date(dto.insuranceExpiryDate)
+        : undefined,
+      registrationExpiryDate: dto.registrationExpiryDate
+        ? new Date(dto.registrationExpiryDate)
+        : undefined,
+    });
+  }
+
+  @Delete('me/vehicles/:vehicleId')
+  async deactivateVehicle(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+  ): Promise<VehicleResponseDto> {
+    return this.driverService.deactivateVehicle({
+      userId: request.user.id,
+      vehicleId,
     });
   }
 
@@ -733,6 +803,13 @@ export class DriverController {
         { name: 'driverLicenseFront', maxCount: 1 },
         { name: 'driverLicenseBack', maxCount: 1 },
         { name: 'identityDocument', maxCount: 1 },
+        { name: 'frontPhoto', maxCount: 1 },
+        { name: 'rearPhoto', maxCount: 1 },
+        { name: 'sidePhoto', maxCount: 1 },
+        { name: 'licensePlatePhoto', maxCount: 1 },
+        { name: 'registrationFrontDocument', maxCount: 1 },
+        { name: 'registrationBackDocument', maxCount: 1 },
+        { name: 'insuranceDocument', maxCount: 1 },
         { name: 'vehicleRegistration', maxCount: 1 },
         { name: 'vehicleInsurance', maxCount: 1 },
         { name: 'vehiclePhotos', maxCount: MAX_VEHICLE_PHOTOS },
@@ -801,6 +878,7 @@ export class DriverController {
   async uploadVehicleDocuments(
     @Req() request: AuthenticatedRequest,
     @Param('vehicleId') vehicleId: string,
+    @Body() dto: UploadDriverVehicleDocumentsDto,
     @UploadedFiles() files: DriverDocumentUploadFields,
   ): Promise<DriverVehicleDocumentsResponseDto> {
     const allFiles = Object.values(files ?? {}).flatMap((group) => group ?? []);
@@ -822,6 +900,12 @@ export class DriverController {
     return this.driverService.uploadVehicleDocuments({
       userId: request.user.id,
       vehicleId,
+      insuranceExpiryDate: dto.insuranceExpiryDate
+        ? new Date(dto.insuranceExpiryDate)
+        : undefined,
+      registrationExpiryDate: dto.registrationExpiryDate
+        ? new Date(dto.registrationExpiryDate)
+        : undefined,
       files,
     });
   }

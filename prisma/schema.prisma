@@ -124,6 +124,25 @@ enum VehicleType {
   MOTORCYCLE_TRAILER
   FURNITURE_TRUCK
   OTHER
+  FLATBED_OPEN
+  FLATBED_ENCLOSED
+  SMALL_TRUCK
+  MEDIUM_TRUCK
+  PICKUP
+  MOTORCYCLE
+}
+
+enum DriverVehicleCondition {
+  EXCELLENT
+  GOOD
+  NEEDS_MAINTENANCE
+}
+
+enum DriverVehicleReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  INACTIVE
 }
 
 enum DriverDocumentType {
@@ -139,6 +158,13 @@ enum DriverDocumentType {
   VEHICLE_REGISTRATION
   VEHICLE_INSURANCE
   VEHICLE_PHOTO
+  VEHICLE_FRONT_PHOTO
+  VEHICLE_REAR_PHOTO
+  VEHICLE_SIDE_PHOTO
+  VEHICLE_LICENSE_PLATE_PHOTO
+  VEHICLE_REGISTRATION_FRONT
+  VEHICLE_REGISTRATION_BACK
+  VEHICLE_INSURANCE_DOCUMENT
   TECHNICAL_INSPECTION
   PROFILE_PHOTO
 }
@@ -512,27 +538,33 @@ model DriverAvailabilitySchedule {
 }
 
 model DriverVehicle {
-  id          String      @id @default(cuid())
-  driverId    String
-  vehicleType VehicleType
-  make        String
-  model       String
-  year        Int
-  plateNumber String      @unique
-  color       String?
-  capacityKg  Float?
-  lengthCm    Float?
-  widthCm     Float?
-  heightCm    Float?
-  hasTrailer  Boolean     @default(false)
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                     String                   @id @default(cuid())
+  driverId               String
+  vehicleType            VehicleType
+  make                   String
+  model                  String
+  year                   Int
+  plateNumber            String                   @unique
+  condition              DriverVehicleCondition   @default(GOOD)
+  color                  String?
+  capacityKg             Float?
+  lengthCm               Float?
+  widthCm                Float?
+  heightCm               Float?
+  hasTrailer             Boolean                  @default(false)
+  insuranceExpiryDate    DateTime?
+  registrationExpiryDate DateTime?
+  status                 DriverVehicleReviewStatus @default(APPROVED)
+  rejectionReason        String?
+  isActive               Boolean                  @default(true)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   driver    DriverProfile    @relation(fields: [driverId], references: [id], onDelete: Cascade)
   documents DriverDocument[]
 
   @@index([driverId])
+  @@index([status])
   @@map("driver_vehicles")
 }
 

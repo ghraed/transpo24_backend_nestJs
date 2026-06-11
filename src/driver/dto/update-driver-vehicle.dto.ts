@@ -8,7 +8,6 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -17,32 +16,37 @@ import {
   MinLength,
 } from 'class-validator';
 
-export class CreateDriverVehicleDto {
+export class UpdateDriverVehicleDto {
+  @IsOptional()
   @IsEnum(VehicleType)
-  vehicleType!: VehicleType;
+  vehicleType?: VehicleType;
 
   @Transform(({ value, obj }) => value ?? obj.make)
+  @IsOptional()
   @IsString()
   @MinLength(2)
-  brand!: string;
+  brand?: string;
 
-  @Transform(({ value, obj }) => value ?? obj.model)
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  model!: string;
+  model?: string;
 
+  @IsOptional()
   @IsInt()
   @Min(1980)
   @Max(new Date().getFullYear() + 1)
-  year!: number;
+  year?: number;
 
   @Transform(({ value, obj }) => value ?? obj.plateNumber)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  licensePlateNumber!: string;
+  @MinLength(1)
+  licensePlateNumber?: string;
 
+  @IsOptional()
   @IsEnum(DriverVehicleCondition)
-  condition!: DriverVehicleCondition;
+  condition?: DriverVehicleCondition;
 
   @IsOptional()
   @IsString()
