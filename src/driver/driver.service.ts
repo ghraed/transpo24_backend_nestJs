@@ -22,6 +22,7 @@ import {
   PreferredLanguage,
   Prisma,
   UserRole,
+  VehicleCargoType,
   VehicleCondition,
   VehicleType,
 } from '@prisma/client';
@@ -70,6 +71,18 @@ import {
   normalizeDriverVehicleTypeInput,
   toDriverVehicleApiType,
 } from './dto/driver-vehicle-type.util';
+import {
+  DriverVehicleLoadCapacitiesListResponseDto,
+  DriverVehicleLoadCapacityResponseDto,
+  UpsertDriverVehicleLoadCapacityDto,
+  type WorkingDayScheduleResponseDto,
+} from './dto/driver-load-capacity.dto';
+import {
+  canVehicleSupportRequestLoad,
+  isCarCarrierVehicleType,
+  isWorkingScheduleAvailableForDate,
+  type WorkingDayScheduleValue,
+} from './vehicle-load-capacity.util';
 import {
   DriverEarningItemResponse,
   DriverEarningsListInput,
@@ -167,6 +180,20 @@ interface UpdateDriverVehicleInput {
 interface DeactivateDriverVehicleInput {
   userId: string;
   vehicleId: string;
+}
+
+interface UpsertDriverVehicleLoadCapacityInput {
+  userId: string;
+  vehicleId: string;
+  name?: string;
+  maxLoadKg?: number;
+  cargoLengthM?: number;
+  cargoWidthM?: number;
+  cargoHeightM?: number;
+  dimensionsAreStandard?: boolean;
+  allowedCargoTypes: VehicleCargoType[];
+  workingSchedule: UpsertDriverVehicleLoadCapacityDto['workingSchedule'];
+  isDefault?: boolean;
 }
 
 interface GetDriverAvailabilityInput {
@@ -318,6 +345,7 @@ type VehicleSource = {
   id: string;
   driverId: string;
   vehicleType: VehicleType;
+  loadProfileName: string | null;
   make: string;
   model: string;
   year: number;
@@ -328,6 +356,10 @@ type VehicleSource = {
   lengthCm: number | null;
   widthCm: number | null;
   heightCm: number | null;
+  dimensionsAreStandard: boolean;
+  allowedCargoTypes: VehicleCargoType[];
+  workingSchedule: Prisma.JsonValue | null;
+  isDefaultLoadProfile: boolean;
   hasTrailer: boolean;
   insuranceExpiryDate: Date | null;
   registrationExpiryDate: Date | null;
@@ -600,6 +632,7 @@ const DRIVER_VEHICLE_SELECT = {
   id: true,
   driverId: true,
   vehicleType: true,
+  loadProfileName: true,
   make: true,
   model: true,
   year: true,
@@ -610,6 +643,10 @@ const DRIVER_VEHICLE_SELECT = {
   lengthCm: true,
   widthCm: true,
   heightCm: true,
+  dimensionsAreStandard: true,
+  allowedCargoTypes: true,
+  workingSchedule: true,
+  isDefaultLoadProfile: true,
   hasTrailer: true,
   insuranceExpiryDate: true,
   registrationExpiryDate: true,
@@ -1427,7 +1464,7 @@ export class DriverService {
       take: 50,
     });
 
-    const vehicleTypes = await this.getDriverVehicleTypes(profile.id);
+    const vehicles = await this.getApprovedDriverVehicles(profile.id);
     const alerts: DriverRequestAlertSummaryDto[] = [];
 
     for (const request of requests as RequestDetailsSource[]) {
@@ -1445,10 +1482,7 @@ export class DriverService {
 
       if (
         !request.service ||
-        !this.isServiceCompatibleWithDriverVehicles(
-          request.service.key,
-          vehicleTypes,
-        )
+        !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
       ) {
         continue;
       }
@@ -1499,13 +1533,10 @@ export class DriverService {
       );
     }
 
-    const vehicleTypes = await this.getDriverVehicleTypes(profile.id);
+    const vehicles = await this.getApprovedDriverVehicles(profile.id);
     if (
       !request.service ||
-      !this.isServiceCompatibleWithDriverVehicles(
-        request.service.key,
-        vehicleTypes,
-      )
+      !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
     ) {
       throw new NotFoundException('Request not available for this driver.');
     }
@@ -1777,13 +1808,10 @@ export class DriverService {
         );
       }
 
-      const vehicleTypes = await this.getDriverVehicleTypesTx(tx, profile.id);
+      const vehicles = await this.getApprovedDriverVehiclesTx(tx, profile.id);
       if (
         !request.service ||
-        !this.isServiceCompatibleWithDriverVehicles(
-          request.service.key,
-          vehicleTypes,
-        )
+        !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
       ) {
         throw new BadRequestException(
           'Request is not available for this driver.',
@@ -2025,6 +2053,121 @@ export class DriverService {
         profile.status,
       ),
     };
+  }
+
+  async upsertVehicleLoadCapacity(
+    input: UpsertDriverVehicleLoadCapacityInput,
+  ): Promise<DriverVehicleLoadCapacityResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+
+    const normalizedVehicleType =
+      normalizeDriverVehicleTypeInput(vehicle.vehicleType) as VehicleType;
+    const normalizedWorkingSchedule = this.validateLoadCapacitySchedule(
+      input.workingSchedule,
+    );
+    const normalizedPayload = this.normalizeVehicleLoadCapacityInput({
+      vehicleType: normalizedVehicleType,
+      name: input.name,
+      maxLoadKg: input.maxLoadKg,
+      cargoLengthM: input.cargoLengthM,
+      cargoWidthM: input.cargoWidthM,
+      cargoHeightM: input.cargoHeightM,
+      dimensionsAreStandard: input.dimensionsAreStandard,
+      allowedCargoTypes: input.allowedCargoTypes,
+      workingSchedule: normalizedWorkingSchedule,
+      isDefault: input.isDefault,
+    });
+
+    const updatedVehicle = await this.prisma.$transaction(async (tx) => {
+      if (normalizedPayload.isDefault) {
+        await tx.driverVehicle.updateMany({
+          where: {
+            driverId: profile.id,
+            isDefaultLoadProfile: true,
+            NOT: { id: vehicle.id },
+          },
+          data: {
+            isDefaultLoadProfile: false,
+          },
+        });
+      }
+
+      return tx.driverVehicle.update({
+        where: { id: vehicle.id },
+        data: {
+          loadProfileName: normalizedPayload.name,
+          capacityKg: normalizedPayload.maxLoadKg,
+          lengthCm: normalizedPayload.lengthCm,
+          widthCm: normalizedPayload.widthCm,
+          heightCm: normalizedPayload.heightCm,
+          dimensionsAreStandard: normalizedPayload.dimensionsAreStandard,
+          allowedCargoTypes: normalizedPayload.allowedCargoTypes,
+          workingSchedule:
+            normalizedPayload.workingSchedule as unknown as Prisma.InputJsonValue,
+          isDefaultLoadProfile: normalizedPayload.isDefault,
+        },
+        select: DRIVER_VEHICLE_SELECT,
+      });
+    });
+
+    return this.toVehicleLoadCapacityResponse(updatedVehicle);
+  }
+
+  async getVehicleLoadCapacity(
+    input: GetDriverVehicleInput,
+  ): Promise<DriverVehicleLoadCapacityResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    return this.toVehicleLoadCapacityResponse(vehicle);
+  }
+
+  async listVehicleLoadCapacities(
+    input: ListDriverVehiclesInput,
+  ): Promise<DriverVehicleLoadCapacitiesListResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicles = await this.prisma.driverVehicle.findMany({
+      where: {
+        driverId: profile.id,
+      },
+      orderBy: [{ isDefaultLoadProfile: 'desc' }, { createdAt: 'asc' }],
+      select: DRIVER_VEHICLE_SELECT,
+    });
+
+    return {
+      loadCapacities: vehicles.map((vehicle) =>
+        this.toVehicleLoadCapacityResponse(vehicle),
+      ),
+    };
+  }
+
+  async setDefaultVehicleLoadCapacity(
+    input: GetDriverVehicleInput,
+  ): Promise<DriverVehicleLoadCapacityResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+
+    const updatedVehicle = await this.prisma.$transaction(async (tx) => {
+      await tx.driverVehicle.updateMany({
+        where: {
+          driverId: profile.id,
+          isDefaultLoadProfile: true,
+        },
+        data: {
+          isDefaultLoadProfile: false,
+        },
+      });
+
+      return tx.driverVehicle.update({
+        where: { id: vehicle.id },
+        data: {
+          isDefaultLoadProfile: true,
+        },
+        select: DRIVER_VEHICLE_SELECT,
+      });
+    });
+
+    return this.toVehicleLoadCapacityResponse(updatedVehicle);
   }
 
   async getDriverEarningsSummary(
@@ -3531,47 +3674,43 @@ export class DriverService {
     }
   }
 
-  private async getDriverVehicleTypes(
+  private async getApprovedDriverVehicles(
     driverId: string,
-  ): Promise<Set<VehicleType>> {
+  ): Promise<VehicleSource[]> {
     const vehicles = await this.prisma.driverVehicle.findMany({
       where: {
         driverId,
         isActive: true,
         status: DriverVehicleReviewStatus.APPROVED,
       },
-      select: {
-        vehicleType: true,
-      },
+      select: DRIVER_VEHICLE_SELECT,
     });
 
     if (vehicles.length === 0) {
       throw new BadRequestException('At least one active vehicle is required.');
     }
 
-    return new Set(vehicles.map((vehicle) => vehicle.vehicleType));
+    return vehicles;
   }
 
-  private async getDriverVehicleTypesTx(
+  private async getApprovedDriverVehiclesTx(
     tx: Prisma.TransactionClient,
     driverId: string,
-  ): Promise<Set<VehicleType>> {
+  ): Promise<VehicleSource[]> {
     const vehicles = await tx.driverVehicle.findMany({
       where: {
         driverId,
         isActive: true,
         status: DriverVehicleReviewStatus.APPROVED,
       },
-      select: {
-        vehicleType: true,
-      },
+      select: DRIVER_VEHICLE_SELECT,
     });
 
     if (vehicles.length === 0) {
       throw new BadRequestException('At least one active vehicle is required.');
     }
 
-    return new Set(vehicles.map((vehicle) => vehicle.vehicleType));
+    return vehicles;
   }
 
   private validateOfferInput(input: SendDriverPriceOfferInput): void {
@@ -3676,6 +3815,56 @@ export class DriverService {
 
     const allowedTypes = serviceVehicleTypeMap[serviceKey];
     return allowedTypes.some((vehicleType) => vehicleTypes.has(vehicleType));
+  }
+
+  private hasCompatibleDriverVehicleForRequest(
+    request: RequestDetailsSource & { service: { key: ServiceKey } | null },
+    vehicles: VehicleSource[],
+  ): boolean {
+    if (!request.service) {
+      return false;
+    }
+
+    const requestDate = request.isImmediate
+      ? new Date()
+      : request.scheduledPickupAt ?? new Date();
+
+    return vehicles.some((vehicle) => {
+      if (
+        !this.isServiceCompatibleWithDriverVehicles(
+          request.service!.key,
+          new Set([vehicle.vehicleType]),
+        )
+      ) {
+        return false;
+      }
+
+      const workingSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+      if (!isWorkingScheduleAvailableForDate(workingSchedule, requestDate)) {
+        return false;
+      }
+
+      return canVehicleSupportRequestLoad(
+        {
+          vehicleType: vehicle.vehicleType,
+          capacityKg: vehicle.capacityKg,
+          lengthCm: vehicle.lengthCm,
+          widthCm: vehicle.widthCm,
+          heightCm: vehicle.heightCm,
+          dimensionsAreStandard: vehicle.dimensionsAreStandard,
+          allowedCargoTypes: vehicle.allowedCargoTypes,
+          workingSchedule,
+        },
+        {
+          serviceKey: request.service!.key,
+          itemType: request.itemType,
+          weightKg: request.itemWeightKg,
+          lengthCm: request.itemLengthCm,
+          widthCm: request.itemWidthCm,
+          heightCm: request.itemHeightCm,
+        },
+      );
+    });
   }
 
   private calculateDistanceKm(
@@ -4075,6 +4264,217 @@ export class DriverService {
     }
   }
 
+  private normalizeVehicleLoadCapacityInput(input: {
+    vehicleType: VehicleType;
+    name?: string;
+    maxLoadKg?: number;
+    cargoLengthM?: number;
+    cargoWidthM?: number;
+    cargoHeightM?: number;
+    dimensionsAreStandard?: boolean;
+    allowedCargoTypes: VehicleCargoType[];
+    workingSchedule: WorkingDayScheduleValue[];
+    isDefault?: boolean;
+  }): {
+    name: string | null;
+    maxLoadKg: number | null;
+    lengthCm: number | null;
+    widthCm: number | null;
+    heightCm: number | null;
+    dimensionsAreStandard: boolean;
+    allowedCargoTypes: VehicleCargoType[];
+    workingSchedule: WorkingDayScheduleValue[];
+    isDefault: boolean;
+  } {
+    const isCarCarrier = isCarCarrierVehicleType(input.vehicleType);
+    const dimensionsAreStandard =
+      input.dimensionsAreStandard ?? isCarCarrier;
+
+    if (
+      !input.allowedCargoTypes.length ||
+      input.allowedCargoTypes.some((value) => !Object.values(VehicleCargoType).includes(value))
+    ) {
+      throw new BadRequestException(
+        'allowedCargoTypes must contain at least one valid cargo type.',
+      );
+    }
+
+    if (!isCarCarrier) {
+      if (input.maxLoadKg === undefined || input.maxLoadKg <= 0) {
+        throw new BadRequestException(
+          'maxLoadKg is required for non-car-carrier vehicles.',
+        );
+      }
+      if (input.cargoLengthM === undefined || input.cargoLengthM <= 0) {
+        throw new BadRequestException(
+          'cargoLengthM is required for non-car-carrier vehicles.',
+        );
+      }
+      if (input.cargoWidthM === undefined || input.cargoWidthM <= 0) {
+        throw new BadRequestException(
+          'cargoWidthM is required for non-car-carrier vehicles.',
+        );
+      }
+      if (input.cargoHeightM === undefined || input.cargoHeightM <= 0) {
+        throw new BadRequestException(
+          'cargoHeightM is required for non-car-carrier vehicles.',
+        );
+      }
+    }
+
+    return {
+      name: input.name?.trim() || null,
+      maxLoadKg: input.maxLoadKg ?? null,
+      lengthCm:
+        input.cargoLengthM !== undefined ? input.cargoLengthM * 100 : null,
+      widthCm:
+        input.cargoWidthM !== undefined ? input.cargoWidthM * 100 : null,
+      heightCm:
+        input.cargoHeightM !== undefined ? input.cargoHeightM * 100 : null,
+      dimensionsAreStandard: isCarCarrier ? true : dimensionsAreStandard,
+      allowedCargoTypes: [...new Set(input.allowedCargoTypes)],
+      workingSchedule: input.workingSchedule,
+      isDefault: Boolean(input.isDefault),
+    };
+  }
+
+  private validateLoadCapacitySchedule(
+    schedule: UpsertDriverVehicleLoadCapacityDto['workingSchedule'],
+  ): WorkingDayScheduleValue[] {
+    if (!Array.isArray(schedule) || schedule.length === 0) {
+      throw new BadRequestException('workingSchedule is required.');
+    }
+
+    const seenDays = new Set<DayOfWeek>();
+    let hasAvailableDay = false;
+
+    return schedule.map((day) => {
+      if (seenDays.has(day.dayOfWeek)) {
+        throw new BadRequestException('workingSchedule days must be unique.');
+      }
+      seenDays.add(day.dayOfWeek);
+
+      const normalizedRanges = day.timeRanges.map((range) => {
+        if (range.startTime >= range.endTime) {
+          throw new BadRequestException(
+            `startTime must be before endTime for ${day.dayOfWeek}.`,
+          );
+        }
+        return {
+          startTime: range.startTime,
+          endTime: range.endTime,
+        };
+      }).sort((left, right) => left.startTime.localeCompare(right.startTime));
+
+      for (let index = 1; index < normalizedRanges.length; index += 1) {
+        if (normalizedRanges[index - 1].endTime > normalizedRanges[index].startTime) {
+          throw new BadRequestException(
+            `workingSchedule time ranges must not overlap for ${day.dayOfWeek}.`,
+          );
+        }
+      }
+
+      if (day.isAvailable) {
+        if (normalizedRanges.length === 0) {
+          throw new BadRequestException(
+            `workingSchedule must include at least one time range for ${day.dayOfWeek}.`,
+          );
+        }
+        hasAvailableDay = true;
+      }
+
+      return {
+        dayOfWeek: day.dayOfWeek,
+        isAvailable: day.isAvailable,
+        timeRanges: normalizedRanges,
+      };
+    }).sort(
+      (left, right) =>
+        WEEK_DAYS_ORDER.indexOf(left.dayOfWeek) - WEEK_DAYS_ORDER.indexOf(right.dayOfWeek),
+    ).map((day) => {
+      if (!hasAvailableDay) {
+        throw new BadRequestException(
+          'workingSchedule must contain at least one available day.',
+        );
+      }
+      return day;
+    });
+  }
+
+  private parseVehicleWorkingSchedule(
+    raw: Prisma.JsonValue | null,
+  ): WorkingDayScheduleValue[] {
+    if (!raw || !Array.isArray(raw)) {
+      return [];
+    }
+
+    const result: WorkingDayScheduleValue[] = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        continue;
+      }
+      const scheduleEntry = entry as Record<string, unknown>;
+      const dayOfWeek = scheduleEntry.dayOfWeek;
+      const isAvailable = scheduleEntry.isAvailable;
+      const timeRanges = scheduleEntry.timeRanges;
+      if (
+        typeof dayOfWeek !== 'string' ||
+        !Object.values(DayOfWeek).includes(dayOfWeek as DayOfWeek) ||
+        typeof isAvailable !== 'boolean' ||
+        !Array.isArray(timeRanges)
+      ) {
+        continue;
+      }
+      result.push({
+        dayOfWeek: dayOfWeek as DayOfWeek,
+        isAvailable,
+        timeRanges: timeRanges.flatMap((range) => {
+          if (!range || typeof range !== 'object' || Array.isArray(range)) {
+            return [];
+          }
+          const timeRange = range as Record<string, unknown>;
+          if (
+            typeof timeRange.startTime !== 'string' ||
+            typeof timeRange.endTime !== 'string'
+          ) {
+            return [];
+          }
+          return [
+            {
+              startTime: timeRange.startTime,
+              endTime: timeRange.endTime,
+            },
+          ];
+        }),
+      });
+    }
+
+    return result;
+  }
+
+  private toVehicleLoadCapacityResponse(
+    vehicle: VehicleSource,
+  ): DriverVehicleLoadCapacityResponseDto {
+    const workingSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+    return {
+      id: vehicle.id,
+      driverId: vehicle.driverId,
+      vehicleId: vehicle.id,
+      name: vehicle.loadProfileName,
+      vehicleType: toDriverVehicleApiType(vehicle.vehicleType),
+      maxLoadKg: vehicle.capacityKg,
+      cargoLengthM: vehicle.lengthCm !== null ? vehicle.lengthCm / 100 : null,
+      cargoWidthM: vehicle.widthCm !== null ? vehicle.widthCm / 100 : null,
+      cargoHeightM: vehicle.heightCm !== null ? vehicle.heightCm / 100 : null,
+      dimensionsAreStandard: vehicle.dimensionsAreStandard,
+      allowedCargoTypes: vehicle.allowedCargoTypes,
+      workingSchedule: workingSchedule as WorkingDayScheduleResponseDto[],
+      isDefault: vehicle.isDefaultLoadProfile,
+      createdAt: vehicle.createdAt.toISOString(),
+      updatedAt: vehicle.updatedAt.toISOString(),
+    };
+  }
+
   private toAvailabilityResponse(
     profile: { id: string; status: DriverStatus; isProfileCompleted: boolean },
     availability: AvailabilitySource | null,
@@ -4359,6 +4759,8 @@ export class DriverService {
       return null;
     };
 
+    const workingSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+
     return {
       id: vehicle.id,
       driverId: vehicle.driverId,
@@ -4372,10 +4774,15 @@ export class DriverService {
       plateNumber: vehicle.plateNumber,
       condition: vehicle.condition,
       color: vehicle.color,
+      loadProfileName: vehicle.loadProfileName,
       capacityKg: vehicle.capacityKg,
       lengthCm: vehicle.lengthCm,
       widthCm: vehicle.widthCm,
       heightCm: vehicle.heightCm,
+      dimensionsAreStandard: vehicle.dimensionsAreStandard,
+      allowedCargoTypes: vehicle.allowedCargoTypes,
+      workingSchedule,
+      isDefaultLoadProfile: vehicle.isDefaultLoadProfile,
       hasTrailer: vehicle.hasTrailer,
       frontPhotoUrl: readDocumentUrl(
         DriverDocumentType.VEHICLE_FRONT_PHOTO,

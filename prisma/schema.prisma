@@ -145,6 +145,17 @@ enum DriverVehicleReviewStatus {
   INACTIVE
 }
 
+enum VehicleCargoType {
+  VEHICLE
+  MOTORCYCLE
+  GOODS
+  FURNITURE
+  FRAGILE_GOODS
+  REFRIGERATED_GOODS
+  HEAVY_EQUIPMENT
+  OTHER
+}
+
 enum DriverDocumentType {
   PERSONAL_SELFIE
   ID_FRONT
@@ -541,6 +552,7 @@ model DriverVehicle {
   id                     String                   @id @default(cuid())
   driverId               String
   vehicleType            VehicleType
+  loadProfileName        String?
   make                   String
   model                  String
   year                   Int
@@ -551,6 +563,10 @@ model DriverVehicle {
   lengthCm               Float?
   widthCm                Float?
   heightCm               Float?
+  dimensionsAreStandard  Boolean                  @default(false)
+  allowedCargoTypes      VehicleCargoType[]        @default([])
+  workingSchedule        Json?
+  isDefaultLoadProfile   Boolean                  @default(false)
   hasTrailer             Boolean                  @default(false)
   insuranceExpiryDate    DateTime?
   registrationExpiryDate DateTime?
@@ -565,6 +581,7 @@ model DriverVehicle {
 
   @@index([driverId])
   @@index([status])
+  @@index([driverId, isDefaultLoadProfile])
   @@map("driver_vehicles")
 }
 

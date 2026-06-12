@@ -27,12 +27,18 @@ import {
   TransportProofPhotoType,
   TransportRequestStatus,
   VehicleCondition,
+  VehicleCargoType,
   VehicleType,
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
 import { TripsGateway } from '../trips/trips.gateway';
+import {
+  canVehicleSupportRequestLoad,
+  isWorkingScheduleAvailableForDate,
+  type WorkingDayScheduleValue,
+} from '../driver/vehicle-load-capacity.util';
 import {
   CustomerRequestResponseDto,
   CustomerHomeRequestSummaryDto,
@@ -439,6 +445,13 @@ type EligibleDriverDispatchCandidate = {
   } | null;
   vehicles: Array<{
     vehicleType: VehicleType;
+    capacityKg: number | null;
+    lengthCm: number | null;
+    widthCm: number | null;
+    heightCm: number | null;
+    dimensionsAreStandard: boolean;
+    allowedCargoTypes: VehicleCargoType[];
+    workingSchedule: Prisma.JsonValue | null;
   }>;
 };
 
@@ -2919,6 +2932,13 @@ export class CustomerRequestsService {
           where: { isActive: true, status: 'APPROVED' },
           select: {
             vehicleType: true,
+            capacityKg: true,
+            lengthCm: true,
+            widthCm: true,
+            heightCm: true,
+            dimensionsAreStandard: true,
+            allowedCargoTypes: true,
+            workingSchedule: true,
           },
         },
       },
@@ -3016,8 +3036,7 @@ export class CustomerRequestsService {
       return false;
     }
 
-    const vehicleTypes = new Set(driver.vehicles.map((vehicle) => vehicle.vehicleType));
-    if (!this.isServiceCompatibleWithDriverVehicles(request.service.key, vehicleTypes)) {
+    if (!this.hasCompatibleVehicleForRequest(request, driver.vehicles)) {
       return false;
     }
 
@@ -3037,6 +3056,95 @@ export class CustomerRequestsService {
     }
 
     return true;
+  }
+
+  private hasCompatibleVehicleForRequest(
+    request: TransportRequestResponseSource & {
+      service: { key: ServiceKey } | null;
+    },
+    vehicles: EligibleDriverDispatchCandidate['vehicles'],
+  ): boolean {
+    if (!request.service) {
+      return false;
+    }
+
+    const scheduledDate = request.isImmediate
+      ? new Date()
+      : request.scheduledPickupAt ?? new Date();
+
+    return vehicles.some((vehicle) => {
+      if (!this.isServiceCompatibleWithDriverVehicles(request.service!.key, new Set([vehicle.vehicleType]))) {
+        return false;
+      }
+
+      const normalizedSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+      if (!isWorkingScheduleAvailableForDate(normalizedSchedule, scheduledDate)) {
+        return false;
+      }
+
+      return canVehicleSupportRequestLoad(
+        {
+          vehicleType: vehicle.vehicleType,
+          capacityKg: vehicle.capacityKg,
+          lengthCm: vehicle.lengthCm,
+          widthCm: vehicle.widthCm,
+          heightCm: vehicle.heightCm,
+          dimensionsAreStandard: vehicle.dimensionsAreStandard,
+          allowedCargoTypes: vehicle.allowedCargoTypes,
+          workingSchedule: normalizedSchedule,
+        },
+        {
+          serviceKey: request.service!.key,
+          itemType: request.itemType,
+          weightKg: request.itemWeightKg,
+          lengthCm: request.itemLengthCm,
+          widthCm: request.itemWidthCm,
+          heightCm: request.itemHeightCm,
+        },
+      );
+    });
+  }
+
+  private parseVehicleWorkingSchedule(
+    raw: Prisma.JsonValue | null,
+  ): WorkingDayScheduleValue[] {
+    if (!raw || !Array.isArray(raw)) {
+      return [];
+    }
+
+    return raw.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return [];
+      }
+      const value = entry as Record<string, unknown>;
+      if (
+        typeof value.dayOfWeek !== 'string' ||
+        typeof value.isAvailable !== 'boolean' ||
+        !Array.isArray(value.timeRanges)
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          dayOfWeek: value.dayOfWeek as WorkingDayScheduleValue['dayOfWeek'],
+          isAvailable: value.isAvailable,
+          timeRanges: value.timeRanges.flatMap((range) => {
+            if (!range || typeof range !== 'object' || Array.isArray(range)) {
+              return [];
+            }
+            const timeRange = range as Record<string, unknown>;
+            if (
+              typeof timeRange.startTime !== 'string' ||
+              typeof timeRange.endTime !== 'string'
+            ) {
+              return [];
+            }
+            return [{ startTime: timeRange.startTime, endTime: timeRange.endTime }];
+          }),
+        },
+      ];
+    });
   }
 
   private isServiceCompatibleWithDriverVehicles(

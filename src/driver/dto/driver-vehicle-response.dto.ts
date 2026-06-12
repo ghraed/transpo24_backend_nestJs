@@ -1,5 +1,7 @@
 import {
   VehicleType,
+  VehicleCargoType,
+  DayOfWeek,
   DocumentStatus,
   DriverDocumentType,
   DriverStatus,
@@ -30,10 +32,22 @@ export interface VehicleResponseDto {
   plateNumber: string;
   condition: DriverVehicleCondition;
   color: string | null;
+  loadProfileName: string | null;
   capacityKg: number | null;
   lengthCm: number | null;
   widthCm: number | null;
   heightCm: number | null;
+  dimensionsAreStandard: boolean;
+  allowedCargoTypes: VehicleCargoType[];
+  workingSchedule: Array<{
+    dayOfWeek: DayOfWeek;
+    isAvailable: boolean;
+    timeRanges: Array<{
+      startTime: string;
+      endTime: string;
+    }>;
+  }>;
+  isDefaultLoadProfile: boolean;
   hasTrailer: boolean;
   frontPhotoUrl: string | null;
   rearPhotoUrl: string | null;

@@ -43,6 +43,11 @@ import {
   VehicleResponseDto,
   DriverVehiclesListResponseDto,
 } from './dto/driver-vehicle-response.dto';
+import {
+  DriverVehicleLoadCapacitiesListResponseDto,
+  DriverVehicleLoadCapacityResponseDto,
+  UpsertDriverVehicleLoadCapacityDto,
+} from './dto/driver-load-capacity.dto';
 import { UploadDriverVehicleDocumentsDto } from './dto/upload-driver-vehicle-documents.dto';
 import { SendDriverPriceOfferDto } from './dto/send-driver-price-offer.dto';
 import {
@@ -642,6 +647,58 @@ export class DriverController {
     @Param('vehicleId') vehicleId: string,
   ): Promise<VehicleResponseDto> {
     return this.driverService.deactivateVehicle({
+      userId: request.user.id,
+      vehicleId,
+    });
+  }
+
+  @Get('me/load-capacities')
+  async listVehicleLoadCapacities(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<DriverVehicleLoadCapacitiesListResponseDto> {
+    return this.driverService.listVehicleLoadCapacities({
+      userId: request.user.id,
+    });
+  }
+
+  @Get('me/vehicles/:vehicleId/load-capacity')
+  async getVehicleLoadCapacity(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+  ): Promise<DriverVehicleLoadCapacityResponseDto> {
+    return this.driverService.getVehicleLoadCapacity({
+      userId: request.user.id,
+      vehicleId,
+    });
+  }
+
+  @Post('me/vehicles/:vehicleId/load-capacity')
+  async upsertVehicleLoadCapacity(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+    @Body() dto: UpsertDriverVehicleLoadCapacityDto,
+  ): Promise<DriverVehicleLoadCapacityResponseDto> {
+    return this.driverService.upsertVehicleLoadCapacity({
+      userId: request.user.id,
+      vehicleId,
+      name: dto.name,
+      maxLoadKg: dto.maxLoadKg,
+      cargoLengthM: dto.cargoLengthM,
+      cargoWidthM: dto.cargoWidthM,
+      cargoHeightM: dto.cargoHeightM,
+      dimensionsAreStandard: dto.dimensionsAreStandard,
+      allowedCargoTypes: dto.allowedCargoTypes,
+      workingSchedule: dto.workingSchedule,
+      isDefault: dto.isDefault,
+    });
+  }
+
+  @Post('me/vehicles/:vehicleId/load-capacity/set-default')
+  async setDefaultVehicleLoadCapacity(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+  ): Promise<DriverVehicleLoadCapacityResponseDto> {
+    return this.driverService.setDefaultVehicleLoadCapacity({
       userId: request.user.id,
       vehicleId,
     });
