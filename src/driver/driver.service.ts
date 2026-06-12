@@ -66,7 +66,10 @@ import {
   DriverVehiclesListResponseDto,
   VehicleResponseDto,
 } from './dto/driver-vehicle-response.dto';
-import { toDriverVehicleApiType } from './dto/driver-vehicle-type.util';
+import {
+  normalizeDriverVehicleTypeInput,
+  toDriverVehicleApiType,
+} from './dto/driver-vehicle-type.util';
 import {
   DriverEarningItemResponse,
   DriverEarningsListInput,
@@ -2406,6 +2409,8 @@ export class DriverService {
     input: CreateDriverVehicleInput,
   ): Promise<DriverVehicleDocumentsResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
+    const normalizedVehicleType =
+      normalizeDriverVehicleTypeInput(input.vehicleType) as VehicleType;
 
     if (!profile.isProfileCompleted) {
       throw new BadRequestException(
@@ -2445,7 +2450,7 @@ export class DriverService {
     const vehicle = await this.prisma.driverVehicle.create({
       data: {
         driverId: profile.id,
-        vehicleType: input.vehicleType,
+        vehicleType: normalizedVehicleType,
         make: input.brand.trim(),
         model: input.model.trim(),
         year: input.year,
@@ -2480,6 +2485,10 @@ export class DriverService {
       profile.id,
       input.vehicleId,
     );
+    const normalizedVehicleType =
+      input.vehicleType !== undefined
+        ? (normalizeDriverVehicleTypeInput(input.vehicleType) as VehicleType)
+        : undefined;
 
     if (input.year !== undefined) {
       const currentYear = new Date().getFullYear();
@@ -2536,7 +2545,7 @@ export class DriverService {
     const vehicle = await this.prisma.driverVehicle.update({
       where: { id: existingVehicle.id },
       data: {
-        vehicleType: input.vehicleType ?? existingVehicle.vehicleType,
+        vehicleType: normalizedVehicleType ?? existingVehicle.vehicleType,
         make:
           input.brand !== undefined ? input.brand.trim() : existingVehicle.make,
         model:
