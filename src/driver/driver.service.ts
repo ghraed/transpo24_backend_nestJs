@@ -61,12 +61,12 @@ import {
   SendDriverPriceOfferResponseDto,
 } from './dto/driver-offer.dto';
 import {
-  CanonicalVehicleType,
   DriverDocumentResponseDto,
   DriverVehicleDocumentsResponseDto,
   DriverVehiclesListResponseDto,
   VehicleResponseDto,
 } from './dto/driver-vehicle-response.dto';
+import { toDriverVehicleApiType } from './dto/driver-vehicle-type.util';
 import {
   DriverEarningItemResponse,
   DriverEarningsListInput,
@@ -796,24 +796,6 @@ const LEGACY_COMPATIBLE_VEHICLE_DOCUMENT_TYPES = {
   insurance: DriverDocumentType.VEHICLE_INSURANCE,
   photo: DriverDocumentType.VEHICLE_PHOTO,
 } as const;
-
-const CANONICAL_VEHICLE_TYPE_MAP: Record<VehicleType, CanonicalVehicleType> = {
-  CAR_CARRIER: 'FLATBED_ENCLOSED',
-  FLATBED_TRUCK: 'FLATBED_OPEN',
-  TOW_TRUCK: 'TOW_TRUCK',
-  VAN: 'VAN',
-  BOX_TRUCK: 'MEDIUM_TRUCK',
-  PICKUP_TRUCK: 'PICKUP',
-  MOTORCYCLE_TRAILER: 'MOTORCYCLE',
-  FURNITURE_TRUCK: 'MEDIUM_TRUCK',
-  OTHER: 'SMALL_TRUCK',
-  FLATBED_OPEN: 'FLATBED_OPEN',
-  FLATBED_ENCLOSED: 'FLATBED_ENCLOSED',
-  SMALL_TRUCK: 'SMALL_TRUCK',
-  MEDIUM_TRUCK: 'MEDIUM_TRUCK',
-  PICKUP: 'PICKUP',
-  MOTORCYCLE: 'MOTORCYCLE',
-};
 
 @Injectable()
 export class DriverService {
@@ -2035,7 +2017,10 @@ export class DriverService {
     return {
       vehicle: this.toVehicleResponse(vehicle, vehicle.documents),
       documents: vehicle.documents.map((document) => this.toDocumentResponse(document)),
-      nextStep: this.getVehicleDocumentsNextStep(profile.status, [vehicle]),
+      nextStep: await this.getVehicleDocumentsNextStepForDriver(
+        profile.id,
+        profile.status,
+      ),
     };
   }
 
@@ -2474,7 +2459,7 @@ export class DriverService {
         hasTrailer: input.hasTrailer,
         insuranceExpiryDate: input.insuranceExpiryDate ?? null,
         registrationExpiryDate: input.registrationExpiryDate ?? null,
-        status: DriverVehicleReviewStatus.APPROVED,
+        status: DriverVehicleReviewStatus.PENDING_REVIEW,
         isActive: true,
       },
       select: DRIVER_VEHICLE_SELECT,
@@ -2532,6 +2517,22 @@ export class DriverService {
       }
     }
 
+    const shouldResetVehicleReview =
+      input.vehicleType !== undefined ||
+      input.brand !== undefined ||
+      input.model !== undefined ||
+      input.year !== undefined ||
+      input.licensePlateNumber !== undefined ||
+      input.condition !== undefined ||
+      input.color !== undefined ||
+      input.capacityKg !== undefined ||
+      input.lengthCm !== undefined ||
+      input.widthCm !== undefined ||
+      input.heightCm !== undefined ||
+      input.hasTrailer !== undefined ||
+      input.insuranceExpiryDate !== undefined ||
+      input.registrationExpiryDate !== undefined;
+
     const vehicle = await this.prisma.driverVehicle.update({
       where: { id: existingVehicle.id },
       data: {
@@ -2563,6 +2564,12 @@ export class DriverService {
           input.registrationExpiryDate !== undefined
             ? input.registrationExpiryDate
             : existingVehicle.registrationExpiryDate,
+        status: shouldResetVehicleReview
+          ? DriverVehicleReviewStatus.PENDING_REVIEW
+          : existingVehicle.status,
+        rejectionReason: shouldResetVehicleReview
+          ? null
+          : existingVehicle.rejectionReason,
       },
       select: {
         ...DRIVER_VEHICLE_SELECT,
@@ -2576,7 +2583,10 @@ export class DriverService {
     return {
       vehicle: this.toVehicleResponse(vehicle, vehicle.documents),
       documents: vehicle.documents.map((document) => this.toDocumentResponse(document)),
-      nextStep: this.getVehicleDocumentsNextStep(profile.status, [vehicle]),
+      nextStep: await this.getVehicleDocumentsNextStepForDriver(
+        profile.id,
+        profile.status,
+      ),
     };
   }
 
@@ -2698,6 +2708,8 @@ export class DriverService {
             insuranceExpiryDate: input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
             registrationExpiryDate:
               input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
+            status: DriverVehicleReviewStatus.PENDING_REVIEW,
+            rejectionReason: null,
           },
         });
       });
@@ -2742,11 +2754,16 @@ export class DriverService {
           insuranceExpiryDate: input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
           registrationExpiryDate:
             input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
+          status: DriverVehicleReviewStatus.PENDING_REVIEW,
+          rejectionReason: null,
         },
         documents,
       ),
       documents: documents.map((document) => this.toDocumentResponse(document)),
-      nextStep: hasRequired ? 'SET_AVAILABILITY' : 'ADD_VEHICLE_DOCUMENTS',
+      nextStep: await this.getVehicleDocumentsNextStepForDriver(
+        profile.id,
+        profile.status,
+      ),
     };
   }
 
@@ -3162,11 +3179,14 @@ export class DriverService {
       return 'COMPLETE_PROFILE';
     }
 
-    if (status === DriverStatus.APPROVED) {
-      return 'HOME';
+    if (status === DriverStatus.PENDING_REVIEW) {
+      return 'WAITING_APPROVAL';
     }
 
-    if (status === DriverStatus.PENDING_REVIEW) {
+    if (
+      status === DriverStatus.SUSPENDED ||
+      status === DriverStatus.REJECTED
+    ) {
       return 'WAITING_APPROVAL';
     }
 
@@ -3178,7 +3198,43 @@ export class DriverService {
       return 'ADD_VEHICLE_DOCUMENTS';
     }
 
+    const hasApprovedVehicleWithRequiredDocuments = vehicles.some(
+      (vehicle) =>
+        vehicle.isActive &&
+        vehicle.status === DriverVehicleReviewStatus.APPROVED &&
+        this.hasRequiredVehicleDocuments(vehicle.documents),
+    );
+
+    if (!hasApprovedVehicleWithRequiredDocuments) {
+      return 'WAITING_APPROVAL';
+    }
+
+    if (status === DriverStatus.APPROVED) {
+      return 'HOME';
+    }
+
     return 'SET_AVAILABILITY';
+  }
+
+  private async getVehicleDocumentsNextStepForDriver(
+    driverId: string,
+    status: DriverStatus,
+  ): Promise<DriverNextStep> {
+    const vehicles = await this.prisma.driverVehicle.findMany({
+      where: {
+        driverId,
+        isActive: true,
+      },
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+
+    return this.getVehicleDocumentsNextStep(status, vehicles);
   }
 
   private resolveStatusAfterDocuments(
@@ -3197,23 +3253,27 @@ export class DriverService {
   }
 
   private hasRequiredVehicleDocuments(
-    documents: Array<{ type: DriverDocumentType }>,
+    documents: Array<{ type: DriverDocumentType; status?: DocumentStatus }>,
   ): boolean {
+    const eligibleDocuments = documents.filter(
+      (document) => document.status !== DocumentStatus.REJECTED,
+    );
+
     const hasCanonicalPhotoSet =
-      documents.some((doc) => doc.type === DriverDocumentType.VEHICLE_FRONT_PHOTO) &&
-      documents.some((doc) => doc.type === DriverDocumentType.VEHICLE_REAR_PHOTO) &&
-      documents.some((doc) => doc.type === DriverDocumentType.VEHICLE_SIDE_PHOTO) &&
-      documents.some(
+      eligibleDocuments.some((doc) => doc.type === DriverDocumentType.VEHICLE_FRONT_PHOTO) &&
+      eligibleDocuments.some((doc) => doc.type === DriverDocumentType.VEHICLE_REAR_PHOTO) &&
+      eligibleDocuments.some((doc) => doc.type === DriverDocumentType.VEHICLE_SIDE_PHOTO) &&
+      eligibleDocuments.some(
         (doc) => doc.type === DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
       );
     const hasCanonicalDocumentSet =
-      documents.some(
+      eligibleDocuments.some(
         (doc) => doc.type === DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
       ) &&
-      documents.some(
+      eligibleDocuments.some(
         (doc) => doc.type === DriverDocumentType.VEHICLE_REGISTRATION_BACK,
       ) &&
-      documents.some(
+      eligibleDocuments.some(
         (doc) => doc.type === DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
       );
 
@@ -3221,24 +3281,24 @@ export class DriverService {
       return true;
     }
 
-    const hasLicenseFront = documents.some(
+    const hasLicenseFront = eligibleDocuments.some(
       (doc) => doc.type === DriverDocumentType.DRIVER_LICENSE_FRONT,
     );
-    const hasLicenseBack = documents.some(
+    const hasLicenseBack = eligibleDocuments.some(
       (doc) => doc.type === DriverDocumentType.DRIVER_LICENSE_BACK,
     );
-    const hasIdentity = documents.some(
+    const hasIdentity = eligibleDocuments.some(
       (doc) =>
         doc.type === DriverDocumentType.IDENTITY_DOCUMENT ||
         doc.type === DriverDocumentType.PASSPORT,
     );
-    const hasVehicleRegistration = documents.some(
+    const hasVehicleRegistration = eligibleDocuments.some(
       (doc) => doc.type === DriverDocumentType.VEHICLE_REGISTRATION,
     );
-    const hasVehicleInsurance = documents.some(
+    const hasVehicleInsurance = eligibleDocuments.some(
       (doc) => doc.type === DriverDocumentType.VEHICLE_INSURANCE,
     );
-    const hasVehiclePhoto = documents.some(
+    const hasVehiclePhoto = eligibleDocuments.some(
       (doc) => doc.type === DriverDocumentType.VEHICLE_PHOTO,
     );
 
@@ -4293,7 +4353,8 @@ export class DriverService {
     return {
       id: vehicle.id,
       driverId: vehicle.driverId,
-      vehicleType: CANONICAL_VEHICLE_TYPE_MAP[vehicle.vehicleType],
+      vehicleType: toDriverVehicleApiType(vehicle.vehicleType),
+      vehicleTypeLegacy: vehicle.vehicleType,
       brand: vehicle.make,
       make: vehicle.make,
       model: vehicle.model,
@@ -4334,6 +4395,7 @@ export class DriverService {
         ? vehicle.registrationExpiryDate.toISOString()
         : null,
       status: vehicle.status,
+      verificationStatus: vehicle.status,
       rejectionReason: vehicle.rejectionReason,
       isActive: vehicle.isActive,
       createdAt: vehicle.createdAt.toISOString(),

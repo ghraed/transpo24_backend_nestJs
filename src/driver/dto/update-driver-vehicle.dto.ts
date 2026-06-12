@@ -15,8 +15,10 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { normalizeDriverVehicleTypeInput } from './driver-vehicle-type.util';
 
 export class UpdateDriverVehicleDto {
+  @Transform(({ value }) => normalizeDriverVehicleTypeInput(value))
   @IsOptional()
   @IsEnum(VehicleType)
   vehicleType?: VehicleType;

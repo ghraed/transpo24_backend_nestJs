@@ -1,20 +1,14 @@
 import {
+  VehicleType,
   DocumentStatus,
   DriverDocumentType,
   DriverStatus,
   DriverVehicleCondition,
   DriverVehicleReviewStatus,
 } from '@prisma/client';
+import { DriverVehicleApiType } from './driver-vehicle-type.util';
 
-export type CanonicalVehicleType =
-  | 'FLATBED_OPEN'
-  | 'FLATBED_ENCLOSED'
-  | 'SMALL_TRUCK'
-  | 'MEDIUM_TRUCK'
-  | 'PICKUP'
-  | 'VAN'
-  | 'TOW_TRUCK'
-  | 'MOTORCYCLE';
+export type CanonicalVehicleType = DriverVehicleApiType;
 
 export type DriverVehicleNextStep =
   | 'COMPLETE_PROFILE'
@@ -27,6 +21,7 @@ export interface VehicleResponseDto {
   id: string;
   driverId: string;
   vehicleType: CanonicalVehicleType;
+  vehicleTypeLegacy: VehicleType;
   brand: string;
   make: string;
   model: string;
@@ -50,6 +45,7 @@ export interface VehicleResponseDto {
   insuranceExpiryDate: string | null;
   registrationExpiryDate: string | null;
   status: DriverVehicleReviewStatus;
+  verificationStatus: DriverVehicleReviewStatus;
   rejectionReason: string | null;
   isActive: boolean;
   createdAt: string;
