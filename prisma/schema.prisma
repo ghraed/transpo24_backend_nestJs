@@ -472,7 +472,9 @@ model DriverProfile {
   lastName              String
   phone                 String             @unique
   countryCode           String?
+  countryCodes          String[]           @default([])
   city                  String?
+  cities                String[]           @default([])
   coverageAreas         String[]           @default([])
   fullNameOnId          String?
   dateOfBirth           DateTime?

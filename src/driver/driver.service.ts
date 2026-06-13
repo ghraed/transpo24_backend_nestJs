@@ -104,7 +104,9 @@ interface UpdateDriverProfileInput {
   lastName: string;
   phone: string;
   countryCode?: string | null;
+  countryCodes?: string[] | null;
   city?: string | null;
+  cities?: string[] | null;
   coverageAreas?: string[] | null;
   fullNameOnId?: string | null;
   dateOfBirth?: Date | null;
@@ -314,7 +316,9 @@ type DriverProfileSource = {
   lastName: string;
   phone: string;
   countryCode: string | null;
+  countryCodes: string[];
   city: string | null;
+  cities: string[];
   coverageAreas: string[];
   fullNameOnId: string | null;
   dateOfBirth: Date | null;
@@ -606,7 +610,9 @@ const DRIVER_ME_SELECT = {
       lastName: true,
       phone: true,
       countryCode: true,
+      countryCodes: true,
       city: true,
+      cities: true,
       coverageAreas: true,
       fullNameOnId: true,
       dateOfBirth: true,
@@ -3075,10 +3081,18 @@ export class DriverService {
       input.changes.countryCode !== undefined
         ? input.changes.countryCode?.trim() || null
         : input.existingProfile.countryCode;
+    const nextCountryCodes =
+      input.changes.countryCodes !== undefined
+        ? this.normalizeCountryCodes(input.changes.countryCodes ?? [])
+        : input.existingProfile.countryCodes;
     const nextCity =
       input.changes.city !== undefined
         ? input.changes.city?.trim() || null
         : input.existingProfile.city;
+    const nextCities =
+      input.changes.cities !== undefined
+        ? this.normalizeCities(input.changes.cities ?? [])
+        : input.existingProfile.cities;
     const nextCoverageAreas =
       input.changes.coverageAreas !== undefined
         ? this.normalizeCoverageAreas(input.changes.coverageAreas ?? [])
@@ -3180,8 +3194,10 @@ export class DriverService {
         firstName: nextFirstName,
         lastName: nextLastName,
         phone: nextPhone,
-        countryCode: nextCountryCode,
-        city: nextCity,
+        countryCode: nextCountryCodes[0] ?? nextCountryCode,
+        countryCodes: nextCountryCodes,
+        city: nextCities[0] ?? nextCity,
+        cities: nextCities,
         coverageAreas: nextCoverageAreas,
         fullNameOnId: nextFullNameOnId,
         dateOfBirth: nextDateOfBirth ?? null,
@@ -3227,6 +3243,20 @@ export class DriverService {
     return [
       ...new Set(coverageAreas.map((area) => area.trim()).filter(Boolean)),
     ];
+  }
+
+  private normalizeCountryCodes(countryCodes: string[]): string[] {
+    return [
+      ...new Set(
+        countryCodes
+          .map((countryCode) => countryCode.trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  private normalizeCities(cities: string[]): string[] {
+    return [...new Set(cities.map((city) => city.trim()).filter(Boolean))];
   }
 
   private isDriverPersonalInfoComplete(input: {
@@ -5092,7 +5122,9 @@ export class DriverService {
       lastName: profile.lastName,
       phone: profile.phone,
       countryCode: profile.countryCode,
+      countryCodes: profile.countryCodes,
       city: profile.city,
+      cities: profile.cities,
       coverageAreas: profile.coverageAreas,
       fullNameOnId: profile.fullNameOnId,
       dateOfBirth: profile.dateOfBirth

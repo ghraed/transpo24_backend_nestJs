@@ -14,7 +14,9 @@ export interface DriverProfileResponseDto {
   lastName: string;
   phone: string;
   countryCode: string | null;
+  countryCodes: string[];
   city: string | null;
+  cities: string[];
   coverageAreas: string[];
   fullNameOnId: string | null;
   dateOfBirth: string | null;

@@ -12,7 +12,9 @@ export interface LoginResponseDto {
     lastName: string;
     phone: string;
     countryCode: string | null;
+    countryCodes: string[];
     city: string | null;
+    cities: string[];
     status: string;
     isProfileCompleted: boolean;
   };

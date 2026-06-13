@@ -28,8 +28,22 @@ export class UpdateDriverProfileDto {
   countryCode?: string;
 
   @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  countryCodes?: string[];
+
+  @IsOptional()
   @IsString()
   city?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  cities?: string[];
 
   @IsOptional()
   @IsArray()

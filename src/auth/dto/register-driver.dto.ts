@@ -1,5 +1,7 @@
 import {
+  ArrayUnique,
   IsEmail,
+  IsArray,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -31,6 +33,20 @@ export class RegisterDriverDto {
   countryCode?: string;
 
   @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  countryCodes?: string[];
+
+  @IsOptional()
   @IsString()
   city?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  cities?: string[];
 }

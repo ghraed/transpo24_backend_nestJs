@@ -40,7 +40,9 @@ interface RegisterDriverInput {
   phone: string;
   password: string;
   countryCode?: string;
+  countryCodes?: string[];
   city?: string;
+  cities?: string[];
 }
 
 const ACCESS_TOKEN_SECRET =
@@ -87,14 +89,22 @@ export class AuthService {
   async registerDriver(
     dto: RegisterDriverDto,
   ): Promise<RegisterDriverResponseDto> {
+    const normalizedCountryCodes = this.normalizeCountryCodes(
+      dto.countryCodes ?? (dto.countryCode ? [dto.countryCode] : []),
+    );
+    const normalizedCities = this.normalizeCities(
+      dto.cities ?? (dto.city ? [dto.city] : []),
+    );
     const input: RegisterDriverInput = {
       firstName: dto.firstName.trim(),
       lastName: dto.lastName.trim(),
       email: dto.email.trim().toLowerCase(),
       phone: dto.phone.trim(),
       password: dto.password,
-      countryCode: dto.countryCode?.trim(),
-      city: dto.city?.trim(),
+      countryCode: normalizedCountryCodes[0] ?? dto.countryCode?.trim(),
+      countryCodes: normalizedCountryCodes,
+      city: normalizedCities[0] ?? dto.city?.trim(),
+      cities: normalizedCities,
     };
 
     const [existingUser, existingDriverPhone] = await this.prisma.$transaction([
@@ -128,7 +138,9 @@ export class AuthService {
             lastName: input.lastName,
             phone: input.phone,
             countryCode: input.countryCode || null,
+            countryCodes: input.countryCodes ?? [],
             city: input.city || null,
+            cities: input.cities ?? [],
             status: DriverStatus.PENDING_PROFILE,
             isProfileCompleted: false,
           },
@@ -145,7 +157,9 @@ export class AuthService {
             lastName: true,
             phone: true,
             countryCode: true,
+            countryCodes: true,
             city: true,
+            cities: true,
             status: true,
             isProfileCompleted: true,
           },
@@ -177,7 +191,9 @@ export class AuthService {
         lastName: created.driverProfile.lastName,
         phone: created.driverProfile.phone,
         countryCode: created.driverProfile.countryCode,
+        countryCodes: created.driverProfile.countryCodes,
         city: created.driverProfile.city,
+        cities: created.driverProfile.cities,
         status: created.driverProfile.status,
         isProfileCompleted: created.driverProfile.isProfileCompleted,
       },
@@ -203,7 +219,9 @@ export class AuthService {
             lastName: true,
             phone: true,
             countryCode: true,
+            countryCodes: true,
             city: true,
+            cities: true,
             status: true,
             isProfileCompleted: true,
           },
@@ -251,7 +269,9 @@ export class AuthService {
             lastName: driverProfile.lastName,
             phone: driverProfile.phone,
             countryCode: driverProfile.countryCode,
+            countryCodes: driverProfile.countryCodes,
             city: driverProfile.city,
+            cities: driverProfile.cities,
             status: driverProfile.status,
             isProfileCompleted: driverProfile.isProfileCompleted,
           }
@@ -274,6 +294,22 @@ export class AuthService {
           ? 'UPLOAD_DOCUMENTS'
           : response.nextStep,
     };
+  }
+
+  private normalizeCountryCodes(values: string[]): string[] {
+    return Array.from(
+      new Set(
+        values
+          .map((value) => value.trim().toUpperCase())
+          .filter((value) => value.length > 0),
+      ),
+    );
+  }
+
+  private normalizeCities(values: string[]): string[] {
+    return Array.from(
+      new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+    );
   }
 
   getUserFromAccessToken(token: string): AuthenticatedUser | null {
