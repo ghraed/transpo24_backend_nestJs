@@ -1417,11 +1417,56 @@ export class DriverService {
       throw new NotFoundException('Driver profile not found.');
     }
 
-    await this.prisma.driverProfile.update({
-      where: { id: user.driverProfile.id },
-      data: {
-        status: DriverStatus.APPROVED,
+    const profileId = user.driverProfile.id;
+    const vehicles = await this.prisma.driverVehicle.findMany({
+      where: {
+        driverId: profileId,
       },
+      orderBy: [{ isDefaultLoadProfile: 'desc' }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+
+    const primaryVehicle =
+      vehicles.find((vehicle) => this.hasRequiredVehicleDocuments(vehicle.documents)) ??
+      vehicles[0] ??
+      null;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.driverProfile.update({
+        where: { id: profileId },
+        data: {
+          status: DriverStatus.APPROVED,
+        },
+      });
+
+      if (!primaryVehicle) {
+        return;
+      }
+
+      await tx.driverVehicle.update({
+        where: { id: primaryVehicle.id },
+        data: {
+          status: DriverVehicleReviewStatus.APPROVED,
+          isActive: true,
+        },
+      });
+
+      await tx.driverVehicle.updateMany({
+        where: {
+          driverId: profileId,
+          NOT: { id: primaryVehicle.id },
+        },
+        data: {
+          status: DriverVehicleReviewStatus.INACTIVE,
+          isActive: false,
+        },
+      });
     });
 
     return this.getMe({ userId: input.userId });
@@ -2614,7 +2659,7 @@ export class DriverService {
         insuranceExpiryDate: input.insuranceExpiryDate ?? null,
         registrationExpiryDate: input.registrationExpiryDate ?? null,
         status: DriverVehicleReviewStatus.PENDING_REVIEW,
-        isActive: true,
+        isActive: false,
       },
       select: DRIVER_VEHICLE_SELECT,
     });
@@ -2725,6 +2770,7 @@ export class DriverService {
         status: shouldResetVehicleReview
           ? DriverVehicleReviewStatus.PENDING_REVIEW
           : existingVehicle.status,
+        isActive: shouldResetVehicleReview ? false : existingVehicle.isActive,
         rejectionReason: shouldResetVehicleReview
           ? null
           : existingVehicle.rejectionReason,
@@ -2754,11 +2800,82 @@ export class DriverService {
     const profile = await this.ensureDriverProfile(input.userId);
     const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
 
+    if (vehicle.status === DriverVehicleReviewStatus.PENDING_REVIEW) {
+      await this.prisma.driverVehicle.delete({
+        where: { id: vehicle.id },
+      });
+
+      return this.toVehicleResponse(vehicle, vehicle.documents);
+    }
+
     const updatedVehicle = await this.prisma.driverVehicle.update({
       where: { id: vehicle.id },
       data: {
         isActive: false,
         status: DriverVehicleReviewStatus.INACTIVE,
+      },
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+
+    return this.toVehicleResponse(updatedVehicle, updatedVehicle.documents);
+  }
+
+  async activateVehicle(
+    input: DeactivateDriverVehicleInput,
+  ): Promise<VehicleResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+
+    if (!this.hasRequiredVehicleDocuments(vehicle.documents)) {
+      throw new BadRequestException(
+        'Vehicle and required documents must be completed before activation.',
+      );
+    }
+
+    const updatedVehicle = await this.prisma.driverVehicle.update({
+      where: { id: vehicle.id },
+      data: {
+        isActive: true,
+        status: DriverVehicleReviewStatus.APPROVED,
+        rejectionReason: null,
+      },
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+
+    return this.toVehicleResponse(updatedVehicle, updatedVehicle.documents);
+  }
+
+  async approveVehicleForTesting(
+    input: DeactivateDriverVehicleInput,
+  ): Promise<VehicleResponseDto> {
+    const allowInProduction = process.env.ALLOW_TESTING_APPROVAL === 'true';
+    if (process.env.NODE_ENV === 'production' && !allowInProduction) {
+      throw new BadRequestException(
+        'Testing approval is disabled in production.',
+      );
+    }
+
+    const profile = await this.ensureDriverProfile(input.userId);
+    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+
+    const updatedVehicle = await this.prisma.driverVehicle.update({
+      where: { id: vehicle.id },
+      data: {
+        isActive: true,
+        status: DriverVehicleReviewStatus.APPROVED,
+        rejectionReason: null,
       },
       select: {
         ...DRIVER_VEHICLE_SELECT,
@@ -2867,6 +2984,7 @@ export class DriverService {
             registrationExpiryDate:
               input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
             status: DriverVehicleReviewStatus.PENDING_REVIEW,
+            isActive: false,
             rejectionReason: null,
           },
         });
@@ -2913,6 +3031,7 @@ export class DriverService {
           registrationExpiryDate:
             input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
           status: DriverVehicleReviewStatus.PENDING_REVIEW,
+          isActive: false,
           rejectionReason: null,
         },
         documents,

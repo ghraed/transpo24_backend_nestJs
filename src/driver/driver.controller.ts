@@ -654,6 +654,28 @@ export class DriverController {
     });
   }
 
+  @Patch('me/vehicles/:vehicleId/activate')
+  async activateVehicle(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+  ): Promise<VehicleResponseDto> {
+    return this.driverService.activateVehicle({
+      userId: request.user.id,
+      vehicleId,
+    });
+  }
+
+  @Patch('me/vehicles/:vehicleId/testing/approve')
+  async approveVehicleForTesting(
+    @Req() request: AuthenticatedRequest,
+    @Param('vehicleId') vehicleId: string,
+  ): Promise<VehicleResponseDto> {
+    return this.driverService.approveVehicleForTesting({
+      userId: request.user.id,
+      vehicleId,
+    });
+  }
+
   @Get('me/load-capacities')
   async listVehicleLoadCapacities(
     @Req() request: AuthenticatedRequest,
