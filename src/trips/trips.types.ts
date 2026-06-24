@@ -111,6 +111,9 @@ export type OfferAcceptedPayload = {
 };
 
 export type RequestNewPayload = DriverRequestAlertSummaryDto;
+export type RequestDeletedPayload = {
+  requestId: string;
+};
 
 export type OfferNewPayload = {
   requestId: string;

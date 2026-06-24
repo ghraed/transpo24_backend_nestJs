@@ -1432,10 +1432,7 @@ export class DriverService {
       },
     });
 
-    const primaryVehicle =
-      vehicles.find((vehicle) => this.hasRequiredVehicleDocuments(vehicle.documents)) ??
-      vehicles[0] ??
-      null;
+    const activeVehicleIds = vehicles.map((vehicle) => vehicle.id);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.driverProfile.update({
@@ -1445,12 +1442,15 @@ export class DriverService {
         },
       });
 
-      if (!primaryVehicle) {
+      if (activeVehicleIds.length === 0) {
         return;
       }
 
-      await tx.driverVehicle.update({
-        where: { id: primaryVehicle.id },
+      await tx.driverVehicle.updateMany({
+        where: {
+          driverId: profileId,
+          id: { in: activeVehicleIds },
+        },
         data: {
           status: DriverVehicleReviewStatus.APPROVED,
           isActive: true,
@@ -1460,7 +1460,7 @@ export class DriverService {
       await tx.driverVehicle.updateMany({
         where: {
           driverId: profileId,
-          NOT: { id: primaryVehicle.id },
+          id: { notIn: activeVehicleIds },
         },
         data: {
           status: DriverVehicleReviewStatus.INACTIVE,
@@ -2162,6 +2162,8 @@ export class DriverService {
       });
     });
 
+    await this.syncOpenRequestAlertsForDriver(profile.id);
+
     return this.toVehicleLoadCapacityResponse(updatedVehicle);
   }
 
@@ -2217,6 +2219,8 @@ export class DriverService {
         select: DRIVER_VEHICLE_SELECT,
       });
     });
+
+    await this.syncOpenRequestAlertsForDriver(profile.id);
 
     return this.toVehicleLoadCapacityResponse(updatedVehicle);
   }
@@ -3842,6 +3846,101 @@ export class DriverService {
     return vehicles;
   }
 
+  private async syncOpenRequestAlertsForDriver(driverId: string): Promise<void> {
+    const availability = await this.prisma.driverAvailability.findUnique({
+      where: { driverId },
+      select: {
+        id: true,
+        isOnline: true,
+        baseLatitude: true,
+        baseLongitude: true,
+        serviceRadiusKm: true,
+      },
+    });
+
+    if (!availability?.isOnline) {
+      return;
+    }
+
+    const vehicles = await this.prisma.driverVehicle.findMany({
+      where: {
+        driverId,
+        isActive: true,
+        status: DriverVehicleReviewStatus.APPROVED,
+      },
+      select: DRIVER_VEHICLE_SELECT,
+    });
+
+    if (vehicles.length === 0) {
+      return;
+    }
+
+    const requests = await this.prisma.transportRequest.findMany({
+      where: {
+        status: TransportRequestStatus.PENDING_QUOTES,
+        pickupLatitude: { not: null },
+        pickupLongitude: { not: null },
+        dropoffLatitude: { not: null },
+        dropoffLongitude: { not: null },
+        itemTitle: { not: null },
+        itemType: { not: null },
+        OR: [{ isImmediate: true }, { scheduledPickupAt: { not: null } }],
+      },
+      select: DRIVER_REQUEST_DETAILS_SELECT,
+      orderBy: { submittedAt: 'desc' },
+      take: 50,
+    });
+
+    for (const request of requests as RequestDetailsSource[]) {
+      const existingAlert = request.driverAlerts.find(
+        (alert) => alert.driverId === driverId,
+      );
+      if (
+        existingAlert &&
+        (existingAlert.status === DriverRequestAlertStatus.IGNORED ||
+          existingAlert.status === DriverRequestAlertStatus.ACCEPTED ||
+          existingAlert.status === DriverRequestAlertStatus.EXPIRED)
+      ) {
+        continue;
+      }
+
+      if (
+        !request.service ||
+        !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
+      ) {
+        continue;
+      }
+
+      const distanceKm = this.calculateDistanceKm(
+        availability.baseLatitude,
+        availability.baseLongitude,
+        request.pickupLatitude,
+        request.pickupLongitude,
+      );
+      if (
+        distanceKm !== null &&
+        availability.serviceRadiusKm > 0 &&
+        distanceKm > availability.serviceRadiusKm
+      ) {
+        continue;
+      }
+
+      const alert =
+        existingAlert ??
+        (await this.ensureDriverRequestAlert({
+          requestId: request.id,
+          driverId,
+        }));
+
+      if (!existingAlert && this.tripsGateway.getDriverConnectionCount(driverId) > 0) {
+        this.tripsGateway.emitRequestNew(
+          driverId,
+          this.toRequestAlertSummary(request, alert, distanceKm),
+        );
+      }
+    }
+  }
+
   private async getApprovedDriverVehiclesTx(
     tx: Prisma.TransactionClient,
     driverId: string,
@@ -3944,6 +4043,11 @@ export class DriverService {
         'PICKUP_TRUCK',
         'MOTORCYCLE',
         'PICKUP',
+        'FLATBED_TRUCK',
+        'FLATBED_OPEN',
+        'FLATBED_ENCLOSED',
+        'TOW_TRUCK',
+        'CAR_CARRIER',
       ],
       GOODS_TRANSPORT: [
         'VAN',

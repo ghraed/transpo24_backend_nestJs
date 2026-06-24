@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -34,6 +34,15 @@ function toObject(value: unknown): unknown {
   } catch {
     return value;
   }
+}
+
+function toFurnitureLocation(value: unknown): FurnitureRequestLocationDto | unknown {
+  const parsed = toObject(value);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  return plainToInstance(FurnitureRequestLocationDto, parsed);
 }
 
 class FurnitureRequestLocationDto {
@@ -93,13 +102,13 @@ export class CreateFurnitureTransportRequestDto {
   @IsBoolean()
   customerCanHelpLoading?: boolean;
 
-  @Transform(({ value }) => toObject(value))
+  @Transform(({ value }) => toFurnitureLocation(value))
   @IsNotEmptyObject()
   @ValidateNested()
   @Type(() => FurnitureRequestLocationDto)
   pickupLocation!: FurnitureRequestLocationDto;
 
-  @Transform(({ value }) => toObject(value))
+  @Transform(({ value }) => toFurnitureLocation(value))
   @IsNotEmptyObject()
   @ValidateNested()
   @Type(() => FurnitureRequestLocationDto)

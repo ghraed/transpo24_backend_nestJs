@@ -159,6 +159,27 @@ export class PaymentsService {
       throw new NotFoundException('Payment hold not found.');
     }
 
+    if (
+      request.paymentHold.provider === PaymentProvider.STRIPE &&
+      request.paymentHold.stripePaymentIntentId
+    ) {
+      const paymentIntent = await this.stripeService.retrievePaymentIntent(
+        request.paymentHold.stripePaymentIntentId,
+      );
+      await this.syncStripePaymentIntent(paymentIntent, 'payment_intent.status_checked');
+
+      const refreshedHold = await this.prisma.paymentHold.findUnique({
+        where: { id: request.paymentHold.id },
+        select: PAYMENT_HOLD_SELECT,
+      });
+
+      if (!refreshedHold) {
+        throw new NotFoundException('Payment hold not found.');
+      }
+
+      return this.toPaymentSummaryDto(refreshedHold);
+    }
+
     return this.toPaymentSummaryDto(request.paymentHold);
   }
 
@@ -668,39 +689,48 @@ export class PaymentsService {
       },
     });
 
-    const status = this.mapStripeIntentStatus(paymentIntent);
-    const hold = await tx.paymentHold.create({
-      data: {
-        customerId: input.customerId,
-        requestId: input.requestId,
-        acceptedOfferId: input.acceptedOfferId,
-        driverId: input.driverId,
-        amount: input.amount,
-        currency: input.currency,
-        paymentMethod: input.paymentMethod,
-        provider: PaymentProvider.STRIPE,
-        status,
-        stripePaymentMethodId: input.stripePaymentMethodId?.trim() || null,
-        stripePaymentIntentId: paymentIntent.id,
-        stripeClientSecret: paymentIntent.client_secret,
-        stripeChargeId: this.getStripeChargeId(paymentIntent),
-      },
-      select: PAYMENT_HOLD_SELECT,
-    });
+    try {
+      const status = this.mapStripeIntentStatus(paymentIntent);
+      const hold = await tx.paymentHold.create({
+        data: {
+          customerId: input.customerId,
+          requestId: input.requestId,
+          acceptedOfferId: input.acceptedOfferId,
+          driverId: input.driverId,
+          amount: input.amount,
+          currency: input.currency,
+          paymentMethod: input.paymentMethod,
+          provider: PaymentProvider.STRIPE,
+          status,
+          stripePaymentMethodId: input.stripePaymentMethodId?.trim() || null,
+          stripePaymentIntentId: paymentIntent.id,
+          stripeClientSecret: paymentIntent.client_secret,
+          stripeChargeId: this.getStripeChargeId(paymentIntent),
+        },
+        select: PAYMENT_HOLD_SELECT,
+      });
 
-    await tx.transportRequest.update({
-      where: { id: input.requestId },
-      data: {
-        paymentStatus: status,
-        paymentMethod: input.paymentMethod,
-        heldAmount: input.amount,
-        capturedAmount: new Prisma.Decimal(0),
-        paymentHoldId: hold.id,
-        stripePaymentIntentId: paymentIntent.id,
-      },
-    });
+      await tx.transportRequest.update({
+        where: { id: input.requestId },
+        data: {
+          paymentStatus: status,
+          paymentMethod: input.paymentMethod,
+          heldAmount: input.amount,
+          capturedAmount: new Prisma.Decimal(0),
+          paymentHoldId: hold.id,
+          stripePaymentIntentId: paymentIntent.id,
+        },
+      });
 
-    return this.toPaymentSummaryDto(hold);
+      return this.toPaymentSummaryDto(hold);
+    } catch (error) {
+      try {
+        await this.stripeService.cancelPaymentIntent(paymentIntent.id);
+      } catch {
+        // Best-effort compensation for an orphaned external hold.
+      }
+      throw error;
+    }
   }
 
   private async releaseWalletReservation(
@@ -811,7 +841,7 @@ export class PaymentsService {
     }
 
     if (paymentIntent.status === 'requires_payment_method') {
-      return PaymentStatus.PAYMENT_FAILED;
+      return PaymentStatus.PAYMENT_HOLD_PENDING;
     }
 
     return PaymentStatus.PAYMENT_HOLD_PENDING;

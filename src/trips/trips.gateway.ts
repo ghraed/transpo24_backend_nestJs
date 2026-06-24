@@ -30,6 +30,7 @@ import {
   PaymentCancelledPayload,
   PaymentCapturedPayload,
   PaymentHeldPayload,
+  RequestDeletedPayload,
   RequestDriverSelectedPayload,
   RequestNewPayload,
   TripStatusUpdatedPayload,
@@ -229,6 +230,10 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   emitRequestNew(driverId: string, payload: RequestNewPayload): void {
     this.server.to(this.getDriverRoom(driverId)).emit('requestNew', payload);
+  }
+
+  emitRequestDeleted(driverId: string, payload: RequestDeletedPayload): void {
+    this.server.to(this.getDriverRoom(driverId)).emit('requestDeleted', payload);
   }
 
   emitOfferNew(customerId: string, payload: OfferNewPayload): void {

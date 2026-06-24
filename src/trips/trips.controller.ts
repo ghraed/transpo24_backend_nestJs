@@ -48,6 +48,10 @@ export class TripsController {
       stripePaymentMethodId: dto.stripePaymentMethodId,
     });
 
+    if (accepted.nextStep !== 'TRACK_REQUEST' || !accepted.request.acceptedAt) {
+      return accepted;
+    }
+
     const offerAcceptedPayload =
       await this.tripsService.mapOfferAcceptedPayload(tripId);
     const tripStatusPayload = this.tripsService.mapTripStatusResponse(

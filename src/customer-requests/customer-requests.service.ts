@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
@@ -22,6 +23,7 @@ import {
   MotorcycleCondition,
   MotorcycleType,
   PaymentMethod,
+  PaymentStatus,
   Prisma,
   ServiceKey,
   TransportProofPhotoType,
@@ -33,6 +35,7 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
+import { PaymentSummaryDto } from '../payments/dto/request-payment.dto';
 import { TripsGateway } from '../trips/trips.gateway';
 import {
   canVehicleSupportRequestLoad,
@@ -219,6 +222,30 @@ interface AcceptDriverOfferInput {
   stripePaymentMethodId?: string;
 }
 
+interface FinalizeAcceptedOfferPaymentInput {
+  customerId: string;
+  requestId: string;
+}
+
+const RETRYABLE_PAYMENT_HOLD_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.PAYMENT_FAILED,
+  PaymentStatus.PAYMENT_RELEASED,
+  PaymentStatus.PAYMENT_CANCELLED,
+]);
+
+const SUCCESSFUL_PAYMENT_HOLD_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.PAYMENT_HELD,
+  PaymentStatus.PAYMENT_CAPTURE_PENDING,
+  PaymentStatus.PAYMENT_CAPTURED,
+]);
+
+const ACTIVE_PAYMENT_HOLD_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.PAYMENT_HOLD_PENDING,
+  PaymentStatus.PAYMENT_HELD,
+  PaymentStatus.PAYMENT_CAPTURE_PENDING,
+  PaymentStatus.PAYMENT_CAPTURED,
+]);
+
 interface GetCustomerRequestStatusInput {
   customerId: string;
   requestId: string;
@@ -235,6 +262,11 @@ interface GetCustomerHomeInput {
 
 interface ListCustomerRequestsInput {
   customerId: string;
+}
+
+interface DeleteCustomerRequestInput {
+  customerId: string;
+  requestId: string;
 }
 
 type RequestLocationResponse = {
@@ -639,6 +671,11 @@ const DRIVER_SERVICE_VEHICLE_TYPE_MAP: Record<ServiceKey, VehicleType[]> = {
     'PICKUP_TRUCK',
     'MOTORCYCLE',
     'PICKUP',
+    'FLATBED_TRUCK',
+    'FLATBED_OPEN',
+    'FLATBED_ENCLOSED',
+    'TOW_TRUCK',
+    'CAR_CARRIER',
   ],
   GOODS_TRANSPORT: [
     'VAN',
@@ -687,6 +724,20 @@ const ACTIVE_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
 ];
 
+const HOLD_DELETABLE_REQUEST_STATUSES: TransportRequestStatus[] = [
+  TransportRequestStatus.DRAFT,
+  TransportRequestStatus.PENDING_QUOTES,
+  TransportRequestStatus.QUOTED,
+  TransportRequestStatus.CANCELLED,
+];
+
+const DELETABLE_REQUEST_STATUSES: TransportRequestStatus[] = [
+  TransportRequestStatus.DRAFT,
+  TransportRequestStatus.PENDING_QUOTES,
+  TransportRequestStatus.QUOTED,
+  TransportRequestStatus.CANCELLED,
+];
+
 const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.PENDING_QUOTES,
   TransportRequestStatus.QUOTED,
@@ -694,6 +745,8 @@ const ACCEPTABLE_OFFER_REQUEST_STATUSES: TransportRequestStatus[] = [
 
 @Injectable()
 export class CustomerRequestsService {
+  private readonly logger = new Logger(CustomerRequestsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
@@ -2084,6 +2137,13 @@ export class CustomerRequestsService {
           status: true,
           acceptedOfferId: true,
           assignedDriverId: true,
+          acceptedAt: true,
+          paymentHold: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
         },
       });
 
@@ -2107,6 +2167,32 @@ export class CustomerRequestsService {
         throw new ConflictException(
           'An offer has already been accepted for this request.',
         );
+      }
+
+      if (
+        request.paymentHold &&
+        !RETRYABLE_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)
+      ) {
+        throw new ConflictException(
+          'A payment attempt is already in progress for this request.',
+        );
+      }
+
+      if (request.paymentHold) {
+        await tx.paymentHold.delete({
+          where: { id: request.paymentHold.id },
+        });
+        await tx.transportRequest.update({
+          where: { id: request.id },
+          data: {
+            paymentStatus: null,
+            paymentMethod: null,
+            heldAmount: null,
+            capturedAmount: null,
+            paymentHoldId: null,
+            stripePaymentIntentId: null,
+          },
+        });
       }
 
       const offer = await tx.driverOffer.findUnique({
@@ -2195,94 +2281,296 @@ export class CustomerRequestsService {
         paymentMethod: input.paymentMethod,
         stripePaymentMethodId: input.stripePaymentMethodId,
       });
-
-      const acceptedAt = new Date();
-
-      const acceptedOffer = await tx.driverOffer.update({
-        where: { id: offer.id },
-        data: {
-          status: DriverOfferStatus.ACCEPTED,
-          acceptedAt,
-          rejectedAt: null,
-          cancelledAt: null,
-        },
-        select: {
-          id: true,
-          requestId: true,
-          driverId: true,
-          price: true,
-          currency: true,
-          estimatedPickupAt: true,
-          estimatedDeliveryAt: true,
-          estimatedDurationMinutes: true,
-          message: true,
-          status: true,
-          acceptedAt: true,
-          createdAt: true,
-        },
-      });
-
-      const rejectedPendingOffers = await tx.driverOffer.findMany({
-        where: {
-          requestId: request.id,
-          id: { not: offer.id },
-          status: DriverOfferStatus.PENDING,
-        },
-        select: {
-          id: true,
-          driverId: true,
-        },
-      });
-
-      const rejectedOffers = await tx.driverOffer.updateMany({
-        where: {
-          requestId: request.id,
-          id: { not: offer.id },
-          status: DriverOfferStatus.PENDING,
-        },
-        data: {
-          status: DriverOfferStatus.REJECTED,
-          rejectedAt: acceptedAt,
-        },
-      });
-
-      const updatedRequest = await tx.transportRequest.update({
-        where: { id: request.id },
-        data: {
-          status: TransportRequestStatus.DRIVER_GOING_TO_PICKUP,
-          assignedDriverId: offer.driverId,
-          acceptedOfferId: offer.id,
-          acceptedAt,
-        },
-        select: {
-          id: true,
-          status: true,
-          assignedDriverId: true,
-          acceptedOfferId: true,
-          acceptedAt: true,
-        },
-      });
-
-      // TODO: authorize/capture customer payment before assigning driver in production.
-      // TODO: emit driver.offer.accepted and driver.offer.rejected notifications when notification module is available.
-
       return {
-        acceptedOffer,
+        acceptedOffer: offer,
         payment,
-        updatedRequest,
-        rejectedOffersCount: rejectedOffers.count,
-        rejectedOffers: rejectedPendingOffers,
+        updatedRequest: {
+          id: request.id,
+          status: request.status,
+          assignedDriverId: null,
+          acceptedOfferId: null,
+          acceptedAt: null,
+        },
+        rejectedOffersCount: 0,
+        rejectedOffers: [],
       };
     });
+
+    const response = {
+      request: {
+        id: result.updatedRequest.id,
+        status: result.updatedRequest.status,
+        assignedDriverId: result.updatedRequest.assignedDriverId,
+        acceptedOfferId: result.updatedRequest.acceptedOfferId,
+        acceptedAt: null,
+      },
+      acceptedOffer: this.toAcceptedOfferResponse(result.acceptedOffer),
+      payment: result.payment,
+      rejectedOffersCount: result.rejectedOffersCount,
+      nextStep: 'CONFIRM_PAYMENT' as const,
+    };
+    try {
+      this.tripsGateway.emitPaymentHeld(input.customerId, result.payment);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit payment held event for request ${result.updatedRequest.id}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+
+    return response;
+  }
+
+  async finalizeAcceptedOfferPayment(
+    input: FinalizeAcceptedOfferPaymentInput,
+  ): Promise<CustomerAcceptOfferResponseDto> {
+    let result: {
+      acceptedOffer: AcceptedOfferSource;
+      payment: PaymentSummaryDto;
+      updatedRequest: {
+        id: string;
+        status: TransportRequestStatus;
+        assignedDriverId: string | null;
+        acceptedOfferId: string | null;
+        acceptedAt: Date | null;
+      };
+      rejectedOffersCount: number;
+      rejectedOffers: { id: string; driverId: string }[];
+    };
+
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
+        const request = await tx.transportRequest.findUnique({
+          where: { id: input.requestId },
+          select: {
+            id: true,
+            customerId: true,
+            status: true,
+            acceptedOfferId: true,
+            assignedDriverId: true,
+            acceptedAt: true,
+            paymentHold: {
+              select: {
+                id: true,
+                requestId: true,
+                acceptedOfferId: true,
+                status: true,
+                customerId: true,
+                driverId: true,
+                amount: true,
+                currency: true,
+                paymentMethod: true,
+                provider: true,
+                stripePaymentIntentId: true,
+                stripeClientSecret: true,
+                stripeChargeId: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        });
+
+        if (!request) {
+          throw new NotFoundException('Transport request not found.');
+        }
+
+        if (request.customerId !== input.customerId) {
+          throw new ForbiddenException('You are not allowed to finalize this request.');
+        }
+
+        if (!request.paymentHold) {
+          throw new BadRequestException('Payment hold not found.');
+        }
+
+        if (!SUCCESSFUL_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)) {
+          throw new BadRequestException('Payment has not been authorized successfully.');
+        }
+
+        if (request.acceptedOfferId && request.assignedDriverId) {
+          const acceptedOffer = await tx.driverOffer.findUniqueOrThrow({
+            where: { id: request.acceptedOfferId },
+            select: {
+              id: true,
+              requestId: true,
+              driverId: true,
+              price: true,
+              currency: true,
+              estimatedPickupAt: true,
+              estimatedDeliveryAt: true,
+              estimatedDurationMinutes: true,
+              message: true,
+              status: true,
+              acceptedAt: true,
+              createdAt: true,
+            },
+          });
+
+          return {
+            acceptedOffer,
+            payment: this.toPaymentSummaryResponse(request.paymentHold),
+            updatedRequest: {
+              id: request.id,
+              status: request.status,
+              assignedDriverId: request.assignedDriverId,
+              acceptedOfferId: request.acceptedOfferId,
+              acceptedAt: request.acceptedAt,
+            },
+            rejectedOffersCount: 0,
+            rejectedOffers: [],
+          };
+        }
+
+        if (!ACCEPTABLE_OFFER_REQUEST_STATUSES.includes(request.status)) {
+          throw new BadRequestException('Request is not in a state where offers can be accepted.');
+        }
+
+        const offer = await tx.driverOffer.findUnique({
+          where: { id: request.paymentHold.acceptedOfferId },
+          select: {
+            id: true,
+            requestId: true,
+            driverId: true,
+            status: true,
+            price: true,
+            currency: true,
+            estimatedPickupAt: true,
+            estimatedDeliveryAt: true,
+            estimatedDurationMinutes: true,
+            message: true,
+            acceptedAt: true,
+            createdAt: true,
+          },
+        });
+
+        if (!offer) {
+          throw new NotFoundException('Offer not found.');
+        }
+
+        if (offer.status !== DriverOfferStatus.PENDING) {
+          throw new BadRequestException('Only pending offers can be finalized.');
+        }
+
+        const acceptedAt = new Date();
+        const acceptedOffer = await tx.driverOffer.update({
+          where: { id: offer.id },
+          data: {
+            status: DriverOfferStatus.ACCEPTED,
+            acceptedAt,
+            rejectedAt: null,
+            cancelledAt: null,
+          },
+          select: {
+            id: true,
+            requestId: true,
+            driverId: true,
+            price: true,
+            currency: true,
+            estimatedPickupAt: true,
+            estimatedDeliveryAt: true,
+            estimatedDurationMinutes: true,
+            message: true,
+            status: true,
+            acceptedAt: true,
+            createdAt: true,
+          },
+        });
+
+        const rejectedPendingOffers = await tx.driverOffer.findMany({
+          where: {
+            requestId: request.id,
+            id: { not: offer.id },
+            status: DriverOfferStatus.PENDING,
+          },
+          select: {
+            id: true,
+            driverId: true,
+          },
+        });
+
+        const rejectedOffers = await tx.driverOffer.updateMany({
+          where: {
+            requestId: request.id,
+            id: { not: offer.id },
+            status: DriverOfferStatus.PENDING,
+          },
+          data: {
+            status: DriverOfferStatus.REJECTED,
+            rejectedAt: acceptedAt,
+          },
+        });
+
+        const updatedRequest = await tx.transportRequest.update({
+          where: { id: request.id },
+          data: {
+            status: TransportRequestStatus.DRIVER_GOING_TO_PICKUP,
+            assignedDriverId: offer.driverId,
+            acceptedOfferId: offer.id,
+            acceptedAt,
+          },
+          select: {
+            id: true,
+            status: true,
+            assignedDriverId: true,
+            acceptedOfferId: true,
+            acceptedAt: true,
+          },
+        });
+
+        return {
+          acceptedOffer,
+          payment: this.toPaymentSummaryResponse(request.paymentHold),
+          updatedRequest,
+          rejectedOffersCount: rejectedOffers.count,
+          rejectedOffers: rejectedPendingOffers,
+        };
+      });
+    } catch (error) {
+      try {
+        const request = await this.prisma.transportRequest.findUnique({
+          where: { id: input.requestId },
+          select: {
+            customerId: true,
+            assignedDriverId: true,
+            acceptedOfferId: true,
+            paymentHold: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+          },
+        });
+
+        if (
+          request &&
+          request.customerId === input.customerId &&
+          !request.assignedDriverId &&
+          !request.acceptedOfferId &&
+          request.paymentHold &&
+          ACTIVE_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)
+        ) {
+          await this.paymentsService.cancelRequestPayment({
+            customerId: input.customerId,
+            requestId: input.requestId,
+          });
+        }
+      } catch (cleanupError) {
+        this.logger.error(
+          `Failed to rollback payment hold for request ${input.requestId} after finalize error.`,
+          cleanupError instanceof Error ? cleanupError.stack : undefined,
+        );
+      }
+
+      throw error;
+    }
 
     if (
       !result.updatedRequest.assignedDriverId ||
       !result.updatedRequest.acceptedOfferId ||
       !result.updatedRequest.acceptedAt
     ) {
-      throw new BadRequestException(
-        'Request assignment failed after accepting offer.',
-      );
+      throw new BadRequestException('Request assignment failed after payment authorization.');
     }
 
     const acceptedRequest = await this.prisma.transportRequest.findUnique({
@@ -2311,45 +2599,51 @@ export class CustomerRequestsService {
       nextStep: 'TRACK_REQUEST' as const,
     };
 
-    this.tripsGateway.emitOfferAccepted(
-      {
-        tripId: result.updatedRequest.id,
-        acceptedOfferId: result.updatedRequest.acceptedOfferId,
-        driverId: result.updatedRequest.assignedDriverId,
-        customerId: input.customerId,
-        agreedPrice: Number(result.acceptedOffer.price),
-        currency: result.acceptedOffer.currency,
-        pickupLocation: {
-          latitude: acceptedRequest?.pickupLatitude ?? 0,
-          longitude: acceptedRequest?.pickupLongitude ?? 0,
-          address: acceptedRequest?.pickupAddress ?? null,
+    try {
+      this.tripsGateway.emitOfferAccepted(
+        {
+          tripId: result.updatedRequest.id,
+          acceptedOfferId: result.updatedRequest.acceptedOfferId,
+          driverId: result.updatedRequest.assignedDriverId,
+          customerId: input.customerId,
+          agreedPrice: Number(result.acceptedOffer.price),
+          currency: result.acceptedOffer.currency,
+          pickupLocation: {
+            latitude: acceptedRequest?.pickupLatitude ?? 0,
+            longitude: acceptedRequest?.pickupLongitude ?? 0,
+            address: acceptedRequest?.pickupAddress ?? null,
+          },
+          dropoffLocation: {
+            latitude: acceptedRequest?.dropoffLatitude ?? 0,
+            longitude: acceptedRequest?.dropoffLongitude ?? 0,
+            address: acceptedRequest?.dropoffAddress ?? null,
+          },
+          status: result.updatedRequest.status,
         },
-        dropoffLocation: {
-          latitude: acceptedRequest?.dropoffLatitude ?? 0,
-          longitude: acceptedRequest?.dropoffLongitude ?? 0,
-          address: acceptedRequest?.dropoffAddress ?? null,
+        {
+          tripId: result.updatedRequest.id,
+          status: result.updatedRequest.status,
+          updatedAt: result.updatedRequest.acceptedAt.toISOString(),
         },
-        status: result.updatedRequest.status,
-      },
-      {
-        tripId: result.updatedRequest.id,
-        status: result.updatedRequest.status,
-        updatedAt: result.updatedRequest.acceptedAt.toISOString(),
-      },
-    );
+      );
 
-    for (const rejectedOffer of result.rejectedOffers) {
-      this.tripsGateway.emitOfferRejected({
-        requestId: result.updatedRequest.id,
-        offerId: rejectedOffer.id,
-        driverId: rejectedOffer.driverId,
-        status: DriverOfferStatus.REJECTED,
-        rejectedAt: result.updatedRequest.acceptedAt.toISOString(),
-      });
+      for (const rejectedOffer of result.rejectedOffers) {
+        this.tripsGateway.emitOfferRejected({
+          requestId: result.updatedRequest.id,
+          offerId: rejectedOffer.id,
+          driverId: rejectedOffer.driverId,
+          status: DriverOfferStatus.REJECTED,
+          rejectedAt: result.updatedRequest.acceptedAt.toISOString(),
+        });
+      }
+
+      this.tripsGateway.emitRequestDriverSelected(input.customerId, response);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit finalized payment events for request ${result.updatedRequest.id}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
     }
-
-    this.tripsGateway.emitRequestDriverSelected(input.customerId, response);
-    this.tripsGateway.emitPaymentHeld(input.customerId, result.payment);
 
     return response;
   }
@@ -2504,6 +2798,58 @@ export class CustomerRequestsService {
     return requests.map((request) =>
       this.toCustomerHomeRequestSummary(request, true),
     );
+  }
+
+  async deleteCustomerRequest(input: DeleteCustomerRequestInput): Promise<void> {
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: input.requestId },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+        paymentHold: {
+          select: { id: true },
+        },
+        driverAlerts: {
+          select: {
+            driverId: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    if (request.customerId !== input.customerId) {
+      throw new ForbiddenException('You are not allowed to delete this request.');
+    }
+
+    if (!DELETABLE_REQUEST_STATUSES.includes(request.status)) {
+      throw new ConflictException('Only unassigned requests can be deleted.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (request.paymentHold?.id) {
+        if (!HOLD_DELETABLE_REQUEST_STATUSES.includes(request.status)) {
+          throw new ConflictException('Requests with active payment holds cannot be deleted.');
+        }
+
+        await this.paymentsService.cancelRequestPaymentTx(tx, request.id);
+      }
+
+      await tx.transportRequest.delete({
+        where: { id: request.id },
+      });
+    });
+
+    const uniqueDriverIds = [...new Set(request.driverAlerts.map((alert) => alert.driverId))];
+    for (const driverId of uniqueDriverIds) {
+      this.tripsGateway.emitRequestDeleted(driverId, {
+        requestId: request.id,
+      });
+    }
   }
 
   private async cleanupFiles(files: MulterFile[]): Promise<void> {
@@ -2838,6 +3184,47 @@ export class CustomerRequestsService {
       status: offer.status,
       acceptedAt: offer.acceptedAt ? offer.acceptedAt.toISOString() : null,
       createdAt: offer.createdAt.toISOString(),
+    };
+  }
+
+  private toPaymentSummaryResponse(hold: {
+    id: string;
+    requestId: string;
+    acceptedOfferId: string;
+    customerId: string;
+    driverId: string;
+    amount: Prisma.Decimal;
+    currency: string;
+    paymentMethod: PaymentMethod;
+    provider: Prisma.JsonValue | string;
+    status: PaymentStatus;
+    stripePaymentIntentId: string | null;
+    stripeClientSecret: string | null;
+    stripeChargeId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): PaymentSummaryDto {
+    return {
+      id: hold.id,
+      requestId: hold.requestId,
+      acceptedOfferId: hold.acceptedOfferId,
+      customerId: hold.customerId,
+      driverId: hold.driverId,
+      amount: Number(hold.amount),
+      heldAmount: ACTIVE_PAYMENT_HOLD_STATUSES.has(hold.status)
+        ? Number(hold.amount)
+        : 0,
+      capturedAmount:
+        hold.status === PaymentStatus.PAYMENT_CAPTURED ? Number(hold.amount) : 0,
+      currency: hold.currency,
+      paymentMethod: hold.paymentMethod,
+      provider: hold.provider as PaymentSummaryDto['provider'],
+      status: hold.status,
+      stripePaymentIntentId: hold.stripePaymentIntentId,
+      stripeClientSecret: hold.stripeClientSecret,
+      stripeChargeId: hold.stripeChargeId,
+      createdAt: hold.createdAt.toISOString(),
+      updatedAt: hold.updatedAt.toISOString(),
     };
   }
 

@@ -9,7 +9,7 @@ import { CustomerRequestsController } from './customer-requests.controller';
 import { CustomerRequestsService } from './customer-requests.service';
 
 @Module({
-  imports: [AuthModule, PaymentsModule, forwardRef(() => TripsModule)],
+  imports: [AuthModule, forwardRef(() => PaymentsModule), forwardRef(() => TripsModule)],
   controllers: [CustomerHomeController, CustomerRequestsController],
   providers: [CustomerRequestsService, PrismaService],
   exports: [CustomerRequestsService],

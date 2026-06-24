@@ -229,6 +229,18 @@ export class CustomerRequestsController {
     });
   }
 
+  @Delete(':requestId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ): Promise<void> {
+    await this.customerRequestsService.deleteCustomerRequest({
+      customerId: request.user.id,
+      requestId,
+    });
+  }
+
   @Patch(':requestId/pickup-location')
   async updatePickupLocation(
     @Req() request: AuthenticatedRequest,
@@ -403,6 +415,17 @@ export class CustomerRequestsController {
       confirm: dto.confirm ?? true,
       paymentMethod: dto.paymentMethod,
       stripePaymentMethodId: dto.stripePaymentMethodId,
+    });
+  }
+
+  @Post(':requestId/payment/finalize')
+  async finalizeAcceptedOfferPayment(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ): Promise<CustomerAcceptOfferResponseDto> {
+    return this.customerRequestsService.finalizeAcceptedOfferPayment({
+      customerId: request.user.id,
+      requestId,
     });
   }
 }

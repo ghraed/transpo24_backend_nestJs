@@ -20,12 +20,12 @@ export interface CustomerAcceptOfferResponseDto {
   request: {
     id: string;
     status: TransportRequestStatus;
-    assignedDriverId: string;
-    acceptedOfferId: string;
-    acceptedAt: string;
+    assignedDriverId: string | null;
+    acceptedOfferId: string | null;
+    acceptedAt: string | null;
   };
   acceptedOffer: AcceptedOfferResponseDto;
   payment: PaymentSummaryDto;
   rejectedOffersCount: number;
-  nextStep: 'TRACK_REQUEST';
+  nextStep: 'CONFIRM_PAYMENT' | 'TRACK_REQUEST';
 }

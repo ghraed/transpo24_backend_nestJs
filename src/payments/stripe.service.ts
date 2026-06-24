@@ -26,8 +26,14 @@ export class StripeService {
     }
 
     const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
-    if (!secretKey) {
-      throw new BadRequestException('Stripe is not configured.');
+    if (
+      !secretKey ||
+      secretKey.startsWith('replace_') ||
+      (!secretKey.startsWith('sk_test_') && !secretKey.startsWith('sk_live_'))
+    ) {
+      throw new BadRequestException(
+        'Stripe is not configured. Set STRIPE_SECRET_KEY to a real sk_test_ or sk_live_ key.',
+      );
     }
 
     this.stripeClient = new Stripe(secretKey);
@@ -61,6 +67,7 @@ export class StripeService {
         currency: input.currency,
         customer: input.customerId,
         payment_method: input.stripePaymentMethodId.trim(),
+        payment_method_types: ['card'],
         confirm: true,
         capture_method: 'manual',
         confirmation_method: 'automatic',
@@ -75,6 +82,7 @@ export class StripeService {
       capture_method: 'manual',
       automatic_payment_methods: {
         enabled: true,
+        allow_redirects: 'never',
       },
       metadata: input.metadata,
     });
@@ -84,6 +92,12 @@ export class StripeService {
     paymentIntentId: string,
   ) {
     return this.getClient().paymentIntents.capture(paymentIntentId);
+  }
+
+  async retrievePaymentIntent(
+    paymentIntentId: string,
+  ) {
+    return this.getClient().paymentIntents.retrieve(paymentIntentId);
   }
 
   async cancelPaymentIntent(

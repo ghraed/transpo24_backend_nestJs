@@ -53,6 +53,22 @@ const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async resetUsersForTesting(): Promise<{ deletedUsers: number; keptEmail: string }> {
+    const keptEmail = 'driver@test.com';
+    const deleted = await this.prisma.user.deleteMany({
+      where: {
+        email: {
+          not: keptEmail,
+        },
+      },
+    });
+
+    return {
+      deletedUsers: deleted.count,
+      keptEmail,
+    };
+  }
+
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
     const normalizedEmail = dto.email.trim().toLowerCase();
 
