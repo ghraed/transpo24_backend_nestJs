@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 type RegisterPushTokenInput = {
   userId: string;
   role: UserRole;
+  hasDriverProfile: boolean;
   token: string;
   app: PushApp;
   platform: PushPlatform;
@@ -25,7 +26,7 @@ export class PushTokensService {
   async registerToken(
     input: RegisterPushTokenInput,
   ): Promise<{ success: true }> {
-    this.assertRoleMatchesApp(input.role, input.app);
+    this.assertRoleMatchesApp(input.role, input.app, input.hasDriverProfile);
 
     await this.prisma.pushToken.upsert({
       where: { token: input.token.trim() },
@@ -53,10 +54,14 @@ export class PushTokensService {
     return { success: true };
   }
 
-  private assertRoleMatchesApp(role: UserRole, app: PushApp): void {
+  private assertRoleMatchesApp(
+    role: UserRole,
+    app: PushApp,
+    hasDriverProfile: boolean,
+  ): void {
     if (
       (role === UserRole.CUSTOMER && app === PushApp.CUSTOMER) ||
-      (role === UserRole.DRIVER && app === PushApp.DRIVER)
+      ((role === UserRole.DRIVER || hasDriverProfile) && app === PushApp.DRIVER)
     ) {
       return;
     }

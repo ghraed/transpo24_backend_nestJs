@@ -41,6 +41,7 @@ type SocketUser = {
   email: string;
   name: string;
   role: UserRole;
+  hasDriverProfile: boolean;
 };
 
 type SocketDebugPingPayload = {
@@ -144,7 +145,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ): Promise<void> {
     try {
       const user = this.getAuthenticatedSocketUser(client);
-      if (user.role !== UserRole.DRIVER) {
+      if (user.role !== UserRole.DRIVER && !user.hasDriverProfile) {
         throw new WsException('Driver access is required.');
       }
 
@@ -178,7 +179,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ): Promise<void> {
     try {
       const user = this.getAuthenticatedSocketUser(client);
-      if (user.role !== UserRole.DRIVER) {
+      if (user.role !== UserRole.DRIVER && !user.hasDriverProfile) {
         throw new WsException('Driver access is required.');
       }
 

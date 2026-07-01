@@ -38,7 +38,7 @@ export interface DriverMeResponseDto {
   user: {
     id: string;
     email: string;
-    role: 'DRIVER';
+    role: 'CUSTOMER' | 'DRIVER';
   };
   driver: DriverProfileResponseDto;
   nextStep: DriverNextStep;

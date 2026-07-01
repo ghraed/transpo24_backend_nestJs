@@ -85,20 +85,20 @@ export class TripsService {
       throw new NotFoundException('Trip not found.');
     }
 
-    if (input.role === UserRole.CUSTOMER && trip.customerId !== input.userId) {
-      throw new ForbiddenException(
-        'You are not allowed to join this trip room.',
-      );
+    if (trip.customerId === input.userId) {
+      return;
     }
 
-    if (input.role === UserRole.DRIVER) {
-      const profile = await this.ensureDriverProfile(input.userId);
-      if (trip.assignedDriverId !== profile.id) {
-        throw new ForbiddenException(
-          'You are not allowed to join this trip room.',
-        );
-      }
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { userId: input.userId },
+      select: { id: true },
+    });
+
+    if (profile && trip.assignedDriverId === profile.id) {
+      return;
     }
+
+    throw new ForbiddenException('You are not allowed to join this trip room.');
   }
 
   async mapOfferAcceptedPayload(tripId: string): Promise<OfferAcceptedPayload> {

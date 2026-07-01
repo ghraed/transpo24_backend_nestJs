@@ -24,6 +24,7 @@ type AccessTokenPayload = {
   name: string;
   email: string;
   role: UserRole;
+  hasDriverProfile: boolean;
   exp: number;
 };
 
@@ -123,62 +124,142 @@ export class AuthService {
     const [existingUser, existingDriverPhone] = await this.prisma.$transaction([
       this.prisma.user.findUnique({
         where: { email: input.email },
-        select: { id: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          passwordHash: true,
+          driverProfile: {
+            select: {
+              id: true,
+            },
+          },
+        },
       }),
       this.prisma.driverProfile.findUnique({
         where: { phone: input.phone },
-        select: { id: true },
+        select: { id: true, userId: true },
       }),
     ]);
 
-    if (existingUser) {
-      throw new ConflictException('Email is already in use.');
-    }
-
-    if (existingDriverPhone) {
+    if (existingDriverPhone && existingDriverPhone.userId !== existingUser?.id) {
       throw new ConflictException('Phone is already in use.');
     }
 
-    const created = await this.prisma.user.create({
-      data: {
-        name: `${input.firstName} ${input.lastName}`.trim(),
-        email: input.email,
-        passwordHash: hashPassword(input.password),
-        role: UserRole.DRIVER,
-        driverProfile: {
-          create: {
-            firstName: input.firstName,
-            lastName: input.lastName,
-            phone: input.phone,
-            countryCode: input.countryCode || null,
-            countryCodes: input.countryCodes ?? [],
-            city: input.city || null,
-            cities: input.cities ?? [],
-            status: DriverStatus.PENDING_PROFILE,
-            isProfileCompleted: false,
+    let created:
+      | {
+          id: string;
+          email: string;
+          role: UserRole;
+          driverProfile: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            countryCode: string | null;
+            countryCodes: string[];
+            city: string | null;
+            cities: string[];
+            status: DriverStatus;
+            isProfileCompleted: boolean;
+          } | null;
+        }
+      | null = null;
+
+    if (existingUser) {
+      if (existingUser.driverProfile) {
+        throw new ConflictException(
+          'Driver profile already exists for this account. Log in instead.',
+        );
+      }
+
+      if (!verifyPassword(input.password, existingUser.passwordHash)) {
+        throw new ConflictException(
+          'Email is already in use. Use the existing account password to continue driver setup.',
+        );
+      }
+
+      created = await this.prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          name: `${input.firstName} ${input.lastName}`.trim() || existingUser.name,
+          driverProfile: {
+            create: {
+              firstName: input.firstName,
+              lastName: input.lastName,
+              phone: input.phone,
+              countryCode: input.countryCode || null,
+              countryCodes: input.countryCodes ?? [],
+              city: input.city || null,
+              cities: input.cities ?? [],
+              status: DriverStatus.PENDING_PROFILE,
+              isProfileCompleted: false,
+            },
           },
         },
-      },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        driverProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            countryCode: true,
-            countryCodes: true,
-            city: true,
-            cities: true,
-            status: true,
-            isProfileCompleted: true,
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          driverProfile: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              countryCode: true,
+              countryCodes: true,
+              city: true,
+              cities: true,
+              status: true,
+              isProfileCompleted: true,
+            },
           },
         },
-      },
-    });
+      });
+    } else {
+      created = await this.prisma.user.create({
+        data: {
+          name: `${input.firstName} ${input.lastName}`.trim(),
+          email: input.email,
+          passwordHash: hashPassword(input.password),
+          role: UserRole.DRIVER,
+          driverProfile: {
+            create: {
+              firstName: input.firstName,
+              lastName: input.lastName,
+              phone: input.phone,
+              countryCode: input.countryCode || null,
+              countryCodes: input.countryCodes ?? [],
+              city: input.city || null,
+              cities: input.cities ?? [],
+              status: DriverStatus.PENDING_PROFILE,
+              isProfileCompleted: false,
+            },
+          },
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          driverProfile: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              countryCode: true,
+              countryCodes: true,
+              city: true,
+              cities: true,
+              status: true,
+              isProfileCompleted: true,
+            },
+          },
+        },
+      });
+    }
 
     if (!created.driverProfile) {
       throw new BadRequestException('Unable to create driver profile.');
@@ -189,6 +270,7 @@ export class AuthService {
       name: `${created.driverProfile.firstName} ${created.driverProfile.lastName}`.trim(),
       email: created.email,
       role: created.role,
+      hasDriverProfile: true,
     });
 
     return {
@@ -196,7 +278,7 @@ export class AuthService {
       user: {
         id: created.id,
         email: created.email,
-        role: 'DRIVER',
+        role: created.role,
       },
       driver: {
         id: created.driverProfile.id,
@@ -257,10 +339,10 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role,
+      hasDriverProfile: Boolean(user.driverProfile),
     });
 
-    const driverProfile =
-      user.role === UserRole.DRIVER ? user.driverProfile : null;
+    const driverProfile = user.driverProfile;
     const nextStep = driverProfile
       ? driverProfile.isProfileCompleted
         ? 'ADD_VEHICLE_DOCUMENTS'
@@ -296,7 +378,7 @@ export class AuthService {
   async loginDriver(dto: LoginDto): Promise<LoginResponseDto> {
     const response = await this.login(dto);
 
-    if (response.user.role !== UserRole.DRIVER || !response.driver) {
+    if (!response.driver) {
       throw new ForbiddenException('Driver access is required.');
     }
 
@@ -374,6 +456,10 @@ export class AuthService {
         name: payload.name,
         email: payload.email,
         role: payload.role,
+        hasDriverProfile:
+          typeof payload.hasDriverProfile === 'boolean'
+            ? payload.hasDriverProfile
+            : false,
       };
     } catch {
       return null;
@@ -386,6 +472,7 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role,
+      hasDriverProfile: user.hasDriverProfile,
       exp: Math.floor(Date.now() / 1000) + ACCESS_TOKEN_TTL_SECONDS,
     };
 

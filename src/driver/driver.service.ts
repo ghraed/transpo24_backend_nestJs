@@ -867,7 +867,7 @@ export class DriverService {
       select: DRIVER_ME_SELECT,
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 
@@ -891,7 +891,7 @@ export class DriverService {
       select: DRIVER_ME_SELECT,
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 
@@ -910,7 +910,7 @@ export class DriverService {
       select: DRIVER_ME_SELECT,
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 
@@ -1170,7 +1170,7 @@ export class DriverService {
       select: DRIVER_ME_SELECT,
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 
@@ -1213,7 +1213,7 @@ export class DriverService {
       select: DRIVER_ME_SELECT,
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 
@@ -1429,7 +1429,7 @@ export class DriverService {
       select: DRIVER_ME_SELECT,
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 
@@ -3243,7 +3243,7 @@ export class DriverService {
       select: DRIVER_ME_SELECT,
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 
@@ -5131,7 +5131,6 @@ export class DriverService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
-        role: true,
         driverProfile: {
           select: {
             id: true,
@@ -5142,7 +5141,7 @@ export class DriverService {
       },
     });
 
-    if (!user || user.role !== UserRole.DRIVER) {
+    if (!user) {
       throw new NotFoundException('Driver account not found.');
     }
 

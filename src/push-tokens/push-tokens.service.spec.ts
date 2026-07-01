@@ -17,6 +17,7 @@ describe('PushTokensService', () => {
       service.registerToken({
         userId: 'customer-1',
         role: UserRole.CUSTOMER,
+        hasDriverProfile: false,
         token: 'ExponentPushToken[abc123]',
         app: PushApp.CUSTOMER,
         platform: PushPlatform.android,
@@ -57,10 +58,32 @@ describe('PushTokensService', () => {
       service.registerToken({
         userId: 'customer-1',
         role: UserRole.CUSTOMER,
+        hasDriverProfile: false,
         token: 'ExponentPushToken[abc123]',
         app: PushApp.DRIVER,
         platform: PushPlatform.ios,
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('allows driver app tokens for shared customer accounts with a driver profile', async () => {
+    const prisma = {
+      pushToken: {
+        upsert: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    const service = new PushTokensService(prisma as never);
+
+    await expect(
+      service.registerToken({
+        userId: 'customer-driver-1',
+        role: UserRole.CUSTOMER,
+        hasDriverProfile: true,
+        token: 'ExponentPushToken[driver123]',
+        app: PushApp.DRIVER,
+        platform: PushPlatform.ios,
+      }),
+    ).resolves.toEqual({ success: true });
   });
 });

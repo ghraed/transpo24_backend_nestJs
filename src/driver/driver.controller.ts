@@ -154,6 +154,7 @@ export class DriverController {
   }
 
   @Get('profile/onboarding')
+  @Get('me/onboarding')
   async getOnboardingStatus(
     @Req() request: AuthenticatedRequest,
   ): Promise<DriverOnboardingResponseDto> {
@@ -163,6 +164,7 @@ export class DriverController {
   }
 
   @Post('profile/onboarding/personal-info')
+  @Patch('me/onboarding/profile')
   async upsertPersonalInfo(
     @Req() request: AuthenticatedRequest,
     @Body() dto: UpsertDriverPersonalInfoDto,
@@ -232,7 +234,6 @@ export class DriverController {
         }),
         fileFilter: (_req, file, callback) => {
           const isImage = IMAGE_MIME_TYPES.has(file.mimetype);
-          const isDocument = DOCUMENT_MIME_TYPES.has(file.mimetype);
           const field = file.fieldname;
 
           if (
@@ -248,10 +249,10 @@ export class DriverController {
               );
               return;
             }
-          } else if (!isDocument) {
+          } else if (!isImage) {
             callback(
               new BadRequestException(
-                'Onboarding documents must be JPEG, PNG, WEBP, or PDF.',
+                'Onboarding documents must be JPEG, PNG, or WEBP.',
               ),
               false,
             );
@@ -269,19 +270,10 @@ export class DriverController {
     @UploadedFiles() files: DriverOnboardingDocumentUploadFields,
   ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
     const allFiles = Object.values(files ?? {}).flatMap((group) => group ?? []);
-    const oversizedFile = allFiles.find((file) => {
-      if (file.mimetype === 'application/pdf') {
-        return file.size > MAX_PDF_BYTES;
-      }
-      return file.size > MAX_IMAGE_BYTES;
-    });
+    const oversizedFile = allFiles.find((file) => file.size > MAX_IMAGE_BYTES);
 
     if (oversizedFile) {
-      throw new BadRequestException(
-        oversizedFile.mimetype === 'application/pdf'
-          ? 'PDF documents must be 10 MB or smaller.'
-          : 'Image files must be 5 MB or smaller.',
-      );
+      throw new BadRequestException('Image files must be 5 MB or smaller.');
     }
 
     return this.driverService.uploadOnboardingDocuments({
@@ -952,7 +944,6 @@ export class DriverController {
         }),
         fileFilter: (_req, file, callback) => {
           const isImage = IMAGE_MIME_TYPES.has(file.mimetype);
-          const isDocument = DOCUMENT_MIME_TYPES.has(file.mimetype);
           const field = file.fieldname;
 
           if (field === 'vehiclePhotos') {
@@ -965,10 +956,10 @@ export class DriverController {
               );
               return;
             }
-          } else if (!isDocument) {
+          } else if (!isImage) {
             callback(
               new BadRequestException(
-                'Documents must be JPEG, PNG, WEBP, or PDF.',
+                'Documents must be JPEG, PNG, or WEBP.',
               ),
               false,
             );
@@ -987,19 +978,10 @@ export class DriverController {
     @UploadedFiles() files: DriverDocumentUploadFields,
   ): Promise<DriverVehicleDocumentsResponseDto> {
     const allFiles = Object.values(files ?? {}).flatMap((group) => group ?? []);
-    const oversizedFile = allFiles.find((file) => {
-      if (file.mimetype === 'application/pdf') {
-        return file.size > MAX_PDF_BYTES;
-      }
-      return file.size > MAX_IMAGE_BYTES;
-    });
+    const oversizedFile = allFiles.find((file) => file.size > MAX_IMAGE_BYTES);
 
     if (oversizedFile) {
-      throw new BadRequestException(
-        oversizedFile.mimetype === 'application/pdf'
-          ? 'PDF documents must be 10 MB or smaller.'
-          : 'Image files must be 5 MB or smaller.',
-      );
+      throw new BadRequestException('Image files must be 5 MB or smaller.');
     }
 
     return this.driverService.uploadVehicleDocuments({

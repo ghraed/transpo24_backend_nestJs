@@ -6,6 +6,7 @@ export type AuthenticatedUser = {
   name: string;
   email: string;
   role: UserRole;
+  hasDriverProfile: boolean;
 };
 
 export type AuthenticatedRequest = Request & {

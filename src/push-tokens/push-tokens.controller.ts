@@ -18,6 +18,7 @@ export class PushTokensController {
     return this.pushTokensService.registerToken({
       userId: request.user.id,
       role: request.user.role,
+      hasDriverProfile: request.user.hasDriverProfile,
       token: dto.token,
       app: dto.app,
       platform: dto.platform,
