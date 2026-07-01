@@ -1,8 +1,4 @@
-import {
-  PaymentMethod,
-  PaymentProvider,
-  PaymentStatus,
-} from '@prisma/client';
+import { PaymentMethod, PaymentProvider, PaymentStatus } from '@prisma/client';
 
 export interface PaymentSummaryDto {
   id: string;

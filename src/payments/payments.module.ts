@@ -9,7 +9,11 @@ import { PaymentsService } from './payments.service';
 import { StripeService } from './stripe.service';
 
 @Module({
-  imports: [AuthModule, forwardRef(() => TripsModule), forwardRef(() => CustomerRequestsModule)],
+  imports: [
+    AuthModule,
+    forwardRef(() => TripsModule),
+    forwardRef(() => CustomerRequestsModule),
+  ],
   controllers: [PaymentsController],
   providers: [PaymentsService, StripeService, PrismaService],
   exports: [PaymentsService, StripeService],

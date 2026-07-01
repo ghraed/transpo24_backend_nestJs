@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -12,6 +13,7 @@ import {
   DriverOfferStatus,
   DriverRequestAlertStatus,
   DriverDocumentType,
+  PushApp,
   DriverStatus,
   DriverVehicleCondition,
   DriverVehicleReviewStatus,
@@ -30,6 +32,7 @@ import { unlink } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TripsGateway } from '../trips/trips.gateway';
 import { DriverAvailabilityDayDto } from './dto/update-driver-availability.dto';
@@ -229,6 +232,11 @@ interface UpdateDriverOnlineStatusInput {
 
 interface ApproveDriverForTestingInput {
   userId: string;
+}
+
+interface SendCustomerTestNotificationInput {
+  userId: string;
+  email: string;
 }
 
 interface GetDriverRequestAlertsInput {
@@ -845,9 +853,12 @@ const LEGACY_COMPATIBLE_VEHICLE_DOCUMENT_TYPES = {
 
 @Injectable()
 export class DriverService {
+  private readonly logger = new Logger(DriverService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tripsGateway: TripsGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getMe(input: GetDriverMeInput): Promise<DriverMeResponseDto> {
@@ -917,18 +928,25 @@ export class DriverService {
       select: DRIVER_DOCUMENT_SELECT,
     });
 
-    return this.toOnboardingDocumentsStatusResponse(user.driverProfile, documents);
+    return this.toOnboardingDocumentsStatusResponse(
+      user.driverProfile,
+      documents,
+    );
   }
 
   async uploadOnboardingDocuments(
     input: UploadDriverOnboardingDocumentsInput,
   ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
-    const profile = await this.getDriverProfileForOnboardingDocuments(input.userId);
+    const profile = await this.getDriverProfileForOnboardingDocuments(
+      input.userId,
+    );
     const files = input.files;
     const uploadedFiles = this.flattenAnyUploadFiles(files);
 
     if (uploadedFiles.length === 0) {
-      throw new BadRequestException('At least one onboarding document is required.');
+      throw new BadRequestException(
+        'At least one onboarding document is required.',
+      );
     }
 
     if (!profile.isProfileCompleted) {
@@ -954,7 +972,9 @@ export class DriverService {
 
     if (isUploadingIdentityDocument && !input.idDocumentKind) {
       await this.cleanupFiles(uploadedFiles);
-      throw new BadRequestException('Choose whether you are uploading an ID or residency card.');
+      throw new BadRequestException(
+        'Choose whether you are uploading an ID or residency card.',
+      );
     }
 
     if (
@@ -1048,7 +1068,9 @@ export class DriverService {
   async submitOnboardingDocumentsForReview(
     input: SubmitDriverOnboardingDocumentsReviewInput,
   ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
-    const profile = await this.getDriverProfileForOnboardingDocuments(input.userId);
+    const profile = await this.getDriverProfileForOnboardingDocuments(
+      input.userId,
+    );
 
     if (!profile.isProfileCompleted) {
       throw new BadRequestException(
@@ -1057,7 +1079,9 @@ export class DriverService {
     }
 
     if (profile.status === DriverStatus.SUSPENDED) {
-      throw new ForbiddenException('Suspended drivers cannot submit documents for review.');
+      throw new ForbiddenException(
+        'Suspended drivers cannot submit documents for review.',
+      );
     }
 
     const documents = await this.prisma.driverDocument.findMany({
@@ -1071,7 +1095,8 @@ export class DriverService {
     });
 
     const latestDocuments = this.uniqueLatestDocumentsByType(documents);
-    const missingDocuments = this.getMissingOnboardingDocuments(latestDocuments);
+    const missingDocuments =
+      this.getMissingOnboardingDocuments(latestDocuments);
     if (missingDocuments.length > 0) {
       throw new BadRequestException(
         `Missing required documents: ${missingDocuments.join(', ')}.`,
@@ -1397,12 +1422,7 @@ export class DriverService {
   async approveForTesting(
     input: ApproveDriverForTestingInput,
   ): Promise<DriverMeResponseDto> {
-    const allowInProduction = process.env.ALLOW_TESTING_APPROVAL === 'true';
-    if (process.env.NODE_ENV === 'production' && !allowInProduction) {
-      throw new BadRequestException(
-        'Testing approval is disabled in production.',
-      );
-    }
+    this.assertTestingModeEnabled();
 
     const user = await this.prisma.user.findUnique({
       where: { id: input.userId },
@@ -1470,6 +1490,60 @@ export class DriverService {
     });
 
     return this.getMe({ userId: input.userId });
+  }
+
+  async sendCustomerTestNotification(
+    input: SendCustomerTestNotificationInput,
+  ): Promise<{ success: true; email: string; customerId: string }> {
+    this.assertTestingModeEnabled();
+
+    await this.ensureDriverProfile(input.userId);
+
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const customer = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        role: true,
+        pushTokens: {
+          where: {
+            app: PushApp.CUSTOMER,
+            isActive: true,
+          },
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!customer || customer.role !== UserRole.CUSTOMER) {
+      throw new NotFoundException('Customer account not found.');
+    }
+
+    if (customer.pushTokens.length === 0) {
+      throw new BadRequestException(
+        'Customer has no active push token. Login on the customer app and register notifications first.',
+      );
+    }
+
+    await this.notificationsService.sendToUsers({
+      userIds: [customer.id],
+      app: PushApp.CUSTOMER,
+      title: 'Test notification',
+      body: 'Driver app test notification.',
+      type: 'TEST_NOTIFICATION',
+      data: {
+        email: normalizedEmail,
+        requestedByDriverId: input.userId,
+      },
+    });
+
+    return {
+      success: true,
+      email: normalizedEmail,
+      customerId: customer.id,
+    };
   }
 
   async getDriverRequestAlerts(
@@ -2012,7 +2086,8 @@ export class DriverService {
       const estimatedPickupAt = customerOffer.estimatedPickupAt
         ? customerOffer.estimatedPickupAt.toISOString()
         : null;
-      const driverName = `${customerOffer.driver.firstName} ${customerOffer.driver.lastName}`.trim();
+      const driverName =
+        `${customerOffer.driver.firstName} ${customerOffer.driver.lastName}`.trim();
       const payload: OfferNewPayload = {
         requestId: result.updatedRequest.id,
         requestStatus: result.updatedRequest.status,
@@ -2049,6 +2124,32 @@ export class DriverService {
         },
       };
       this.tripsGateway.emitOfferNew(result.customerId, payload);
+
+      void this.notificationsService
+        .notifyCustomerAboutDriverOffer({
+          customerId: result.customerId,
+          requestId: result.updatedRequest.id,
+          offerId: customerOffer.id,
+          driverName: driverName || undefined,
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Failed to notify customer about offer ${customerOffer.id}: ${error instanceof Error ? error.message : 'Unexpected error'}`,
+          );
+        });
+    }
+    if (!customerOffer) {
+      void this.notificationsService
+        .notifyCustomerAboutDriverOffer({
+          customerId: result.customerId,
+          requestId: result.updatedRequest.id,
+          offerId: result.createdOffer.id,
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Failed to notify customer about offer ${result.createdOffer.id}: ${error instanceof Error ? error.message : 'Unexpected error'}`,
+          );
+        });
     }
 
     return {
@@ -2094,11 +2195,16 @@ export class DriverService {
     input: GetDriverVehicleInput,
   ): Promise<DriverVehicleDocumentsResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
-    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    const vehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
 
     return {
       vehicle: this.toVehicleResponse(vehicle, vehicle.documents),
-      documents: vehicle.documents.map((document) => this.toDocumentResponse(document)),
+      documents: vehicle.documents.map((document) =>
+        this.toDocumentResponse(document),
+      ),
       nextStep: await this.getVehicleDocumentsNextStepForDriver(
         profile.id,
         profile.status,
@@ -2110,10 +2216,14 @@ export class DriverService {
     input: UpsertDriverVehicleLoadCapacityInput,
   ): Promise<DriverVehicleLoadCapacityResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
-    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    const vehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
 
-    const normalizedVehicleType =
-      normalizeDriverVehicleTypeInput(vehicle.vehicleType) as VehicleType;
+    const normalizedVehicleType = normalizeDriverVehicleTypeInput(
+      vehicle.vehicleType,
+    ) as VehicleType;
     const normalizedWorkingSchedule = this.validateLoadCapacitySchedule(
       input.workingSchedule,
     );
@@ -2171,7 +2281,10 @@ export class DriverService {
     input: GetDriverVehicleInput,
   ): Promise<DriverVehicleLoadCapacityResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
-    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    const vehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
     return this.toVehicleLoadCapacityResponse(vehicle);
   }
 
@@ -2198,7 +2311,10 @@ export class DriverService {
     input: GetDriverVehicleInput,
   ): Promise<DriverVehicleLoadCapacityResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
-    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    const vehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
 
     const updatedVehicle = await this.prisma.$transaction(async (tx) => {
       await tx.driverVehicle.updateMany({
@@ -2598,17 +2714,16 @@ export class DriverService {
       );
     }
 
-    return this.toAcceptedJobDetailsResponse(
-      request as AcceptedJobRequestSource,
-    );
+    return this.toAcceptedJobDetailsResponse(request);
   }
 
   async createVehicle(
     input: CreateDriverVehicleInput,
   ): Promise<DriverVehicleDocumentsResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
-    const normalizedVehicleType =
-      normalizeDriverVehicleTypeInput(input.vehicleType) as VehicleType;
+    const normalizedVehicleType = normalizeDriverVehicleTypeInput(
+      input.vehicleType,
+    ) as VehicleType;
 
     if (!profile.isProfileCompleted) {
       throw new BadRequestException(
@@ -2624,7 +2739,10 @@ export class DriverService {
     }
 
     if (input.insuranceExpiryDate) {
-      this.assertExpiryDateNotPast(input.insuranceExpiryDate, 'Insurance expiry date');
+      this.assertExpiryDateNotPast(
+        input.insuranceExpiryDate,
+        'Insurance expiry date',
+      );
     }
 
     if (input.registrationExpiryDate) {
@@ -2698,7 +2816,10 @@ export class DriverService {
     }
 
     if (input.insuranceExpiryDate) {
-      this.assertExpiryDateNotPast(input.insuranceExpiryDate, 'Insurance expiry date');
+      this.assertExpiryDateNotPast(
+        input.insuranceExpiryDate,
+        'Insurance expiry date',
+      );
     }
 
     if (input.registrationExpiryDate) {
@@ -2747,22 +2868,34 @@ export class DriverService {
         make:
           input.brand !== undefined ? input.brand.trim() : existingVehicle.make,
         model:
-          input.model !== undefined ? input.model.trim() : existingVehicle.model,
+          input.model !== undefined
+            ? input.model.trim()
+            : existingVehicle.model,
         year: input.year ?? existingVehicle.year,
         plateNumber: normalizedPlateNumber,
         condition: input.condition ?? existingVehicle.condition,
         color:
-          input.color !== undefined ? input.color?.trim() || null : existingVehicle.color,
+          input.color !== undefined
+            ? input.color?.trim() || null
+            : existingVehicle.color,
         capacityKg:
-          input.capacityKg !== undefined ? input.capacityKg : existingVehicle.capacityKg,
+          input.capacityKg !== undefined
+            ? input.capacityKg
+            : existingVehicle.capacityKg,
         lengthCm:
-          input.lengthCm !== undefined ? input.lengthCm : existingVehicle.lengthCm,
+          input.lengthCm !== undefined
+            ? input.lengthCm
+            : existingVehicle.lengthCm,
         widthCm:
           input.widthCm !== undefined ? input.widthCm : existingVehicle.widthCm,
         heightCm:
-          input.heightCm !== undefined ? input.heightCm : existingVehicle.heightCm,
+          input.heightCm !== undefined
+            ? input.heightCm
+            : existingVehicle.heightCm,
         hasTrailer:
-          input.hasTrailer !== undefined ? input.hasTrailer : existingVehicle.hasTrailer,
+          input.hasTrailer !== undefined
+            ? input.hasTrailer
+            : existingVehicle.hasTrailer,
         insuranceExpiryDate:
           input.insuranceExpiryDate !== undefined
             ? input.insuranceExpiryDate
@@ -2790,7 +2923,9 @@ export class DriverService {
 
     return {
       vehicle: this.toVehicleResponse(vehicle, vehicle.documents),
-      documents: vehicle.documents.map((document) => this.toDocumentResponse(document)),
+      documents: vehicle.documents.map((document) =>
+        this.toDocumentResponse(document),
+      ),
       nextStep: await this.getVehicleDocumentsNextStepForDriver(
         profile.id,
         profile.status,
@@ -2802,7 +2937,10 @@ export class DriverService {
     input: DeactivateDriverVehicleInput,
   ): Promise<VehicleResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
-    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    const vehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
 
     if (vehicle.status === DriverVehicleReviewStatus.PENDING_REVIEW) {
       await this.prisma.driverVehicle.delete({
@@ -2834,7 +2972,10 @@ export class DriverService {
     input: DeactivateDriverVehicleInput,
   ): Promise<VehicleResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
-    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    const vehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
 
     if (!this.hasRequiredVehicleDocuments(vehicle.documents)) {
       throw new BadRequestException(
@@ -2872,7 +3013,10 @@ export class DriverService {
     }
 
     const profile = await this.ensureDriverProfile(input.userId);
-    const vehicle = await this.getDriverVehicleWithDocuments(profile.id, input.vehicleId);
+    const vehicle = await this.getDriverVehicleWithDocuments(
+      profile.id,
+      input.vehicleId,
+    );
 
     const updatedVehicle = await this.prisma.driverVehicle.update({
       where: { id: vehicle.id },
@@ -2925,7 +3069,10 @@ export class DriverService {
     }
 
     if (input.insuranceExpiryDate) {
-      this.assertExpiryDateNotPast(input.insuranceExpiryDate, 'Insurance expiry date');
+      this.assertExpiryDateNotPast(
+        input.insuranceExpiryDate,
+        'Insurance expiry date',
+      );
     }
 
     if (input.registrationExpiryDate) {
@@ -2937,13 +3084,22 @@ export class DriverService {
 
     const driverFiles = input.files;
 
-    const documentRows = this.buildDocumentRows(profile.id, vehicle.id, driverFiles);
+    const documentRows = this.buildDocumentRows(
+      profile.id,
+      vehicle.id,
+      driverFiles,
+    );
     if (documentRows.length === 0) {
       await this.cleanupFiles(this.flattenUploadFiles(input.files));
-      throw new BadRequestException('At least one vehicle document or photo is required.');
+      throw new BadRequestException(
+        'At least one vehicle document or photo is required.',
+      );
     }
 
-    const requiredMissing = this.getMissingCanonicalVehicleUploads(driverFiles, vehicle);
+    const requiredMissing = this.getMissingCanonicalVehicleUploads(
+      driverFiles,
+      vehicle,
+    );
     if (requiredMissing.length > 0) {
       await this.cleanupFiles(this.flattenUploadFiles(input.files));
       throw new BadRequestException(
@@ -2984,7 +3140,8 @@ export class DriverService {
         await tx.driverVehicle.update({
           where: { id: vehicle.id },
           data: {
-            insuranceExpiryDate: input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
+            insuranceExpiryDate:
+              input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
             registrationExpiryDate:
               input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
             status: DriverVehicleReviewStatus.PENDING_REVIEW,
@@ -3031,7 +3188,8 @@ export class DriverService {
       vehicle: this.toVehicleResponse(
         {
           ...vehicle,
-          insuranceExpiryDate: input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
+          insuranceExpiryDate:
+            input.insuranceExpiryDate ?? vehicle.insuranceExpiryDate,
           registrationExpiryDate:
             input.registrationExpiryDate ?? vehicle.registrationExpiryDate,
           status: DriverVehicleReviewStatus.PENDING_REVIEW,
@@ -3168,8 +3326,16 @@ export class DriverService {
       input.idDocumentKind === IdentityDocumentKind.RESIDENCY_CARD
         ? input.idExpiryDate
         : undefined;
-    mapSingle(input.files.idFront, DriverDocumentType.ID_FRONT, identityExpiryDate);
-    mapSingle(input.files.idBack, DriverDocumentType.ID_BACK, identityExpiryDate);
+    mapSingle(
+      input.files.idFront,
+      DriverDocumentType.ID_FRONT,
+      identityExpiryDate,
+    );
+    mapSingle(
+      input.files.idBack,
+      DriverDocumentType.ID_BACK,
+      identityExpiryDate,
+    );
     mapSingle(
       input.files.drivingLicense,
       DriverDocumentType.DRIVING_LICENSE,
@@ -3246,7 +3412,7 @@ export class DriverService {
         : input.existingProfile.postalCode;
     const nextPreferredLanguage =
       input.changes.preferredLanguage !== undefined
-        ? input.changes.preferredLanguage ?? null
+        ? (input.changes.preferredLanguage ?? null)
         : input.existingProfile.preferredLanguage;
     const nextEmergencyContactName =
       input.changes.emergencyContactName !== undefined
@@ -3290,9 +3456,7 @@ export class DriverService {
       existingIdOrResidencyNumber &&
       existingIdOrResidencyNumber.userId !== input.userId
     ) {
-      throw new ConflictException(
-        'ID or residency number is already in use.',
-      );
+      throw new ConflictException('ID or residency number is already in use.');
     }
 
     const isProfileCompleted = this.isDriverPersonalInfoComplete({
@@ -3488,10 +3652,7 @@ export class DriverService {
       return 'WAITING_APPROVAL';
     }
 
-    if (
-      status === DriverStatus.SUSPENDED ||
-      status === DriverStatus.REJECTED
-    ) {
+    if (status === DriverStatus.SUSPENDED || status === DriverStatus.REJECTED) {
       return 'WAITING_APPROVAL';
     }
 
@@ -3565,9 +3726,15 @@ export class DriverService {
     );
 
     const hasCanonicalPhotoSet =
-      eligibleDocuments.some((doc) => doc.type === DriverDocumentType.VEHICLE_FRONT_PHOTO) &&
-      eligibleDocuments.some((doc) => doc.type === DriverDocumentType.VEHICLE_REAR_PHOTO) &&
-      eligibleDocuments.some((doc) => doc.type === DriverDocumentType.VEHICLE_SIDE_PHOTO) &&
+      eligibleDocuments.some(
+        (doc) => doc.type === DriverDocumentType.VEHICLE_FRONT_PHOTO,
+      ) &&
+      eligibleDocuments.some(
+        (doc) => doc.type === DriverDocumentType.VEHICLE_REAR_PHOTO,
+      ) &&
+      eligibleDocuments.some(
+        (doc) => doc.type === DriverDocumentType.VEHICLE_SIDE_PHOTO,
+      ) &&
       eligibleDocuments.some(
         (doc) => doc.type === DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
       );
@@ -3622,13 +3789,14 @@ export class DriverService {
     vehicle: VehicleSource,
   ): string[] {
     const latestExistingDocuments = new Set(
-      (vehicle as VehicleSource & { documents?: DocumentSource[] }).documents?.map(
-        (document) => document.type,
-      ) ?? [],
+      (
+        vehicle as VehicleSource & { documents?: DocumentSource[] }
+      ).documents?.map((document) => document.type) ?? [],
     );
 
-    const hasFieldFile = (field: keyof UploadDriverVehicleDocumentsInput['files']): boolean =>
-      Boolean(files[field]?.length);
+    const hasFieldFile = (
+      field: keyof UploadDriverVehicleDocumentsInput['files'],
+    ): boolean => Boolean(files[field]?.length);
 
     const missing: string[] = [];
     if (
@@ -3667,9 +3835,7 @@ export class DriverService {
     }
     if (
       !hasFieldFile('registrationBackDocument') &&
-      !latestExistingDocuments.has(
-        DriverDocumentType.VEHICLE_REGISTRATION_BACK,
-      )
+      !latestExistingDocuments.has(DriverDocumentType.VEHICLE_REGISTRATION_BACK)
     ) {
       missing.push('registrationBackDocument');
     }
@@ -3695,12 +3861,12 @@ export class DriverService {
     type: DriverDocumentType;
     url: string;
     storageKey: string;
-      originalName: string | null;
-      mimeType: string;
-      sizeBytes: number;
-      status: DocumentStatus;
-      expiresAt?: Date | null;
-    }> {
+    originalName: string | null;
+    mimeType: string;
+    sizeBytes: number;
+    status: DocumentStatus;
+    expiresAt?: Date | null;
+  }> {
     const rows: Array<{
       driverId: string;
       vehicleId: string;
@@ -3759,8 +3925,14 @@ export class DriverService {
       DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
     );
 
-    if (!files.registrationFrontDocument?.length && files.vehicleRegistration?.length) {
-      mapSingle(files.vehicleRegistration, DriverDocumentType.VEHICLE_REGISTRATION);
+    if (
+      !files.registrationFrontDocument?.length &&
+      files.vehicleRegistration?.length
+    ) {
+      mapSingle(
+        files.vehicleRegistration,
+        DriverDocumentType.VEHICLE_REGISTRATION,
+      );
     }
 
     if (!files.insuranceDocument?.length && files.vehicleInsurance?.length) {
@@ -3846,7 +4018,9 @@ export class DriverService {
     return vehicles;
   }
 
-  private async syncOpenRequestAlertsForDriver(driverId: string): Promise<void> {
+  private async syncOpenRequestAlertsForDriver(
+    driverId: string,
+  ): Promise<void> {
     const availability = await this.prisma.driverAvailability.findUnique({
       where: { driverId },
       select: {
@@ -3932,7 +4106,10 @@ export class DriverService {
           driverId,
         }));
 
-      if (!existingAlert && this.tripsGateway.getDriverConnectionCount(driverId) > 0) {
+      if (
+        !existingAlert &&
+        this.tripsGateway.getDriverConnectionCount(driverId) > 0
+      ) {
         this.tripsGateway.emitRequestNew(
           driverId,
           this.toRequestAlertSummary(request, alert, distanceKm),
@@ -4080,7 +4257,7 @@ export class DriverService {
 
     const requestDate = request.isImmediate
       ? new Date()
-      : request.scheduledPickupAt ?? new Date();
+      : (request.scheduledPickupAt ?? new Date());
 
     return vehicles.some((vehicle) => {
       if (
@@ -4092,7 +4269,9 @@ export class DriverService {
         return false;
       }
 
-      const workingSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+      const workingSchedule = this.parseVehicleWorkingSchedule(
+        vehicle.workingSchedule,
+      );
       if (!isWorkingScheduleAvailableForDate(workingSchedule, requestDate)) {
         return false;
       }
@@ -4540,12 +4719,13 @@ export class DriverService {
     isDefault: boolean;
   } {
     const isCarCarrier = isCarCarrierVehicleType(input.vehicleType);
-    const dimensionsAreStandard =
-      input.dimensionsAreStandard ?? isCarCarrier;
+    const dimensionsAreStandard = input.dimensionsAreStandard ?? isCarCarrier;
 
     if (
       !input.allowedCargoTypes.length ||
-      input.allowedCargoTypes.some((value) => !Object.values(VehicleCargoType).includes(value))
+      input.allowedCargoTypes.some(
+        (value) => !Object.values(VehicleCargoType).includes(value),
+      )
     ) {
       throw new BadRequestException(
         'allowedCargoTypes must contain at least one valid cargo type.',
@@ -4580,8 +4760,7 @@ export class DriverService {
       maxLoadKg: input.maxLoadKg ?? null,
       lengthCm:
         input.cargoLengthM !== undefined ? input.cargoLengthM * 100 : null,
-      widthCm:
-        input.cargoWidthM !== undefined ? input.cargoWidthM * 100 : null,
+      widthCm: input.cargoWidthM !== undefined ? input.cargoWidthM * 100 : null,
       heightCm:
         input.cargoHeightM !== undefined ? input.cargoHeightM * 100 : null,
       dimensionsAreStandard: isCarCarrier ? true : dimensionsAreStandard,
@@ -4601,57 +4780,66 @@ export class DriverService {
     const seenDays = new Set<DayOfWeek>();
     let hasAvailableDay = false;
 
-    return schedule.map((day) => {
-      if (seenDays.has(day.dayOfWeek)) {
-        throw new BadRequestException('workingSchedule days must be unique.');
-      }
-      seenDays.add(day.dayOfWeek);
-
-      const normalizedRanges = day.timeRanges.map((range) => {
-        if (range.startTime >= range.endTime) {
-          throw new BadRequestException(
-            `startTime must be before endTime for ${day.dayOfWeek}.`,
-          );
+    return schedule
+      .map((day) => {
+        if (seenDays.has(day.dayOfWeek)) {
+          throw new BadRequestException('workingSchedule days must be unique.');
         }
+        seenDays.add(day.dayOfWeek);
+
+        const normalizedRanges = day.timeRanges
+          .map((range) => {
+            if (range.startTime >= range.endTime) {
+              throw new BadRequestException(
+                `startTime must be before endTime for ${day.dayOfWeek}.`,
+              );
+            }
+            return {
+              startTime: range.startTime,
+              endTime: range.endTime,
+            };
+          })
+          .sort((left, right) => left.startTime.localeCompare(right.startTime));
+
+        for (let index = 1; index < normalizedRanges.length; index += 1) {
+          if (
+            normalizedRanges[index - 1].endTime >
+            normalizedRanges[index].startTime
+          ) {
+            throw new BadRequestException(
+              `workingSchedule time ranges must not overlap for ${day.dayOfWeek}.`,
+            );
+          }
+        }
+
+        if (day.isAvailable) {
+          if (normalizedRanges.length === 0) {
+            throw new BadRequestException(
+              `workingSchedule must include at least one time range for ${day.dayOfWeek}.`,
+            );
+          }
+          hasAvailableDay = true;
+        }
+
         return {
-          startTime: range.startTime,
-          endTime: range.endTime,
+          dayOfWeek: day.dayOfWeek,
+          isAvailable: day.isAvailable,
+          timeRanges: normalizedRanges,
         };
-      }).sort((left, right) => left.startTime.localeCompare(right.startTime));
-
-      for (let index = 1; index < normalizedRanges.length; index += 1) {
-        if (normalizedRanges[index - 1].endTime > normalizedRanges[index].startTime) {
+      })
+      .sort(
+        (left, right) =>
+          WEEK_DAYS_ORDER.indexOf(left.dayOfWeek) -
+          WEEK_DAYS_ORDER.indexOf(right.dayOfWeek),
+      )
+      .map((day) => {
+        if (!hasAvailableDay) {
           throw new BadRequestException(
-            `workingSchedule time ranges must not overlap for ${day.dayOfWeek}.`,
+            'workingSchedule must contain at least one available day.',
           );
         }
-      }
-
-      if (day.isAvailable) {
-        if (normalizedRanges.length === 0) {
-          throw new BadRequestException(
-            `workingSchedule must include at least one time range for ${day.dayOfWeek}.`,
-          );
-        }
-        hasAvailableDay = true;
-      }
-
-      return {
-        dayOfWeek: day.dayOfWeek,
-        isAvailable: day.isAvailable,
-        timeRanges: normalizedRanges,
-      };
-    }).sort(
-      (left, right) =>
-        WEEK_DAYS_ORDER.indexOf(left.dayOfWeek) - WEEK_DAYS_ORDER.indexOf(right.dayOfWeek),
-    ).map((day) => {
-      if (!hasAvailableDay) {
-        throw new BadRequestException(
-          'workingSchedule must contain at least one available day.',
-        );
-      }
-      return day;
-    });
+        return day;
+      });
   }
 
   private parseVehicleWorkingSchedule(
@@ -4708,7 +4896,9 @@ export class DriverService {
   private toVehicleLoadCapacityResponse(
     vehicle: VehicleSource,
   ): DriverVehicleLoadCapacityResponseDto {
-    const workingSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+    const workingSchedule = this.parseVehicleWorkingSchedule(
+      vehicle.workingSchedule,
+    );
     return {
       id: vehicle.id,
       driverId: vehicle.driverId,
@@ -4721,7 +4911,7 @@ export class DriverService {
       cargoHeightM: vehicle.heightCm !== null ? vehicle.heightCm / 100 : null,
       dimensionsAreStandard: vehicle.dimensionsAreStandard,
       allowedCargoTypes: vehicle.allowedCargoTypes,
-      workingSchedule: workingSchedule as WorkingDayScheduleResponseDto[],
+      workingSchedule: workingSchedule,
       isDefault: vehicle.isDefaultLoadProfile,
       createdAt: vehicle.createdAt.toISOString(),
       updatedAt: vehicle.updatedAt.toISOString(),
@@ -5002,9 +5192,7 @@ export class DriverService {
       }
     }
 
-    const readDocumentUrl = (
-      ...types: DriverDocumentType[]
-    ): string | null => {
+    const readDocumentUrl = (...types: DriverDocumentType[]): string | null => {
       for (const type of types) {
         const document = latestDocumentsByType.get(type);
         if (document) return document.url;
@@ -5012,7 +5200,9 @@ export class DriverService {
       return null;
     };
 
-    const workingSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+    const workingSchedule = this.parseVehicleWorkingSchedule(
+      vehicle.workingSchedule,
+    );
 
     return {
       id: vehicle.id,
@@ -5126,7 +5316,9 @@ export class DriverService {
       status: document.status,
       rejectionReason: document.rejectionReason,
       expiresAt: document.expiresAt ? document.expiresAt.toISOString() : null,
-      reviewedAt: document.reviewedAt ? document.reviewedAt.toISOString() : null,
+      reviewedAt: document.reviewedAt
+        ? document.reviewedAt.toISOString()
+        : null,
       uploadedAt: document.createdAt.toISOString(),
     };
   }
@@ -5163,7 +5355,8 @@ export class DriverService {
     documents: DocumentSource[],
   ): DriverOnboardingDocumentsStatusResponseDto {
     const latestDocuments = this.uniqueLatestDocumentsByType(documents);
-    const missingDocuments = this.getMissingOnboardingDocuments(latestDocuments);
+    const missingDocuments =
+      this.getMissingOnboardingDocuments(latestDocuments);
     const canSubmitForReview =
       profile.isProfileCompleted &&
       missingDocuments.length === 0 &&
@@ -5388,6 +5581,15 @@ export class DriverService {
       isPersonalInfoCompleted: profile.isProfileCompleted,
       nextStep: this.getOnboardingNextStep(profile),
     };
+  }
+
+  private assertTestingModeEnabled(): void {
+    const allowInProduction = process.env.ALLOW_TESTING_APPROVAL === 'true';
+    if (process.env.NODE_ENV === 'production' && !allowInProduction) {
+      throw new BadRequestException(
+        'Testing approval is disabled in production.',
+      );
+    }
   }
 
   private toDriverMeResponse(

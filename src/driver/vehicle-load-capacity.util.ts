@@ -87,7 +87,11 @@ export function canVehicleSupportRequestLoad(
   }
 
   if (!isCarCarrierVehicleType(vehicle.vehicleType)) {
-    if (request.weightKg !== null && vehicle.capacityKg !== null && vehicle.capacityKg < request.weightKg) {
+    if (
+      request.weightKg !== null &&
+      vehicle.capacityKg !== null &&
+      vehicle.capacityKg < request.weightKg
+    ) {
       return false;
     }
     if (

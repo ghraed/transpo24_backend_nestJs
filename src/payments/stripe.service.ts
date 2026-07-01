@@ -56,9 +56,7 @@ export class StripeService {
     return customer.id;
   }
 
-  async createManualCaptureIntent(
-    input: CreateManualCaptureIntentInput,
-  ) {
+  async createManualCaptureIntent(input: CreateManualCaptureIntentInput) {
     const client = this.getClient();
 
     if (input.stripePaymentMethodId?.trim()) {
@@ -88,28 +86,19 @@ export class StripeService {
     });
   }
 
-  async capturePaymentIntent(
-    paymentIntentId: string,
-  ) {
+  async capturePaymentIntent(paymentIntentId: string) {
     return this.getClient().paymentIntents.capture(paymentIntentId);
   }
 
-  async retrievePaymentIntent(
-    paymentIntentId: string,
-  ) {
+  async retrievePaymentIntent(paymentIntentId: string) {
     return this.getClient().paymentIntents.retrieve(paymentIntentId);
   }
 
-  async cancelPaymentIntent(
-    paymentIntentId: string,
-  ) {
+  async cancelPaymentIntent(paymentIntentId: string) {
     return this.getClient().paymentIntents.cancel(paymentIntentId);
   }
 
-  constructWebhookEvent(
-    rawBody: Buffer,
-    signature: string,
-  ) {
+  constructWebhookEvent(rawBody: Buffer, signature: string) {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
     if (!webhookSecret) {
       throw new BadRequestException('Stripe webhook secret is not configured.');

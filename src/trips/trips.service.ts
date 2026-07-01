@@ -59,7 +59,8 @@ export const DELIVER_ITEM_RADIUS_METERS = 150;
 export const NEAR_DELIVERY_RADIUS_METERS = 5000;
 const MAX_PROOF_PHOTOS = 8;
 const PLATFORM_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
-const DEFAULT_CURRENCY = process.env.STRIPE_CURRENCY?.trim().toUpperCase() || 'CHF';
+const DEFAULT_CURRENCY =
+  process.env.STRIPE_CURRENCY?.trim().toUpperCase() || 'CHF';
 const PROOF_PHOTO_SELECT = {
   id: true,
   type: true,
@@ -191,9 +192,7 @@ export class TripsService {
     return trip;
   }
 
-  async updateDriverLocation(
-    input: DriverLocationInput,
-  ): Promise<{
+  async updateDriverLocation(input: DriverLocationInput): Promise<{
     location: DriverLocationUpdatedPayload;
     nearDelivery: DriverNearDeliveryPayload | null;
   }> {
@@ -371,31 +370,36 @@ export class TripsService {
 
     if (trip.status !== TransportRequestStatus.DRIVER_ARRIVED_PICKUP) {
       if (trip.status === TransportRequestStatus.ITEM_PICKED_UP) {
-        const currentProofPhotos = await this.prisma.transportRequestProofPhoto.findMany({
-          where: {
-            requestId: trip.id,
-            type: TransportProofPhotoType.PICKUP,
-          },
-          orderBy: { sortOrder: 'asc' },
-          select: PROOF_PHOTO_SELECT,
-        });
+        const currentProofPhotos =
+          await this.prisma.transportRequestProofPhoto.findMany({
+            where: {
+              requestId: trip.id,
+              type: TransportProofPhotoType.PICKUP,
+            },
+            orderBy: { sortOrder: 'asc' },
+            select: PROOF_PHOTO_SELECT,
+          });
 
-        const currentTrip = await this.prisma.transportRequest.findUniqueOrThrow({
-          where: { id: trip.id },
-          select: {
-            id: true,
-            customerId: true,
-            assignedDriverId: true,
-            status: true,
-            itemPickedUpAt: true,
-            pickupNotes: true,
-            pickupProofImageUrl: true,
-          },
-        });
+        const currentTrip =
+          await this.prisma.transportRequest.findUniqueOrThrow({
+            where: { id: trip.id },
+            select: {
+              id: true,
+              customerId: true,
+              assignedDriverId: true,
+              status: true,
+              itemPickedUpAt: true,
+              pickupNotes: true,
+              pickupProofImageUrl: true,
+            },
+          });
 
         return {
           response: this.mapPickupItemResponse(currentTrip, currentProofPhotos),
-          itemPickedUp: this.mapItemPickedUpPayload(currentTrip, currentProofPhotos),
+          itemPickedUp: this.mapItemPickedUpPayload(
+            currentTrip,
+            currentProofPhotos,
+          ),
           status: this.mapTripStatusUpdatedPayload(
             currentTrip.id,
             currentTrip.status,
@@ -510,7 +514,10 @@ export class TripsService {
 
     return {
       response: this.mapPickupItemResponse(updated.trip, updated.proofPhotos),
-      itemPickedUp: this.mapItemPickedUpPayload(updated.trip, updated.proofPhotos),
+      itemPickedUp: this.mapItemPickedUpPayload(
+        updated.trip,
+        updated.proofPhotos,
+      ),
       status: this.mapTripStatusUpdatedPayload(
         updated.trip.id,
         updated.trip.status,
@@ -633,28 +640,30 @@ export class TripsService {
 
     if (trip.status !== TransportRequestStatus.DRIVER_GOING_TO_DROPOFF) {
       if (trip.status === TransportRequestStatus.DELIVERED) {
-        const currentTrip = await this.prisma.transportRequest.findUniqueOrThrow({
-          where: { id: trip.id },
-          select: {
-            id: true,
-            customerId: true,
-            assignedDriverId: true,
-            status: true,
-            deliveredAt: true,
-            deliveryNotes: true,
-            deliveryProofImageUrl: true,
-            ratingAvailableAt: true,
-            updatedAt: true,
-          },
-        });
-        const proofPhotos = await this.prisma.transportRequestProofPhoto.findMany({
-          where: {
-            requestId: trip.id,
-            type: TransportProofPhotoType.DELIVERY,
-          },
-          orderBy: { sortOrder: 'asc' },
-          select: PROOF_PHOTO_SELECT,
-        });
+        const currentTrip =
+          await this.prisma.transportRequest.findUniqueOrThrow({
+            where: { id: trip.id },
+            select: {
+              id: true,
+              customerId: true,
+              assignedDriverId: true,
+              status: true,
+              deliveredAt: true,
+              deliveryNotes: true,
+              deliveryProofImageUrl: true,
+              ratingAvailableAt: true,
+              updatedAt: true,
+            },
+          });
+        const proofPhotos =
+          await this.prisma.transportRequestProofPhoto.findMany({
+            where: {
+              requestId: trip.id,
+              type: TransportProofPhotoType.DELIVERY,
+            },
+            orderBy: { sortOrder: 'asc' },
+            select: PROOF_PHOTO_SELECT,
+          });
         return {
           response: this.mapDeliverItemResponse(currentTrip, proofPhotos),
           delivered: this.mapItemDeliveredPayload(currentTrip, proofPhotos),
@@ -678,30 +687,54 @@ export class TripsService {
     });
 
     const now = new Date();
-    const { deliveredTrip, proofPhotos } = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.transportRequest.findUnique({
-        where: { id: trip.id },
-        select: {
-          id: true,
-          customerId: true,
-          assignedDriverId: true,
-          status: true,
-          deliveredAt: true,
-          deliveryNotes: true,
-          deliveryProofImageUrl: true,
-          ratingAvailableAt: true,
-          dropoffLatitude: true,
-          dropoffLongitude: true,
-          updatedAt: true,
-        },
-      });
+    const { deliveredTrip, proofPhotos } = await this.prisma.$transaction(
+      async (tx) => {
+        const current = await tx.transportRequest.findUnique({
+          where: { id: trip.id },
+          select: {
+            id: true,
+            customerId: true,
+            assignedDriverId: true,
+            status: true,
+            deliveredAt: true,
+            deliveryNotes: true,
+            deliveryProofImageUrl: true,
+            ratingAvailableAt: true,
+            dropoffLatitude: true,
+            dropoffLongitude: true,
+            updatedAt: true,
+          },
+        });
 
-      if (!current) {
-        throw new NotFoundException('Trip not found.');
-      }
+        if (!current) {
+          throw new NotFoundException('Trip not found.');
+        }
 
-      if (current.status !== TransportRequestStatus.DRIVER_GOING_TO_DROPOFF) {
-        if (current.status === TransportRequestStatus.DELIVERED && current.deliveredAt) {
+        if (current.status !== TransportRequestStatus.DRIVER_GOING_TO_DROPOFF) {
+          if (
+            current.status === TransportRequestStatus.DELIVERED &&
+            current.deliveredAt
+          ) {
+            const proofPhotos = await tx.transportRequestProofPhoto.findMany({
+              where: {
+                requestId: current.id,
+                type: TransportProofPhotoType.DELIVERY,
+              },
+              orderBy: { sortOrder: 'asc' },
+              select: PROOF_PHOTO_SELECT,
+            });
+
+            return {
+              deliveredTrip: current,
+              proofPhotos,
+            };
+          }
+          throw new BadRequestException(
+            'Trip status must be DRIVER_GOING_TO_DROPOFF before confirming delivery.',
+          );
+        }
+
+        if (current.deliveredAt) {
           const proofPhotos = await tx.transportRequestProofPhoto.findMany({
             where: {
               requestId: current.id,
@@ -716,70 +749,51 @@ export class TripsService {
             proofPhotos,
           };
         }
-        throw new BadRequestException(
-          'Trip status must be DRIVER_GOING_TO_DROPOFF before confirming delivery.',
-        );
-      }
 
-      if (current.deliveredAt) {
-        const proofPhotos = await tx.transportRequestProofPhoto.findMany({
-          where: {
-            requestId: current.id,
-            type: TransportProofPhotoType.DELIVERY,
-          },
-          orderBy: { sortOrder: 'asc' },
-          select: PROOF_PHOTO_SELECT,
+        if (
+          current.dropoffLatitude === null ||
+          current.dropoffLongitude === null
+        ) {
+          throw new BadRequestException('Dropoff location is missing.');
+        }
+
+        const proofPhotos = await this.createProofPhotoRowsTx(tx, {
+          requestId: current.id,
+          type: TransportProofPhotoType.DELIVERY,
+          files: input.proofPhotos ?? [],
         });
 
+        const deliveredTrip = await tx.transportRequest.update({
+          where: { id: current.id },
+          data: {
+            status: TransportRequestStatus.DELIVERED,
+            deliveredAt: now,
+            deliveryConfirmedByDriver: true,
+            deliveryNotes: input.notes ?? null,
+            deliveryProofImageUrl:
+              proofPhotos[0]?.url ?? input.proofImageUrl ?? null,
+            ratingAvailableAt: now,
+          },
+          select: {
+            id: true,
+            customerId: true,
+            assignedDriverId: true,
+            status: true,
+            deliveredAt: true,
+            deliveryNotes: true,
+            deliveryProofImageUrl: true,
+            ratingAvailableAt: true,
+            updatedAt: true,
+          },
+        });
+
+        await this.createDriverEarningForDeliveredTrip(tx, deliveredTrip.id);
         return {
-          deliveredTrip: current,
+          deliveredTrip,
           proofPhotos,
         };
-      }
-
-      if (
-        current.dropoffLatitude === null ||
-        current.dropoffLongitude === null
-      ) {
-        throw new BadRequestException('Dropoff location is missing.');
-      }
-
-      const proofPhotos = await this.createProofPhotoRowsTx(tx, {
-        requestId: current.id,
-        type: TransportProofPhotoType.DELIVERY,
-        files: input.proofPhotos ?? [],
-      });
-
-      const deliveredTrip = await tx.transportRequest.update({
-        where: { id: current.id },
-        data: {
-          status: TransportRequestStatus.DELIVERED,
-          deliveredAt: now,
-          deliveryConfirmedByDriver: true,
-          deliveryNotes: input.notes ?? null,
-          deliveryProofImageUrl:
-            proofPhotos[0]?.url ?? input.proofImageUrl ?? null,
-          ratingAvailableAt: now,
-        },
-        select: {
-          id: true,
-          customerId: true,
-          assignedDriverId: true,
-          status: true,
-          deliveredAt: true,
-          deliveryNotes: true,
-          deliveryProofImageUrl: true,
-          ratingAvailableAt: true,
-          updatedAt: true,
-        },
-      });
-
-      await this.createDriverEarningForDeliveredTrip(tx, deliveredTrip.id);
-      return {
-        deliveredTrip,
-        proofPhotos,
-      };
-    });
+      },
+    );
 
     return {
       response: this.mapDeliverItemResponse(deliveredTrip, proofPhotos),
@@ -1015,24 +1029,26 @@ export class TripsService {
     };
   }
 
-  mapPickupItemResponse(trip: {
-    id: string;
-    customerId: string;
-    assignedDriverId: string | null;
-    status: TransportRequestStatus;
-    itemPickedUpAt: Date | null;
-    pickupNotes: string | null;
-    pickupProofImageUrl: string | null;
-  },
-  proofPhotos: Array<{
-    id: string;
-    type: TransportProofPhotoType;
-    url: string;
-    mimeType: string;
-    sizeBytes: number;
-    sortOrder: number;
-    createdAt: Date;
-  }>,): PickupItemResponse {
+  mapPickupItemResponse(
+    trip: {
+      id: string;
+      customerId: string;
+      assignedDriverId: string | null;
+      status: TransportRequestStatus;
+      itemPickedUpAt: Date | null;
+      pickupNotes: string | null;
+      pickupProofImageUrl: string | null;
+    },
+    proofPhotos: Array<{
+      id: string;
+      type: TransportProofPhotoType;
+      url: string;
+      mimeType: string;
+      sizeBytes: number;
+      sortOrder: number;
+      createdAt: Date;
+    }>,
+  ): PickupItemResponse {
     if (!trip.assignedDriverId || !trip.itemPickedUpAt) {
       throw new BadRequestException('Pickup confirmation data is incomplete.');
     }
@@ -1050,24 +1066,26 @@ export class TripsService {
     };
   }
 
-  mapItemPickedUpPayload(trip: {
-    id: string;
-    customerId: string;
-    assignedDriverId: string | null;
-    status: TransportRequestStatus;
-    itemPickedUpAt: Date | null;
-    pickupNotes: string | null;
-    pickupProofImageUrl: string | null;
-  },
-  proofPhotos: Array<{
-    id: string;
-    type: TransportProofPhotoType;
-    url: string;
-    mimeType: string;
-    sizeBytes: number;
-    sortOrder: number;
-    createdAt: Date;
-  }>,): ItemPickedUpPayload {
+  mapItemPickedUpPayload(
+    trip: {
+      id: string;
+      customerId: string;
+      assignedDriverId: string | null;
+      status: TransportRequestStatus;
+      itemPickedUpAt: Date | null;
+      pickupNotes: string | null;
+      pickupProofImageUrl: string | null;
+    },
+    proofPhotos: Array<{
+      id: string;
+      type: TransportProofPhotoType;
+      url: string;
+      mimeType: string;
+      sizeBytes: number;
+      sortOrder: number;
+      createdAt: Date;
+    }>,
+  ): ItemPickedUpPayload {
     if (!trip.assignedDriverId || !trip.itemPickedUpAt) {
       throw new BadRequestException('Pickup event data is incomplete.');
     }
@@ -1149,25 +1167,27 @@ export class TripsService {
     };
   }
 
-  mapDeliverItemResponse(trip: {
-    id: string;
-    customerId: string;
-    assignedDriverId: string | null;
-    status: TransportRequestStatus;
-    deliveredAt: Date | null;
-    deliveryNotes: string | null;
-    deliveryProofImageUrl: string | null;
-    ratingAvailableAt?: Date | null;
-  },
-  proofPhotos: Array<{
-    id: string;
-    type: TransportProofPhotoType;
-    url: string;
-    mimeType: string;
-    sizeBytes: number;
-    sortOrder: number;
-    createdAt: Date;
-  }>,): DeliverItemResponse {
+  mapDeliverItemResponse(
+    trip: {
+      id: string;
+      customerId: string;
+      assignedDriverId: string | null;
+      status: TransportRequestStatus;
+      deliveredAt: Date | null;
+      deliveryNotes: string | null;
+      deliveryProofImageUrl: string | null;
+      ratingAvailableAt?: Date | null;
+    },
+    proofPhotos: Array<{
+      id: string;
+      type: TransportProofPhotoType;
+      url: string;
+      mimeType: string;
+      sizeBytes: number;
+      sortOrder: number;
+      createdAt: Date;
+    }>,
+  ): DeliverItemResponse {
     if (!trip.assignedDriverId || !trip.deliveredAt) {
       throw new BadRequestException(
         'Delivery confirmation data is incomplete.',
@@ -1192,25 +1212,27 @@ export class TripsService {
     };
   }
 
-  mapItemDeliveredPayload(trip: {
-    id: string;
-    customerId: string;
-    assignedDriverId: string | null;
-    status: TransportRequestStatus;
-    deliveredAt: Date | null;
-    deliveryNotes: string | null;
-    deliveryProofImageUrl: string | null;
-    ratingAvailableAt?: Date | null;
-  },
-  proofPhotos: Array<{
-    id: string;
-    type: TransportProofPhotoType;
-    url: string;
-    mimeType: string;
-    sizeBytes: number;
-    sortOrder: number;
-    createdAt: Date;
-  }>,): ItemDeliveredPayload {
+  mapItemDeliveredPayload(
+    trip: {
+      id: string;
+      customerId: string;
+      assignedDriverId: string | null;
+      status: TransportRequestStatus;
+      deliveredAt: Date | null;
+      deliveryNotes: string | null;
+      deliveryProofImageUrl: string | null;
+      ratingAvailableAt?: Date | null;
+    },
+    proofPhotos: Array<{
+      id: string;
+      type: TransportProofPhotoType;
+      url: string;
+      mimeType: string;
+      sizeBytes: number;
+      sortOrder: number;
+      createdAt: Date;
+    }>,
+  ): ItemDeliveredPayload {
     const mapped = this.mapDeliverItemResponse(trip, proofPhotos);
     return {
       tripId: mapped.tripId,
@@ -1490,7 +1512,9 @@ export class TripsService {
     }
 
     if (!trip.ratingAvailableAt) {
-      throw new BadRequestException('Rating is not available for this trip yet.');
+      throw new BadRequestException(
+        'Rating is not available for this trip yet.',
+      );
     }
 
     return {
@@ -1593,7 +1617,10 @@ export class TripsService {
     }
 
     const allowedStatuses = new Set(options?.allowStatuses ?? []);
-    if (TERMINAL_STATUSES.includes(trip.status) && !allowedStatuses.has(trip.status)) {
+    if (
+      TERMINAL_STATUSES.includes(trip.status) &&
+      !allowedStatuses.has(trip.status)
+    ) {
       throw new BadRequestException('Trip is already closed.');
     }
 

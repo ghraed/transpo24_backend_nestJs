@@ -15,7 +15,11 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import {
+  FileFieldsInterceptor,
+  FileInterceptor,
+  FilesInterceptor,
+} from '@nestjs/platform-express';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 import type { File as MulterFile } from 'multer';
@@ -59,6 +63,7 @@ import {
   DriverOnboardingDocumentsStatusResponseDto,
   UploadDriverOnboardingDocumentsDto,
 } from './dto/driver-onboarding-documents.dto';
+import { SendTestCustomerNotificationDto } from './dto/send-test-customer-notification.dto';
 import { UpsertDriverPersonalInfoDto } from './dto/upsert-driver-personal-info.dto';
 import { UpdateDriverProfileDto } from './dto/update-driver-profile.dto';
 import { DriverService } from './driver.service';
@@ -362,6 +367,17 @@ export class DriverController {
     return this.driverService.approveForTesting({ userId: request.user.id });
   }
 
+  @Post('me/testing/send-customer-notification')
+  async sendCustomerTestNotification(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: SendTestCustomerNotificationDto,
+  ): Promise<{ success: true; email: string; customerId: string }> {
+    return this.driverService.sendCustomerTestNotification({
+      userId: request.user.id,
+      email: dto.email,
+    });
+  }
+
   @Get('requests/alerts')
   async getRequestAlerts(
     @Req() request: AuthenticatedRequest,
@@ -445,7 +461,9 @@ export class DriverController {
           const driverIdValue = req.user?.id;
           const requestIdValue = req.params?.requestId;
           const driverId =
-            typeof driverIdValue === 'string' ? driverIdValue : 'unknown-driver';
+            typeof driverIdValue === 'string'
+              ? driverIdValue
+              : 'unknown-driver';
           const requestId =
             typeof requestIdValue === 'string'
               ? requestIdValue
@@ -473,9 +491,7 @@ export class DriverController {
       fileFilter: (_req, file, callback) => {
         if (!DOCUMENT_MIME_TYPES.has(file.mimetype)) {
           callback(
-            new BadRequestException(
-              'Invoice must be JPEG, PNG, WEBP, or PDF.',
-            ),
+            new BadRequestException('Invoice must be JPEG, PNG, WEBP, or PDF.'),
             false,
           );
           return;
@@ -736,7 +752,9 @@ export class DriverController {
           const driverIdValue = req.user?.id;
           const tripIdValue = req.params?.tripId;
           const driverId =
-            typeof driverIdValue === 'string' ? driverIdValue : 'unknown-driver';
+            typeof driverIdValue === 'string'
+              ? driverIdValue
+              : 'unknown-driver';
           const tripId =
             typeof tripIdValue === 'string' ? tripIdValue : 'unknown-trip';
           const targetDirectory = join(
@@ -763,7 +781,9 @@ export class DriverController {
       fileFilter: (_req, file, callback) => {
         if (!IMAGE_MIME_TYPES.has(file.mimetype)) {
           callback(
-            new BadRequestException('Pickup proof photos must be JPEG, PNG, or WEBP.'),
+            new BadRequestException(
+              'Pickup proof photos must be JPEG, PNG, or WEBP.',
+            ),
             false,
           );
           return;
@@ -820,7 +840,9 @@ export class DriverController {
           const driverIdValue = req.user?.id;
           const tripIdValue = req.params?.tripId;
           const driverId =
-            typeof driverIdValue === 'string' ? driverIdValue : 'unknown-driver';
+            typeof driverIdValue === 'string'
+              ? driverIdValue
+              : 'unknown-driver';
           const tripId =
             typeof tripIdValue === 'string' ? tripIdValue : 'unknown-trip';
           const targetDirectory = join(
@@ -847,7 +869,9 @@ export class DriverController {
       fileFilter: (_req, file, callback) => {
         if (!IMAGE_MIME_TYPES.has(file.mimetype)) {
           callback(
-            new BadRequestException('Delivery proof photos must be JPEG, PNG, or WEBP.'),
+            new BadRequestException(
+              'Delivery proof photos must be JPEG, PNG, or WEBP.',
+            ),
             false,
           );
           return;

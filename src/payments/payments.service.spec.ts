@@ -7,9 +7,11 @@ describe('PaymentsService', () => {
 
   it('converts decimals to Stripe minor units', () => {
     expect(
-      (service as unknown as { toStripeMinorUnit(amount: Prisma.Decimal): number }).toStripeMinorUnit(
-        new Prisma.Decimal('25.50'),
-      ),
+      (
+        service as unknown as {
+          toStripeMinorUnit(amount: Prisma.Decimal): number;
+        }
+      ).toStripeMinorUnit(new Prisma.Decimal('25.50')),
     ).toBe(2550);
   });
 
@@ -33,7 +35,9 @@ describe('PaymentsService', () => {
     expect(
       (
         service as unknown as {
-          mapStripeIntentStatus(paymentIntent: { status: string }): PaymentStatus;
+          mapStripeIntentStatus(paymentIntent: {
+            status: string;
+          }): PaymentStatus;
         }
       ).mapStripeIntentStatus({
         status: 'requires_capture',

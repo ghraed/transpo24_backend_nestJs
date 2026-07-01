@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { DriverStatus, UserRole } from '@prisma/client';
 
+import type { AuthenticatedUser } from './auth.types';
 import { hashPassword, verifyPassword } from '../common/security/password.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -17,13 +18,6 @@ import { RegisterDriverResponseDto } from './dto/register-driver-response.dto';
 import { RegisterDriverDto } from './dto/register-driver.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
-
-type AuthenticatedUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-};
 
 type AccessTokenPayload = {
   sub: string;
@@ -53,7 +47,10 @@ const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async resetUsersForTesting(): Promise<{ deletedUsers: number; keptEmail: string }> {
+  async resetUsersForTesting(): Promise<{
+    deletedUsers: number;
+    keptEmail: string;
+  }> {
     const keptEmail = 'driver@test.com';
     const deleted = await this.prisma.user.deleteMany({
       where: {
@@ -324,7 +321,9 @@ export class AuthService {
 
   private normalizeCities(values: string[]): string[] {
     return Array.from(
-      new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+      new Set(
+        values.map((value) => value.trim()).filter((value) => value.length > 0),
+      ),
     );
   }
 

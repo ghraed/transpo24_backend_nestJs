@@ -31,9 +31,7 @@ const DRIVER_VEHICLE_INPUT_ALIASES: Record<string, VehicleType> = {
   OTHER: VehicleType.SMALL_TRUCK,
 };
 
-export function normalizeDriverVehicleTypeInput(
-  value: unknown,
-): unknown {
+export function normalizeDriverVehicleTypeInput(value: unknown): unknown {
   if (typeof value !== 'string') {
     return value;
   }

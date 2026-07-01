@@ -111,7 +111,9 @@ export class PaymentsService {
     });
 
     if (existingHold) {
-      throw new ConflictException('A payment hold already exists for this request.');
+      throw new ConflictException(
+        'A payment hold already exists for this request.',
+      );
     }
 
     const normalizedAmount = this.toMoneyDecimal(input.amount);
@@ -166,7 +168,10 @@ export class PaymentsService {
       const paymentIntent = await this.stripeService.retrievePaymentIntent(
         request.paymentHold.stripePaymentIntentId,
       );
-      await this.syncStripePaymentIntent(paymentIntent, 'payment_intent.status_checked');
+      await this.syncStripePaymentIntent(
+        paymentIntent,
+        'payment_intent.status_checked',
+      );
 
       const refreshedHold = await this.prisma.paymentHold.findUnique({
         where: { id: request.paymentHold.id },
@@ -183,7 +188,9 @@ export class PaymentsService {
     return this.toPaymentSummaryDto(request.paymentHold);
   }
 
-  async cancelRequestPayment(input: CancelPaymentInput): Promise<PaymentSummaryDto> {
+  async cancelRequestPayment(
+    input: CancelPaymentInput,
+  ): Promise<PaymentSummaryDto> {
     const request = await this.prisma.transportRequest.findUnique({
       where: { id: input.requestId },
       select: {
@@ -198,14 +205,18 @@ export class PaymentsService {
     }
 
     if (request.customerId !== input.customerId) {
-      throw new ForbiddenException('You are not allowed to cancel this payment.');
+      throw new ForbiddenException(
+        'You are not allowed to cancel this payment.',
+      );
     }
 
     if (
       request.status === TransportRequestStatus.DELIVERED ||
       request.status === TransportRequestStatus.COMPLETED
     ) {
-      throw new ConflictException('Delivered trips cannot release payment holds.');
+      throw new ConflictException(
+        'Delivered trips cannot release payment holds.',
+      );
     }
 
     return this.prisma.$transaction((tx) =>
@@ -266,7 +277,9 @@ export class PaymentsService {
     return this.toPaymentSummaryDto(updated);
   }
 
-  async captureRequestPayment(input: CapturePaymentInput): Promise<PaymentSummaryDto> {
+  async captureRequestPayment(
+    input: CapturePaymentInput,
+  ): Promise<PaymentSummaryDto> {
     return this.prisma.$transaction((tx) =>
       this.captureRequestPaymentTx(tx, input),
     );
@@ -286,7 +299,9 @@ export class PaymentsService {
     }
 
     if (input.customerId && hold.customerId !== input.customerId) {
-      throw new ForbiddenException('You are not allowed to capture this payment.');
+      throw new ForbiddenException(
+        'You are not allowed to capture this payment.',
+      );
     }
 
     if (hold.status === PaymentStatus.PAYMENT_CAPTURED) {
@@ -406,7 +421,11 @@ export class PaymentsService {
 
     const currency = this.normalizeCurrency(request.currency);
     const amount = this.toMoneyDecimal(input.amount);
-    const wallet = await this.ensureWallet(this.prisma, request.customerId, currency);
+    const wallet = await this.ensureWallet(
+      this.prisma,
+      request.customerId,
+      currency,
+    );
 
     if (this.getAvailableBalance(wallet).lt(amount)) {
       await this.cleanupFile(input.invoiceFile);
@@ -467,7 +486,10 @@ export class PaymentsService {
     return this.toAdditionalChargeResponseDto(created);
   }
 
-  async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<{
+  async handleStripeWebhook(
+    rawBody: Buffer,
+    signature: string,
+  ): Promise<{
     received: true;
     type: string;
   }> {
@@ -506,7 +528,10 @@ export class PaymentsService {
     paymentIntent: StripePaymentIntentRecord,
     eventType: string,
   ): Promise<void> {
-    const nextStatus = this.mapStripeEventToPaymentStatus(paymentIntent, eventType);
+    const nextStatus = this.mapStripeEventToPaymentStatus(
+      paymentIntent,
+      eventType,
+    );
     if (!nextStatus) {
       return;
     }
@@ -527,13 +552,21 @@ export class PaymentsService {
           status: nextStatus,
           stripeChargeId: this.getStripeChargeId(paymentIntent),
           failedAt:
-            nextStatus === PaymentStatus.PAYMENT_FAILED ? new Date() : undefined,
+            nextStatus === PaymentStatus.PAYMENT_FAILED
+              ? new Date()
+              : undefined,
           cancelledAt:
-            nextStatus === PaymentStatus.PAYMENT_CANCELLED ? new Date() : undefined,
+            nextStatus === PaymentStatus.PAYMENT_CANCELLED
+              ? new Date()
+              : undefined,
           releasedAt:
-            nextStatus === PaymentStatus.PAYMENT_RELEASED ? new Date() : undefined,
+            nextStatus === PaymentStatus.PAYMENT_RELEASED
+              ? new Date()
+              : undefined,
           capturedAt:
-            nextStatus === PaymentStatus.PAYMENT_CAPTURED ? new Date() : undefined,
+            nextStatus === PaymentStatus.PAYMENT_CAPTURED
+              ? new Date()
+              : undefined,
         },
       });
 
@@ -542,7 +575,9 @@ export class PaymentsService {
         data: {
           paymentStatus: nextStatus,
           capturedAmount:
-            nextStatus === PaymentStatus.PAYMENT_CAPTURED ? hold.amount : undefined,
+            nextStatus === PaymentStatus.PAYMENT_CAPTURED
+              ? hold.amount
+              : undefined,
         },
       });
     });
@@ -583,7 +618,11 @@ export class PaymentsService {
     tx: Prisma.TransactionClient,
     input: CreateHoldInput & { amount: Prisma.Decimal; currency: string },
   ): Promise<PaymentSummaryDto> {
-    const wallet = await this.ensureWallet(tx, input.customerId, input.currency);
+    const wallet = await this.ensureWallet(
+      tx,
+      input.customerId,
+      input.currency,
+    );
     const availableBalance = this.getAvailableBalance(wallet);
 
     if (availableBalance.lt(input.amount)) {
@@ -742,7 +781,9 @@ export class PaymentsService {
     await tx.customerWallet.update({
       where: { id: wallet.id },
       data: {
-        reservedBalance: this.maxDecimalZero(wallet.reservedBalance.sub(hold.amount)),
+        reservedBalance: this.maxDecimalZero(
+          wallet.reservedBalance.sub(hold.amount),
+        ),
       },
     });
 
@@ -771,7 +812,9 @@ export class PaymentsService {
     await tx.customerWallet.update({
       where: { id: wallet.id },
       data: {
-        reservedBalance: this.maxDecimalZero(wallet.reservedBalance.sub(hold.amount)),
+        reservedBalance: this.maxDecimalZero(
+          wallet.reservedBalance.sub(hold.amount),
+        ),
         balance: wallet.balance.sub(hold.amount),
       },
     });
@@ -822,7 +865,9 @@ export class PaymentsService {
   }
 
   private toStripeMinorUnit(amount: Prisma.Decimal): number {
-    return Number(amount.mul(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP));
+    return Number(
+      amount.mul(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP),
+    );
   }
 
   private mapStripeIntentStatus(
@@ -891,9 +936,13 @@ export class PaymentsService {
       customerId: hold.customerId,
       driverId: hold.driverId,
       amount: Number(hold.amount),
-      heldAmount: ACTIVE_PAYMENT_STATUSES.has(hold.status) ? Number(hold.amount) : 0,
+      heldAmount: ACTIVE_PAYMENT_STATUSES.has(hold.status)
+        ? Number(hold.amount)
+        : 0,
       capturedAmount:
-        hold.status === PaymentStatus.PAYMENT_CAPTURED ? Number(hold.amount) : 0,
+        hold.status === PaymentStatus.PAYMENT_CAPTURED
+          ? Number(hold.amount)
+          : 0,
       currency: hold.currency,
       paymentMethod: hold.paymentMethod,
       provider: hold.provider,
@@ -937,7 +986,11 @@ export class PaymentsService {
   }
 
   private normalizeCurrency(currency?: string | null): string {
-    return (currency?.trim() || process.env.STRIPE_CURRENCY || 'CHF').toUpperCase();
+    return (
+      currency?.trim() ||
+      process.env.STRIPE_CURRENCY ||
+      'CHF'
+    ).toUpperCase();
   }
 
   private toMoneyDecimal(value: Prisma.Decimal | number): Prisma.Decimal {

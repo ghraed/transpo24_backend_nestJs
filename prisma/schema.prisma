@@ -92,6 +92,16 @@ enum UserRole {
   DRIVER
 }
 
+enum PushApp {
+  CUSTOMER
+  DRIVER
+}
+
+enum PushPlatform {
+  ios
+  android
+}
+
 enum DriverStatus {
   PENDING_PROFILE
   PENDING_DOCUMENTS
@@ -282,6 +292,25 @@ model User {
   walletTransactions CustomerWalletTransaction[]
   paymentHolds  PaymentHold[]
   additionalCharges AdditionalCharge[]
+  pushTokens    PushToken[]
+}
+
+model PushToken {
+  id         String       @id @default(cuid())
+  userId     String
+  app        PushApp
+  platform   PushPlatform
+  token      String       @unique
+  deviceName String?
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, app])
+  @@index([app, isActive])
+  @@map("push_tokens")
 }
 
 model Service {

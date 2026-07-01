@@ -233,7 +233,9 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   emitRequestDeleted(driverId: string, payload: RequestDeletedPayload): void {
-    this.server.to(this.getDriverRoom(driverId)).emit('requestDeleted', payload);
+    this.server
+      .to(this.getDriverRoom(driverId))
+      .emit('requestDeleted', payload);
   }
 
   emitOfferNew(customerId: string, payload: OfferNewPayload): void {
@@ -256,8 +258,12 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   emitPaymentHeld(customerId: string, payload: PaymentHeldPayload): void {
-    this.server.to(this.getCustomerRoom(customerId)).emit('paymentHeld', payload);
-    this.server.to(this.getTripRoom(payload.requestId)).emit('paymentHeld', payload);
+    this.server
+      .to(this.getCustomerRoom(customerId))
+      .emit('paymentHeld', payload);
+    this.server
+      .to(this.getTripRoom(payload.requestId))
+      .emit('paymentHeld', payload);
   }
 
   emitPaymentCaptured(

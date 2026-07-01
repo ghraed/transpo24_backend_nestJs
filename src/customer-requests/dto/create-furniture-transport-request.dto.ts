@@ -36,7 +36,9 @@ function toObject(value: unknown): unknown {
   }
 }
 
-function toFurnitureLocation(value: unknown): FurnitureRequestLocationDto | unknown {
+function toFurnitureLocation(
+  value: unknown,
+): FurnitureRequestLocationDto | unknown {
   const parsed = toObject(value);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return parsed;

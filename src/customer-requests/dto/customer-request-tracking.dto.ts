@@ -1,4 +1,7 @@
-import { TransportProofPhotoType, TransportRequestStatus } from '@prisma/client';
+import {
+  TransportProofPhotoType,
+  TransportRequestStatus,
+} from '@prisma/client';
 
 export class RequestProofPhotoDto {
   id!: string;

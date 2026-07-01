@@ -60,6 +60,7 @@ import {
   CustomerRequestTrackingResponseDto,
   RequestProofPhotoDto,
 } from './dto/customer-request-tracking.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface CreateCustomerRequestInput {
   customerId: string;
@@ -461,8 +462,14 @@ type CustomerRequestOfferSource = {
 
 type DispatchSummary = CustomerRequestResponseDto['dispatchSummary'];
 
+type DispatchResult = {
+  summary: DispatchSummary;
+  driverUserIds: string[];
+};
+
 type EligibleDriverDispatchCandidate = {
   id: string;
+  userId: string;
   firstName: string;
   lastName: string;
   status: DriverStatus;
@@ -752,6 +759,7 @@ export class CustomerRequestsService {
     private readonly paymentsService: PaymentsService,
     @Inject(forwardRef(() => TripsGateway))
     private readonly tripsGateway: TripsGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createDraftRequest(
@@ -1829,11 +1837,22 @@ export class CustomerRequestsService {
       },
     });
 
-    const dispatchSummary = await this.dispatchSubmittedRequestToEligibleDrivers(
+    const dispatchResult = await this.dispatchSubmittedRequestToEligibleDrivers(
       updatedRequest,
     );
 
-    return this.toResponseDto(updatedRequest, dispatchSummary);
+    void this.notificationsService
+      .notifyDriversAboutNewTransportRequest({
+        driverIds: dispatchResult.driverUserIds,
+        requestId: updatedRequest.id,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Failed to notify drivers about request ${updatedRequest.id}: ${error instanceof Error ? error.message : 'Unexpected error'}`,
+        );
+      });
+
+    return this.toResponseDto(updatedRequest, dispatchResult.summary);
   }
 
   async getCustomerRequestStatus(
@@ -2157,15 +2176,93 @@ export class CustomerRequestsService {
         );
       }
 
+      if (request.acceptedOfferId || request.assignedDriverId) {
+        if (!request.acceptedOfferId || !request.assignedDriverId) {
+          throw new ConflictException(
+            'An offer has already been accepted for this request.',
+          );
+        }
+
+        if (request.acceptedOfferId !== input.offerId) {
+          throw new ConflictException(
+            'A different offer has already been accepted for this request.',
+          );
+        }
+
+        const [acceptedOffer, paymentHold] = await Promise.all([
+          tx.driverOffer.findUnique({
+            where: { id: request.acceptedOfferId },
+            select: {
+              id: true,
+              requestId: true,
+              driverId: true,
+              status: true,
+              price: true,
+              currency: true,
+              estimatedPickupAt: true,
+              estimatedDeliveryAt: true,
+              estimatedDurationMinutes: true,
+              message: true,
+              acceptedAt: true,
+              createdAt: true,
+            },
+          }),
+          tx.paymentHold.findUnique({
+            where: { requestId: request.id },
+            select: {
+              id: true,
+              requestId: true,
+              acceptedOfferId: true,
+              customerId: true,
+              driverId: true,
+              amount: true,
+              currency: true,
+              paymentMethod: true,
+              provider: true,
+              status: true,
+              stripePaymentIntentId: true,
+              stripeClientSecret: true,
+              stripeChargeId: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          }),
+        ]);
+
+        if (!acceptedOffer) {
+          throw new NotFoundException('Accepted offer not found.');
+        }
+
+        if (!paymentHold) {
+          throw new ConflictException(
+            'Payment hold not found for the accepted offer.',
+          );
+        }
+
+        if (!SUCCESSFUL_PAYMENT_HOLD_STATUSES.has(paymentHold.status)) {
+          throw new ConflictException(
+            'The accepted offer payment is not authorized successfully yet.',
+          );
+        }
+
+        return {
+          acceptedOffer,
+          payment: this.toPaymentSummaryResponse(paymentHold),
+          updatedRequest: {
+            id: request.id,
+            status: request.status,
+            assignedDriverId: request.assignedDriverId,
+            acceptedOfferId: request.acceptedOfferId,
+            acceptedAt: request.acceptedAt ?? acceptedOffer.acceptedAt,
+          },
+          rejectedOffersCount: 0,
+          rejectedOffers: [],
+        };
+      }
+
       if (!ACCEPTABLE_OFFER_REQUEST_STATUSES.includes(request.status)) {
         throw new BadRequestException(
           'Request is not in a state where offers can be accepted.',
-        );
-      }
-
-      if (request.acceptedOfferId || request.assignedDriverId) {
-        throw new ConflictException(
-          'An offer has already been accepted for this request.',
         );
       }
 
@@ -2302,12 +2399,16 @@ export class CustomerRequestsService {
         status: result.updatedRequest.status,
         assignedDriverId: result.updatedRequest.assignedDriverId,
         acceptedOfferId: result.updatedRequest.acceptedOfferId,
-        acceptedAt: null,
+        acceptedAt: result.updatedRequest.acceptedAt
+          ? result.updatedRequest.acceptedAt.toISOString()
+          : null,
       },
       acceptedOffer: this.toAcceptedOfferResponse(result.acceptedOffer),
       payment: result.payment,
       rejectedOffersCount: result.rejectedOffersCount,
-      nextStep: 'CONFIRM_PAYMENT' as const,
+      nextStep: result.updatedRequest.assignedDriverId
+        ? ('TRACK_REQUEST' as const)
+        : ('CONFIRM_PAYMENT' as const),
     };
     try {
       this.tripsGateway.emitPaymentHeld(input.customerId, result.payment);
@@ -3275,14 +3376,17 @@ export class CustomerRequestsService {
         icon: string | null;
       } | null;
     },
-  ): Promise<DispatchSummary> {
+  ): Promise<DispatchResult> {
     if (!request.service) {
       return {
-        eligibleDriversCount: 0,
-        connectedDriversCount: 0,
-        alertsCreatedCount: 0,
-        broadcastedAt: new Date().toISOString(),
-        noConnectedDriversAvailable: true,
+        summary: {
+          eligibleDriversCount: 0,
+          connectedDriversCount: 0,
+          alertsCreatedCount: 0,
+          broadcastedAt: new Date().toISOString(),
+          noConnectedDriversAvailable: true,
+        },
+        driverUserIds: [],
       };
     }
 
@@ -3301,6 +3405,7 @@ export class CustomerRequestsService {
       },
       select: {
         id: true,
+        userId: true,
         firstName: true,
         lastName: true,
         status: true,
@@ -3334,6 +3439,7 @@ export class CustomerRequestsService {
     const filteredDrivers = eligibleDrivers.filter((driver) =>
       this.isEligibleForRealtimeDispatch(request, driver),
     );
+    const driverUserIds = filteredDrivers.map((driver) => driver.userId);
 
     const existingAlerts = await this.prisma.driverRequestAlert.findMany({
       where: {
@@ -3397,11 +3503,14 @@ export class CustomerRequestsService {
     }
 
     return {
-      eligibleDriversCount: filteredDrivers.length,
-      connectedDriversCount,
-      alertsCreatedCount,
-      broadcastedAt,
-      noConnectedDriversAvailable: connectedDriversCount === 0,
+      summary: {
+        eligibleDriversCount: filteredDrivers.length,
+        connectedDriversCount,
+        alertsCreatedCount,
+        broadcastedAt,
+        noConnectedDriversAvailable: connectedDriversCount === 0,
+      },
+      driverUserIds,
     };
   }
 

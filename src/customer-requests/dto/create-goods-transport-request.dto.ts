@@ -17,7 +17,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-
 function toBoolean(value: unknown): boolean | undefined {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -77,7 +76,9 @@ export class CreateGoodsTransportRequestDto {
   @IsBoolean()
   requiresRefrigeration!: boolean;
 
-  @ValidateIf((value: CreateGoodsTransportRequestDto) => value.approximateWeightKg >= 50)
+  @ValidateIf(
+    (value: CreateGoodsTransportRequestDto) => value.approximateWeightKg >= 50,
+  )
   @IsEnum(GoodsHeavyShipmentType)
   heavyShipmentType?: GoodsHeavyShipmentType;
 

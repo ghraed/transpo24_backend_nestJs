@@ -5,7 +5,9 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CustomerRequestsModule } from './customer-requests/customer-requests.module';
 import { DriverModule } from './driver/driver.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PushTokensModule } from './push-tokens/push-tokens.module';
 import { TripsModule } from './trips/trips.module';
 import { ServicesModule } from './services/services.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
@@ -16,7 +18,9 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     ServicesModule,
     CustomerRequestsModule,
     DriverModule,
+    NotificationsModule,
     PaymentsModule,
+    PushTokensModule,
     TripsModule,
     VehiclesModule,
   ],

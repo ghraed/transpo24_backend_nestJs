@@ -9,7 +9,11 @@ import { TripsGateway } from './trips.gateway';
 import { TripsService } from './trips.service';
 
 @Module({
-  imports: [AuthModule, forwardRef(() => CustomerRequestsModule), forwardRef(() => PaymentsModule)],
+  imports: [
+    AuthModule,
+    forwardRef(() => CustomerRequestsModule),
+    forwardRef(() => PaymentsModule),
+  ],
   controllers: [TripsController, CustomerTripsController],
   providers: [TripsService, TripsGateway, PrismaService],
   exports: [TripsService, TripsGateway],

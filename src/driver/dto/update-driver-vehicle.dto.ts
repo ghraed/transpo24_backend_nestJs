@@ -1,7 +1,4 @@
-import {
-  DriverVehicleCondition,
-  VehicleType,
-} from '@prisma/client';
+import { DriverVehicleCondition, VehicleType } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
