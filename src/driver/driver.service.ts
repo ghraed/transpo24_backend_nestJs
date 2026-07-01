@@ -5349,6 +5349,20 @@ export class DriverService {
     );
   }
 
+  private hasExpiredRequiredOnboardingDocuments(
+    documents: DocumentSource[],
+  ): boolean {
+    const now = Date.now();
+
+    return documents.some(
+      (document) =>
+        DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES.includes(document.type) &&
+        document.status !== DocumentStatus.REJECTED &&
+        document.expiresAt !== null &&
+        document.expiresAt.getTime() < now,
+    );
+  }
+
   private toOnboardingDocumentsStatusResponse(
     profile: DriverProfileSource,
     documents: DocumentSource[],
@@ -5356,9 +5370,12 @@ export class DriverService {
     const latestDocuments = this.uniqueLatestDocumentsByType(documents);
     const missingDocuments =
       this.getMissingOnboardingDocuments(latestDocuments);
+    const hasExpiredRequiredDocuments =
+      this.hasExpiredRequiredOnboardingDocuments(latestDocuments);
     const canSubmitForReview =
       profile.isProfileCompleted &&
       missingDocuments.length === 0 &&
+      !hasExpiredRequiredDocuments &&
       profile.status !== DriverStatus.PENDING_REVIEW &&
       profile.status !== DriverStatus.APPROVED &&
       profile.status !== DriverStatus.SUSPENDED;
