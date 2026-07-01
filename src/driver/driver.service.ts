@@ -66,6 +66,7 @@ import {
 } from './dto/driver-offer.dto';
 import {
   DriverDocumentResponseDto,
+  DriverVehicleCompletenessResponseDto,
   DriverVehicleDocumentsResponseDto,
   DriverVehiclesListResponseDto,
   VehicleResponseDto,
@@ -5202,6 +5203,7 @@ export class DriverService {
     const workingSchedule = this.parseVehicleWorkingSchedule(
       vehicle.workingSchedule,
     );
+    const completeness = this.toVehicleCompletenessResponse(vehicle, documents);
 
     return {
       id: vehicle.id,
@@ -5252,12 +5254,62 @@ export class DriverService {
       registrationExpiryDate: vehicle.registrationExpiryDate
         ? vehicle.registrationExpiryDate.toISOString()
         : null,
+      completeness,
       status: vehicle.status,
       verificationStatus: vehicle.status,
       rejectionReason: vehicle.rejectionReason,
       isActive: vehicle.isActive,
       createdAt: vehicle.createdAt.toISOString(),
       updatedAt: vehicle.updatedAt.toISOString(),
+    };
+  }
+
+  private toVehicleCompletenessResponse(
+    vehicle: VehicleSource,
+    documents: DocumentSource[],
+  ): DriverVehicleCompletenessResponseDto {
+    const eligibleDocuments = documents.filter(
+      (document) => document.status !== DocumentStatus.REJECTED,
+    );
+    const documentTypes = new Set(eligibleDocuments.map((document) => document.type));
+
+    const hasBasicInfo =
+      vehicle.make.trim().length > 0 &&
+      vehicle.model.trim().length > 0 &&
+      Number.isInteger(vehicle.year) &&
+      vehicle.year >= 1980 &&
+      vehicle.plateNumber.trim().length > 0;
+
+    const hasRequiredPhotos =
+      documentTypes.has(DriverDocumentType.VEHICLE_FRONT_PHOTO) &&
+      documentTypes.has(DriverDocumentType.VEHICLE_REAR_PHOTO) &&
+      documentTypes.has(DriverDocumentType.VEHICLE_SIDE_PHOTO) &&
+      documentTypes.has(DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO);
+
+    const hasRequiredDocuments =
+      documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_FRONT) &&
+      documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_BACK) &&
+      documentTypes.has(DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT);
+
+    const missingFields: string[] = [];
+    if (!vehicle.make.trim()) missingFields.push('brand');
+    if (!vehicle.model.trim()) missingFields.push('model');
+    if (!Number.isInteger(vehicle.year) || vehicle.year < 1980) missingFields.push('year');
+    if (!vehicle.plateNumber.trim()) missingFields.push('plateNumber');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_FRONT_PHOTO)) missingFields.push('frontPhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_REAR_PHOTO)) missingFields.push('rearPhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_SIDE_PHOTO)) missingFields.push('sidePhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO)) missingFields.push('licensePlatePhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_FRONT)) missingFields.push('registrationFrontDocument');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_BACK)) missingFields.push('registrationBackDocument');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT)) missingFields.push('insuranceDocument');
+
+    return {
+      hasBasicInfo,
+      hasRequiredPhotos,
+      hasRequiredDocuments,
+      isComplete: hasBasicInfo && hasRequiredPhotos && hasRequiredDocuments,
+      missingFields,
     };
   }
 

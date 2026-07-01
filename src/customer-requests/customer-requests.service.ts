@@ -12,8 +12,10 @@ import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 import {
+  DocumentStatus,
   DriverDocumentType,
   DriverOfferStatus,
+  DriverVehicleReviewStatus,
   DriverRequestAlertStatus,
   DriverStatus,
   GoodsHeavyShipmentType,
@@ -2334,7 +2336,7 @@ export class CustomerRequestsService {
             },
           },
           vehicles: {
-            where: { isActive: true },
+            where: this.buildCompleteApprovedVehicleWhereInput(),
             select: { id: true },
             take: 1,
           },
@@ -2354,7 +2356,7 @@ export class CustomerRequestsService {
 
       if (driverProfile.vehicles.length === 0) {
         throw new BadRequestException(
-          'Offer driver must have at least one active vehicle.',
+          'Offer driver must have at least one complete active vehicle.',
         );
       }
 
@@ -3400,7 +3402,7 @@ export class CustomerRequestsService {
           },
         },
         vehicles: {
-          some: { isActive: true, status: 'APPROVED' },
+          some: this.buildCompleteApprovedVehicleWhereInput(),
         },
       },
       select: {
@@ -3421,7 +3423,7 @@ export class CustomerRequestsService {
           },
         },
         vehicles: {
-          where: { isActive: true, status: 'APPROVED' },
+          where: this.buildCompleteApprovedVehicleWhereInput(),
           select: {
             vehicleType: true,
             capacityKg: true,
@@ -3511,6 +3513,71 @@ export class CustomerRequestsService {
         noConnectedDriversAvailable: connectedDriversCount === 0,
       },
       driverUserIds,
+    };
+  }
+
+  private buildCompleteApprovedVehicleWhereInput(): Prisma.DriverVehicleWhereInput {
+    return {
+      isActive: true,
+      status: DriverVehicleReviewStatus.APPROVED,
+      AND: [
+        {
+          documents: {
+            some: {
+              type: DriverDocumentType.VEHICLE_FRONT_PHOTO,
+              status: { not: DocumentStatus.REJECTED },
+            },
+          },
+        },
+        {
+          documents: {
+            some: {
+              type: DriverDocumentType.VEHICLE_REAR_PHOTO,
+              status: { not: DocumentStatus.REJECTED },
+            },
+          },
+        },
+        {
+          documents: {
+            some: {
+              type: DriverDocumentType.VEHICLE_SIDE_PHOTO,
+              status: { not: DocumentStatus.REJECTED },
+            },
+          },
+        },
+        {
+          documents: {
+            some: {
+              type: DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
+              status: { not: DocumentStatus.REJECTED },
+            },
+          },
+        },
+        {
+          documents: {
+            some: {
+              type: DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
+              status: { not: DocumentStatus.REJECTED },
+            },
+          },
+        },
+        {
+          documents: {
+            some: {
+              type: DriverDocumentType.VEHICLE_REGISTRATION_BACK,
+              status: { not: DocumentStatus.REJECTED },
+            },
+          },
+        },
+        {
+          documents: {
+            some: {
+              type: DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
+              status: { not: DocumentStatus.REJECTED },
+            },
+          },
+        },
+      ],
     };
   }
 

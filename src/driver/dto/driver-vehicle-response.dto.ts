@@ -19,6 +19,14 @@ export type DriverVehicleNextStep =
   | 'WAITING_APPROVAL'
   | 'HOME';
 
+export interface DriverVehicleCompletenessResponseDto {
+  hasBasicInfo: boolean;
+  hasRequiredPhotos: boolean;
+  hasRequiredDocuments: boolean;
+  isComplete: boolean;
+  missingFields: string[];
+}
+
 export interface VehicleResponseDto {
   id: string;
   driverId: string;
@@ -58,6 +66,7 @@ export interface VehicleResponseDto {
   insuranceDocumentUrl: string | null;
   insuranceExpiryDate: string | null;
   registrationExpiryDate: string | null;
+  completeness: DriverVehicleCompletenessResponseDto;
   status: DriverVehicleReviewStatus;
   verificationStatus: DriverVehicleReviewStatus;
   rejectionReason: string | null;
