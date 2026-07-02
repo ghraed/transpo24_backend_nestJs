@@ -1,5 +1,6 @@
 import {
   DriverRequestAlertStatus,
+  DriverOfferStatus,
   ItemType,
   ServiceKey,
   TransportRequestStatus,
@@ -61,6 +62,7 @@ export interface DriverRequestAlertsResponseDto {
 }
 
 export interface DriverRequestDetailsResponseDto extends DriverRequestAlertSummaryDto {
+  offerStatus: DriverOfferStatus | null;
   customer: {
     firstName: string | null;
     rating: number | null;

@@ -466,7 +466,12 @@ type DispatchSummary = CustomerRequestResponseDto['dispatchSummary'];
 
 type DispatchResult = {
   summary: DispatchSummary;
-  driverUserIds: string[];
+  driverNotifications: Array<{
+    userId: string;
+    requestId: string;
+    serviceType: string;
+    distanceKm: number | null;
+  }>;
 };
 
 type EligibleDriverDispatchCandidate = {
@@ -1845,8 +1850,7 @@ export class CustomerRequestsService {
 
     void this.notificationsService
       .notifyDriversAboutNewTransportRequest({
-        driverIds: dispatchResult.driverUserIds,
-        requestId: updatedRequest.id,
+        drivers: dispatchResult.driverNotifications,
       })
       .catch((error: unknown) => {
         this.logger.error(
@@ -2685,6 +2689,11 @@ export class CustomerRequestsService {
         dropoffLatitude: true,
         dropoffLongitude: true,
         dropoffAddress: true,
+        service: {
+          select: {
+            nameEn: true,
+          },
+        },
       },
     });
 
@@ -2741,6 +2750,18 @@ export class CustomerRequestsService {
       }
 
       this.tripsGateway.emitRequestDriverSelected(input.customerId, response);
+
+      void this.notificationsService
+        .notifyDriverSelected({
+          driverId: result.updatedRequest.assignedDriverId,
+          requestId: result.updatedRequest.id,
+          serviceType: acceptedRequest?.service?.nameEn ?? null,
+        })
+        .catch((notificationError: unknown) => {
+          this.logger.error(
+            `Failed to notify selected driver for request ${result.updatedRequest.id}: ${notificationError instanceof Error ? notificationError.message : 'Unexpected error'}`,
+          );
+        });
     } catch (error) {
       this.logger.error(
         `Failed to emit finalized payment events for request ${result.updatedRequest.id}.`,
@@ -3388,7 +3409,7 @@ export class CustomerRequestsService {
           broadcastedAt: new Date().toISOString(),
           noConnectedDriversAvailable: true,
         },
-        driverUserIds: [],
+        driverNotifications: [],
       };
     }
 
@@ -3441,7 +3462,7 @@ export class CustomerRequestsService {
     const filteredDrivers = eligibleDrivers.filter((driver) =>
       this.isEligibleForRealtimeDispatch(request, driver),
     );
-    const driverUserIds = filteredDrivers.map((driver) => driver.userId);
+    const driverNotifications: DispatchResult['driverNotifications'] = [];
 
     const existingAlerts = await this.prisma.driverRequestAlert.findMany({
       where: {
@@ -3485,6 +3506,20 @@ export class CustomerRequestsService {
         alertsCreatedCount += 1;
       }
 
+      const distanceKm = this.calculateDistanceKm(
+        driver.availability?.baseLatitude ?? null,
+        driver.availability?.baseLongitude ?? null,
+        request.pickupLatitude,
+        request.pickupLongitude,
+      );
+
+      driverNotifications.push({
+        userId: driver.userId,
+        requestId: request.id,
+        serviceType: request.service.nameEn,
+        distanceKm,
+      });
+
       const roomConnections = this.tripsGateway.getDriverConnectionCount(driver.id);
       if (roomConnections > 0) {
         connectedDriversCount += 1;
@@ -3493,12 +3528,7 @@ export class CustomerRequestsService {
           this.toDriverRequestAlertSummaryPayload(
             request,
             alert,
-            this.calculateDistanceKm(
-              driver.availability?.baseLatitude ?? null,
-              driver.availability?.baseLongitude ?? null,
-              request.pickupLatitude,
-              request.pickupLongitude,
-            ),
+            distanceKm,
           ),
         );
       }
@@ -3512,7 +3542,7 @@ export class CustomerRequestsService {
         broadcastedAt,
         noConnectedDriversAvailable: connectedDriversCount === 0,
       },
-      driverUserIds,
+      driverNotifications,
     };
   }
 

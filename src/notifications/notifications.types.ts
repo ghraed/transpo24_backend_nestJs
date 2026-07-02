@@ -5,6 +5,7 @@ export type NotificationRecipientApp = PushApp;
 export type PushNotificationType =
   | 'NEW_TRANSPORT_REQUEST'
   | 'NEW_DRIVER_OFFER'
+  | 'DRIVER_SELECTED'
   | string;
 
 export interface SendPushNotificationInput {

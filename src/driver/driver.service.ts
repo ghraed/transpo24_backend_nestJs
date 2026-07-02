@@ -496,6 +496,7 @@ type RequestDetailsSource = {
   id: string;
   customerId: string;
   status: TransportRequestStatus;
+  assignedDriverId: string | null;
   submittedAt: Date | null;
   pickupLatitude: number | null;
   pickupLongitude: number | null;
@@ -701,6 +702,7 @@ const DRIVER_REQUEST_ALERT_SELECT = {
 const DRIVER_REQUEST_DETAILS_SELECT = {
   id: true,
   status: true,
+  assignedDriverId: true,
   submittedAt: true,
   pickupLatitude: true,
   pickupLongitude: true,
@@ -1653,17 +1655,28 @@ export class DriverService {
       throw new NotFoundException('Request not found.');
     }
 
-    if (request.status !== TransportRequestStatus.PENDING_QUOTES) {
-      throw new BadRequestException(
-        'Request is no longer available for quotes.',
-      );
-    }
+    const offer = await this.prisma.driverOffer.findUnique({
+      where: {
+        requestId_driverId: {
+          requestId: request.id,
+          driverId: profile.id,
+        },
+      },
+      select: {
+        status: true,
+      },
+    });
 
-    const vehicles = await this.getApprovedDriverVehicles(profile.id);
-    if (
-      !request.service ||
-      !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
-    ) {
+    const existingAlert =
+      request.driverAlerts.find((alert) => alert.driverId === profile.id) ?? null;
+    const isSelectedDriver = request.assignedDriverId === profile.id;
+    const hasOfferAccess = Boolean(offer);
+    const hasAlertAccess =
+      existingAlert !== null &&
+      existingAlert.status !== DriverRequestAlertStatus.IGNORED &&
+      existingAlert.status !== DriverRequestAlertStatus.EXPIRED;
+
+    if (!hasAlertAccess && !hasOfferAccess && !isSelectedDriver) {
       throw new NotFoundException('Request not available for this driver.');
     }
 
@@ -1676,36 +1689,24 @@ export class DriverService {
       },
     });
 
-    if (!availability) {
-      throw new BadRequestException(
-        'Driver availability must be configured first.',
-      );
+    const distanceKm = availability
+      ? this.calculateDistanceKm(
+          availability.baseLatitude,
+          availability.baseLongitude,
+          request.pickupLatitude,
+          request.pickupLongitude,
+        )
+      : null;
+
+    let alert = existingAlert;
+    if (!alert && (hasOfferAccess || isSelectedDriver)) {
+      alert = await this.ensureDriverRequestAlert({
+        requestId: request.id,
+        driverId: profile.id,
+      });
     }
 
-    const distanceKm = this.calculateDistanceKm(
-      availability.baseLatitude,
-      availability.baseLongitude,
-      request.pickupLatitude,
-      request.pickupLongitude,
-    );
-
-    if (
-      distanceKm !== null &&
-      availability.serviceRadiusKm > 0 &&
-      distanceKm > availability.serviceRadiusKm
-    ) {
-      throw new NotFoundException('Request not available for this driver.');
-    }
-
-    const alert = await this.ensureDriverRequestAlert({
-      requestId: request.id,
-      driverId: profile.id,
-    });
-
-    if (
-      alert.status === DriverRequestAlertStatus.IGNORED ||
-      alert.status === DriverRequestAlertStatus.EXPIRED
-    ) {
+    if (!alert) {
       throw new NotFoundException('Request not available for this driver.');
     }
 
@@ -1718,7 +1719,12 @@ export class DriverService {
           })
         : alert;
 
-    return this.toRequestDetailsResponse(request, seenAlert, distanceKm);
+    return this.toRequestDetailsResponse(
+      request,
+      seenAlert,
+      distanceKm,
+      offer?.status ?? null,
+    );
   }
 
   async markDriverRequestSeen(
@@ -4420,6 +4426,7 @@ export class DriverService {
     request: RequestDetailsSource,
     alert: RequestAlertSource,
     distanceKm: number | null,
+    offerStatus: DriverOfferStatus | null,
   ): DriverRequestDetailsResponseDto {
     const summary = this.toRequestAlertSummary(request, alert, distanceKm);
     const customerFirstName = request.customer?.name
@@ -4428,6 +4435,7 @@ export class DriverService {
 
     return {
       ...summary,
+      offerStatus,
       customer: {
         firstName: customerFirstName,
         rating: null,

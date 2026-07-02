@@ -117,19 +117,32 @@ export class NotificationsService {
   }
 
   async notifyDriversAboutNewTransportRequest(input: {
-    driverIds: string[];
-    requestId: string;
+    drivers: Array<{
+      userId: string;
+      requestId: string;
+      serviceType: string;
+      distanceKm: number | null;
+    }>;
   }): Promise<void> {
-    await this.sendToUsers({
-      userIds: input.driverIds,
-      app: PushApp.DRIVER,
-      title: 'New transport request',
-      body: 'A new transport job is available. Send your offer now.',
-      type: 'NEW_TRANSPORT_REQUEST',
-      data: {
-        requestId: input.requestId,
-      },
-    });
+    for (const driver of input.drivers) {
+      const distanceLabel =
+        driver.distanceKm === null
+          ? 'Distance available in app'
+          : `${driver.distanceKm.toFixed(1)} km away`;
+
+      await this.sendToUsers({
+        userIds: [driver.userId],
+        app: PushApp.DRIVER,
+        title: 'New transport request',
+        body: `${driver.serviceType} · ${distanceLabel}`,
+        type: 'NEW_TRANSPORT_REQUEST',
+        data: {
+          requestId: driver.requestId,
+          serviceType: driver.serviceType,
+          distanceKm: driver.distanceKm,
+        },
+      });
+    }
   }
 
   async notifyCustomerAboutDriverOffer(input: {
@@ -152,6 +165,26 @@ export class NotificationsService {
       data: {
         requestId: input.requestId,
         offerId: input.offerId,
+      },
+    });
+  }
+
+  async notifyDriverSelected(input: {
+    driverId: string;
+    requestId: string;
+    serviceType?: string | null;
+  }): Promise<void> {
+    const serviceLabel = input.serviceType?.trim() || 'transport request';
+
+    await this.sendToUsers({
+      userIds: [input.driverId],
+      app: PushApp.DRIVER,
+      title: 'Customer selected you',
+      body: `You were selected for ${serviceLabel}.`,
+      type: 'DRIVER_SELECTED',
+      data: {
+        requestId: input.requestId,
+        serviceType: input.serviceType ?? null,
       },
     });
   }
