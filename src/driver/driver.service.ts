@@ -1402,12 +1402,12 @@ export class DriverService {
       );
     }
 
-    const hasVehicleDocs = await this.hasVehicleWithRequiredDocuments(
+    const hasEligibleVehicle = await this.hasVehicleReadyForAvailability(
       profile.id,
     );
     this.ensureDriverCanGoOnline(
       profile.status,
-      hasVehicleDocs,
+      hasEligibleVehicle,
       input.isOnline,
     );
 
@@ -2978,9 +2978,12 @@ export class DriverService {
       input.vehicleId,
     );
 
-    if (!this.hasRequiredVehicleDocuments(vehicle.documents)) {
+    if (
+      !this.hasRequiredVehicleDocuments(vehicle.documents) ||
+      !this.hasVehicleLoadCapacityProfile(vehicle)
+    ) {
       throw new BadRequestException(
-        'Vehicle and required documents must be completed before activation.',
+        'Vehicle load profile and required documents must be completed before activation.',
       );
     }
 
@@ -3657,22 +3660,25 @@ export class DriverService {
       return 'WAITING_APPROVAL';
     }
 
-    const hasVehicleWithRequiredDocuments = vehicles.some((vehicle) =>
-      this.hasRequiredVehicleDocuments(vehicle.documents),
+    const hasVehicleReadyForDocumentsStep = vehicles.some(
+      (vehicle) =>
+        this.hasRequiredVehicleDocuments(vehicle.documents) &&
+        this.hasVehicleLoadCapacityProfile(vehicle),
     );
 
-    if (!hasVehicleWithRequiredDocuments) {
+    if (!hasVehicleReadyForDocumentsStep) {
       return 'ADD_VEHICLE_DOCUMENTS';
     }
 
-    const hasApprovedVehicleWithRequiredDocuments = vehicles.some(
+    const hasApprovedVehicleReady = vehicles.some(
       (vehicle) =>
         vehicle.isActive &&
         vehicle.status === DriverVehicleReviewStatus.APPROVED &&
-        this.hasRequiredVehicleDocuments(vehicle.documents),
+        this.hasRequiredVehicleDocuments(vehicle.documents) &&
+        this.hasVehicleLoadCapacityProfile(vehicle),
     );
 
-    if (!hasApprovedVehicleWithRequiredDocuments) {
+    if (!hasApprovedVehicleReady) {
       return 'WAITING_APPROVAL';
     }
 
@@ -4550,16 +4556,16 @@ export class DriverService {
   private async ensureDriverVehicleDocumentsReady(
     driverId: string,
   ): Promise<void> {
-    const hasRequiredDocuments =
-      await this.hasVehicleWithRequiredDocuments(driverId);
-    if (!hasRequiredDocuments) {
+    const hasEligibleVehicle =
+      await this.hasVehicleReadyForAvailability(driverId);
+    if (!hasEligibleVehicle) {
       throw new BadRequestException(
-        'Vehicle and required documents must be completed before setting availability.',
+        'At least one approved active vehicle with load profile and required documents must be completed before setting availability.',
       );
     }
   }
 
-  private async hasVehicleWithRequiredDocuments(
+  private async hasVehicleReadyForAvailability(
     driverId: string,
   ): Promise<boolean> {
     const vehicles = await this.prisma.driverVehicle.findMany({
@@ -4569,6 +4575,13 @@ export class DriverService {
         status: DriverVehicleReviewStatus.APPROVED,
       },
       select: {
+        vehicleType: true,
+        capacityKg: true,
+        lengthCm: true,
+        widthCm: true,
+        heightCm: true,
+        allowedCargoTypes: true,
+        workingSchedule: true,
         id: true,
         documents: {
           select: {
@@ -4579,13 +4592,15 @@ export class DriverService {
       },
     });
 
-    return vehicles.some((vehicle) =>
-      this.hasRequiredVehicleDocuments(
+    return vehicles.some((vehicle) => {
+      const hasRequiredDocuments = this.hasRequiredVehicleDocuments(
         vehicle.documents.filter(
           (document) => document.status !== DocumentStatus.REJECTED,
         ),
-      ),
-    );
+      );
+
+      return hasRequiredDocuments && this.hasVehicleLoadCapacityProfile(vehicle);
+    });
   }
 
   private resolveStatusAfterAvailability(
@@ -4671,7 +4686,7 @@ export class DriverService {
 
   private ensureDriverCanGoOnline(
     status: DriverStatus,
-    hasVehicleWithRequiredDocuments: boolean,
+    hasEligibleVehicle: boolean,
     isOnlineRequested = true,
   ): void {
     if (!isOnlineRequested) {
@@ -4684,9 +4699,9 @@ export class DriverService {
       );
     }
 
-    if (!hasVehicleWithRequiredDocuments) {
+    if (!hasEligibleVehicle) {
       throw new BadRequestException(
-        'At least one active vehicle with required documents is needed to go online.',
+        'At least one active vehicle with load profile and required documents is needed to go online.',
       );
     }
 
@@ -5279,6 +5294,7 @@ export class DriverService {
       Number.isInteger(vehicle.year) &&
       vehicle.year >= 1980 &&
       vehicle.plateNumber.trim().length > 0;
+    const hasLoadCapacityProfile = this.hasVehicleLoadCapacityProfile(vehicle);
 
     const hasRequiredPhotos =
       documentTypes.has(DriverDocumentType.VEHICLE_FRONT_PHOTO) &&
@@ -5296,6 +5312,14 @@ export class DriverService {
     if (!vehicle.model.trim()) missingFields.push('model');
     if (!Number.isInteger(vehicle.year) || vehicle.year < 1980) missingFields.push('year');
     if (!vehicle.plateNumber.trim()) missingFields.push('plateNumber');
+    if (!vehicle.allowedCargoTypes.length) missingFields.push('allowedCargoTypes');
+    if (!this.hasVehicleWorkingSchedule(vehicle)) missingFields.push('workingSchedule');
+    if (!isCarCarrierVehicleType(vehicle.vehicleType)) {
+      if (vehicle.capacityKg === null || vehicle.capacityKg <= 0) missingFields.push('maxLoadKg');
+      if (vehicle.lengthCm === null || vehicle.lengthCm <= 0) missingFields.push('cargoLengthM');
+      if (vehicle.widthCm === null || vehicle.widthCm <= 0) missingFields.push('cargoWidthM');
+      if (vehicle.heightCm === null || vehicle.heightCm <= 0) missingFields.push('cargoHeightM');
+    }
     if (!documentTypes.has(DriverDocumentType.VEHICLE_FRONT_PHOTO)) missingFields.push('frontPhoto');
     if (!documentTypes.has(DriverDocumentType.VEHICLE_REAR_PHOTO)) missingFields.push('rearPhoto');
     if (!documentTypes.has(DriverDocumentType.VEHICLE_SIDE_PHOTO)) missingFields.push('sidePhoto');
@@ -5306,11 +5330,57 @@ export class DriverService {
 
     return {
       hasBasicInfo,
+      hasLoadCapacityProfile,
       hasRequiredPhotos,
       hasRequiredDocuments,
-      isComplete: hasBasicInfo && hasRequiredPhotos && hasRequiredDocuments,
+      isComplete:
+        hasBasicInfo &&
+        hasLoadCapacityProfile &&
+        hasRequiredPhotos &&
+        hasRequiredDocuments,
       missingFields,
     };
+  }
+
+  private hasVehicleLoadCapacityProfile(
+    vehicle: Pick<
+      VehicleSource,
+      | 'vehicleType'
+      | 'capacityKg'
+      | 'lengthCm'
+      | 'widthCm'
+      | 'heightCm'
+      | 'allowedCargoTypes'
+      | 'workingSchedule'
+    >,
+  ): boolean {
+    if (!vehicle.allowedCargoTypes.length || !this.hasVehicleWorkingSchedule(vehicle)) {
+      return false;
+    }
+
+    if (isCarCarrierVehicleType(vehicle.vehicleType)) {
+      return true;
+    }
+
+    return (
+      vehicle.capacityKg !== null &&
+      vehicle.capacityKg > 0 &&
+      vehicle.lengthCm !== null &&
+      vehicle.lengthCm > 0 &&
+      vehicle.widthCm !== null &&
+      vehicle.widthCm > 0 &&
+      vehicle.heightCm !== null &&
+      vehicle.heightCm > 0
+    );
+  }
+
+  private hasVehicleWorkingSchedule(
+    vehicle: Pick<VehicleSource, 'workingSchedule'>,
+  ): boolean {
+    const schedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
+    return schedule.some(
+      (day) => day.isAvailable && day.timeRanges.length > 0,
+    );
   }
 
   private toDocumentResponse(

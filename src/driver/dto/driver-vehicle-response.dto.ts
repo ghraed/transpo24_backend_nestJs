@@ -21,6 +21,7 @@ export type DriverVehicleNextStep =
 
 export interface DriverVehicleCompletenessResponseDto {
   hasBasicInfo: boolean;
+  hasLoadCapacityProfile: boolean;
   hasRequiredPhotos: boolean;
   hasRequiredDocuments: boolean;
   isComplete: boolean;
