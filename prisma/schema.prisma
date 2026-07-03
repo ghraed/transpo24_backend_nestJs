@@ -825,6 +825,9 @@ model AdditionalCharge {
   equipmentType     String?
   invoiceUrl        String
   invoiceStorageKey String?
+  invoiceOriginalFilename String?
+  invoiceMimeType   String?
+  invoiceSizeBytes  Int?
   status            AdditionalChargeStatus @default(PENDING)
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt

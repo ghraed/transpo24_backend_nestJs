@@ -57,6 +57,7 @@ export const DRIVER_PICKUP_ARRIVAL_RADIUS_METERS = 100;
 export const PICKUP_ITEM_RADIUS_METERS = 150;
 export const DELIVER_ITEM_RADIUS_METERS = 150;
 export const NEAR_DELIVERY_RADIUS_METERS = 5000;
+export const DRIVER_PAYOUT_DELAY_HOURS = 24;
 const MAX_PROOF_PHOTOS = 8;
 const PLATFORM_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
 const DEFAULT_CURRENCY =
@@ -908,6 +909,9 @@ export class TripsService {
     const currency =
       acceptedOffer?.currency ?? trip.currency ?? DEFAULT_CURRENCY;
     const amounts = this.calculateDriverEarningAmounts(grossAmount);
+    const availableAt = this.calculateDriverEarningAvailableAt(
+      trip.deliveredAt,
+    );
 
     await tx.driverEarning.create({
       data: {
@@ -917,8 +921,8 @@ export class TripsService {
         platformFeeAmount: amounts.platformFeeAmount,
         netAmount: amounts.netAmount,
         currency,
-        status: DriverEarningStatus.AVAILABLE,
-        availableAt: trip.deliveredAt,
+        status: DriverEarningStatus.PENDING,
+        availableAt,
       },
     });
   }
@@ -938,6 +942,12 @@ export class TripsService {
       platformFeeAmount,
       netAmount,
     };
+  }
+
+  calculateDriverEarningAvailableAt(deliveredAt: Date): Date {
+    return new Date(
+      deliveredAt.getTime() + DRIVER_PAYOUT_DELAY_HOURS * 60 * 60 * 1000,
+    );
   }
 
   async recalculateDriverRatingAggregate(

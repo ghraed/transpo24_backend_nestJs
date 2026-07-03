@@ -30,6 +30,16 @@ export interface AdditionalChargeResponseDto {
   reason: string;
   equipmentType: string | null;
   invoiceUrl: string;
+  invoice: {
+    originalFilename: string | null;
+    mimeType: string | null;
+    sizeBytes: number | null;
+  };
+  walletDeduction: {
+    amount: number;
+    currency: string;
+    transactionType: 'ADDITIONAL_CHARGE';
+  };
   status: string;
   createdAt: string;
   updatedAt: string;

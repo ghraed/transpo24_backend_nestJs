@@ -459,6 +459,9 @@ export class PaymentsService {
           equipmentType: input.equipmentType?.trim() || null,
           invoiceUrl,
           invoiceStorageKey: storageKey,
+          invoiceOriginalFilename: input.invoiceFile.originalname || null,
+          invoiceMimeType: input.invoiceFile.mimetype || null,
+          invoiceSizeBytes: input.invoiceFile.size ?? null,
           status: AdditionalChargeStatus.CAPTURED,
         },
         select: ADDITIONAL_CHARGE_SELECT,
@@ -965,6 +968,9 @@ export class PaymentsService {
     reason: string;
     equipmentType: string | null;
     invoiceUrl: string;
+    invoiceOriginalFilename: string | null;
+    invoiceMimeType: string | null;
+    invoiceSizeBytes: number | null;
     status: AdditionalChargeStatus;
     createdAt: Date;
     updatedAt: Date;
@@ -979,6 +985,16 @@ export class PaymentsService {
       reason: charge.reason,
       equipmentType: charge.equipmentType,
       invoiceUrl: charge.invoiceUrl,
+      invoice: {
+        originalFilename: charge.invoiceOriginalFilename,
+        mimeType: charge.invoiceMimeType,
+        sizeBytes: charge.invoiceSizeBytes,
+      },
+      walletDeduction: {
+        amount: Number(charge.amount),
+        currency: charge.currency,
+        transactionType: 'ADDITIONAL_CHARGE',
+      },
       status: charge.status,
       createdAt: charge.createdAt.toISOString(),
       updatedAt: charge.updatedAt.toISOString(),
@@ -1038,6 +1054,9 @@ const ADDITIONAL_CHARGE_SELECT = {
   reason: true,
   equipmentType: true,
   invoiceUrl: true,
+  invoiceOriginalFilename: true,
+  invoiceMimeType: true,
+  invoiceSizeBytes: true,
   status: true,
   createdAt: true,
   updatedAt: true,
