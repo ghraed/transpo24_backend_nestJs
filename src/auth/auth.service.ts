@@ -67,6 +67,26 @@ export class AuthService {
     };
   }
 
+  async resetDriversForTesting(): Promise<{
+    deletedDrivers: number;
+    keptEmail: string;
+  }> {
+    const keptEmail = 'driver@test.com';
+    const deleted = await this.prisma.user.deleteMany({
+      where: {
+        role: UserRole.DRIVER,
+        email: {
+          not: keptEmail,
+        },
+      },
+    });
+
+    return {
+      deletedDrivers: deleted.count,
+      keptEmail,
+    };
+  }
+
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
     const normalizedEmail = dto.email.trim().toLowerCase();
 

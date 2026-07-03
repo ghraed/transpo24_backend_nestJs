@@ -38,4 +38,12 @@ export class AuthController {
   resetUsersForTesting(): Promise<{ deletedUsers: number; keptEmail: string }> {
     return this.authService.resetUsersForTesting();
   }
+
+  @Post('testing/reset-drivers')
+  resetDriversForTesting(): Promise<{
+    deletedDrivers: number;
+    keptEmail: string;
+  }> {
+    return this.authService.resetDriversForTesting();
+  }
 }
