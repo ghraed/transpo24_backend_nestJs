@@ -43,6 +43,8 @@ interface RegisterDriverInput {
 const ACCESS_TOKEN_SECRET =
   process.env.ACCESS_TOKEN_SECRET ?? 'transpo24-dev-access-token-secret';
 const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+const DEFAULT_DRIVER_FIRST_NAME = 'Driver';
+const DEFAULT_DRIVER_LAST_NAME = 'Account';
 
 @Injectable()
 export class AuthService {
@@ -129,9 +131,13 @@ export class AuthService {
     const normalizedCities = this.normalizeCities(
       dto.cities ?? (dto.city ? [dto.city] : []),
     );
+    const normalizedNames = this.normalizeDriverRegistrationNames(
+      dto.firstName,
+      dto.lastName,
+    );
     const input: RegisterDriverInput = {
-      firstName: dto.firstName.trim(),
-      lastName: dto.lastName.trim(),
+      firstName: normalizedNames.firstName,
+      lastName: normalizedNames.lastName,
       email: dto.email.trim().toLowerCase(),
       phone: dto.phone.trim(),
       password: dto.password,
@@ -427,6 +433,19 @@ export class AuthService {
         values.map((value) => value.trim()).filter((value) => value.length > 0),
       ),
     );
+  }
+
+  private normalizeDriverRegistrationNames(
+    firstName?: string,
+    lastName?: string,
+  ): { firstName: string; lastName: string } {
+    const normalizedFirstName = firstName?.trim() || DEFAULT_DRIVER_FIRST_NAME;
+    const normalizedLastName = lastName?.trim() || DEFAULT_DRIVER_LAST_NAME;
+
+    return {
+      firstName: normalizedFirstName,
+      lastName: normalizedLastName,
+    };
   }
 
   getUserFromAccessToken(token: string): AuthenticatedUser | null {

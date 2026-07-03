@@ -9,12 +9,12 @@ import {
 } from 'class-validator';
 
 export class RegisterDriverDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   firstName!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   lastName!: string;
 
   @IsEmail()

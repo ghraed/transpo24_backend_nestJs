@@ -427,13 +427,8 @@ const DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES: DriverDocumentType[] = [
   DriverDocumentType.DRIVING_LICENSE,
 ];
 
-const DRIVER_ONBOARDING_OPTIONAL_DOCUMENT_TYPES: DriverDocumentType[] = [
-  DriverDocumentType.SELF_IDENTITY_VERIFICATION,
-];
-
 const DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES: DriverDocumentType[] = [
   ...DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES,
-  ...DRIVER_ONBOARDING_OPTIONAL_DOCUMENT_TYPES,
 ];
 
 type RequestAlertSource = {
@@ -5539,8 +5534,6 @@ export class DriverService {
         return 'ID or residency card back';
       case DriverDocumentType.DRIVING_LICENSE:
         return 'Driving license';
-      case DriverDocumentType.SELF_IDENTITY_VERIFICATION:
-        return 'Self-identity verification';
       default:
         return type;
     }
