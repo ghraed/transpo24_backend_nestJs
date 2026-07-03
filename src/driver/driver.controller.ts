@@ -308,7 +308,7 @@ export class DriverController {
       addressLine1: dto.addressLine1 ?? null,
       addressLine2: dto.addressLine2 ?? null,
       postalCode: dto.postalCode ?? null,
-      preferredLanguage: dto.preferredLanguage ?? null,
+      preferredLanguages: dto.preferredLanguages ?? null,
       emergencyContactName: dto.emergencyContactName ?? null,
       emergencyContactPhone: dto.emergencyContactPhone ?? null,
       profilePhotoUrl: dto.profilePhotoUrl ?? null,

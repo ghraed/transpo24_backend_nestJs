@@ -79,8 +79,10 @@ export class UpdateDriverProfileDto {
   postalCode?: string;
 
   @IsOptional()
-  @IsEnum(PreferredLanguage)
-  preferredLanguage?: PreferredLanguage;
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(PreferredLanguage, { each: true })
+  preferredLanguages?: PreferredLanguage[];
 
   @IsOptional()
   @IsString()

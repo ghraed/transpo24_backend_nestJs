@@ -24,7 +24,7 @@ export interface DriverProfileResponseDto {
   addressLine1: string | null;
   addressLine2: string | null;
   postalCode: string | null;
-  preferredLanguage: PreferredLanguage | null;
+  preferredLanguages: PreferredLanguage[];
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   profilePhotoUrl: string | null;

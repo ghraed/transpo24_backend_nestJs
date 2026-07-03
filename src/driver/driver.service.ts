@@ -118,7 +118,7 @@ interface UpdateDriverProfileInput {
   addressLine1?: string | null;
   addressLine2?: string | null;
   postalCode?: string | null;
-  preferredLanguage?: PreferredLanguage | null;
+  preferredLanguages?: PreferredLanguage[] | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
   profilePhotoUrl?: string | null;
@@ -335,7 +335,7 @@ type DriverProfileSource = {
   addressLine1: string | null;
   addressLine2: string | null;
   postalCode: string | null;
-  preferredLanguage: PreferredLanguage | null;
+  preferredLanguages: PreferredLanguage[];
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   profilePhotoUrl: string | null;
@@ -625,7 +625,7 @@ const DRIVER_ME_SELECT = {
       addressLine1: true,
       addressLine2: true,
       postalCode: true,
-      preferredLanguage: true,
+      preferredLanguages: true,
       emergencyContactName: true,
       emergencyContactPhone: true,
       profilePhotoUrl: true,
@@ -3415,10 +3415,10 @@ export class DriverService {
       input.changes.postalCode !== undefined
         ? input.changes.postalCode?.trim() || null
         : input.existingProfile.postalCode;
-    const nextPreferredLanguage =
-      input.changes.preferredLanguage !== undefined
-        ? (input.changes.preferredLanguage ?? null)
-        : input.existingProfile.preferredLanguage;
+    const nextPreferredLanguages =
+      input.changes.preferredLanguages !== undefined
+        ? this.normalizePreferredLanguages(input.changes.preferredLanguages ?? [])
+        : input.existingProfile.preferredLanguages;
     const nextEmergencyContactName =
       input.changes.emergencyContactName !== undefined
         ? input.changes.emergencyContactName?.trim() || null
@@ -3497,7 +3497,7 @@ export class DriverService {
         addressLine1: nextAddressLine1,
         addressLine2: nextAddressLine2,
         postalCode: nextPostalCode,
-        preferredLanguage: nextPreferredLanguage,
+        preferredLanguages: nextPreferredLanguages,
         emergencyContactName: nextEmergencyContactName,
         emergencyContactPhone: nextEmergencyContactPhone,
         profilePhotoUrl: nextProfilePhotoUrl,
@@ -3535,6 +3535,12 @@ export class DriverService {
     return [
       ...new Set(coverageAreas.map((area) => area.trim()).filter(Boolean)),
     ];
+  }
+
+  private normalizePreferredLanguages(
+    preferredLanguages: PreferredLanguage[],
+  ): PreferredLanguage[] {
+    return [...new Set(preferredLanguages)];
   }
 
   private normalizeCountryCodes(countryCodes: string[]): string[] {
@@ -5691,7 +5697,7 @@ export class DriverService {
       addressLine1: profile.addressLine1,
       addressLine2: profile.addressLine2,
       postalCode: profile.postalCode,
-      preferredLanguage: profile.preferredLanguage,
+      preferredLanguages: profile.preferredLanguages,
       emergencyContactName: profile.emergencyContactName,
       emergencyContactPhone: profile.emergencyContactPhone,
       profilePhotoUrl: profile.profilePhotoUrl,

@@ -513,7 +513,7 @@ model DriverProfile {
   postalCode            String?
   identityDocumentKind  IdentityDocumentKind?
   profilePhotoUrl       String?
-  preferredLanguage     PreferredLanguage?
+  preferredLanguages    PreferredLanguage[] @default([])
   emergencyContactName  String?
   emergencyContactPhone String?
   submittedForReviewAt  DateTime?

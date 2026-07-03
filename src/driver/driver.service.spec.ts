@@ -27,7 +27,7 @@ describe('DriverService', () => {
       addressLine1: null,
       addressLine2: null,
       postalCode: null,
-      preferredLanguage: null,
+      preferredLanguages: [],
       emergencyContactName: null,
       emergencyContactPhone: null,
       profilePhotoUrl: null,
