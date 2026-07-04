@@ -1,3 +1,5 @@
+import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+
 import { StripeService } from './stripe.service';
 
 describe('StripeService', () => {
@@ -36,6 +38,98 @@ describe('StripeService', () => {
         payment_method_types: ['card'],
         confirm: true,
         capture_method: 'manual',
+      }),
+    );
+  });
+
+  it('maps Stripe invalid request failures to BadRequestException', async () => {
+    const create = jest.fn().mockRejectedValue({
+      type: 'StripeInvalidRequestError',
+      message: 'No such payment_method: pm_missing',
+    });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          paymentIntents: {
+            create: typeof create;
+          };
+        };
+      }
+    ).getClient = () => ({
+      paymentIntents: {
+        create,
+      },
+    });
+
+    await expect(
+      service.createManualCaptureIntent({
+        customerId: 'cus_test',
+        amount: 15000,
+        currency: 'usd',
+        stripePaymentMethodId: 'pm_missing',
+        metadata: {
+          requestId: 'req_1',
+        },
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('maps Stripe connection failures to ServiceUnavailableException', async () => {
+    const retrieve = jest.fn().mockRejectedValue({
+      type: 'StripeConnectionError',
+      message: 'Connection to Stripe failed.',
+    });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          paymentIntents: {
+            retrieve: typeof retrieve;
+          };
+        };
+      }
+    ).getClient = () => ({
+      paymentIntents: {
+        retrieve,
+      },
+    });
+
+    await expect(service.retrievePaymentIntent('pi_test')).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('falls back to a generated Stripe customer name when profile name is blank', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'cus_created' });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          customers: {
+            create: typeof create;
+          };
+        };
+      }
+    ).getClient = () => ({
+      customers: {
+        create,
+      },
+    });
+
+    await service.ensureCustomer({
+      customerId: 'customer_123',
+      email: 'customer@example.com',
+      name: '   ',
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'customer@example.com',
+        name: 'Customer customer_123',
       }),
     );
   });

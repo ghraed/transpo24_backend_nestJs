@@ -1,11 +1,16 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import Stripe from 'stripe';
 
 type EnsureStripeCustomerInput = {
   stripeCustomerId?: string | null;
   customerId: string;
-  email: string;
-  name: string;
+  email?: string | null;
+  name?: string | null;
 };
 
 type CreateManualCaptureIntentInput = {
@@ -45,13 +50,15 @@ export class StripeService {
       return input.stripeCustomerId.trim();
     }
 
-    const customer = await this.getClient().customers.create({
-      email: input.email,
-      name: input.name,
-      metadata: {
-        customerId: input.customerId,
-      },
-    });
+    const customer = await this.runStripe(() =>
+      this.getClient().customers.create({
+        ...(input.email?.trim() ? { email: input.email.trim() } : {}),
+        name: input.name?.trim() || `Customer ${input.customerId}`,
+        metadata: {
+          customerId: input.customerId,
+        },
+      }),
+    );
 
     return customer.id;
   }
@@ -60,42 +67,52 @@ export class StripeService {
     const client = this.getClient();
 
     if (input.stripePaymentMethodId?.trim()) {
-      return client.paymentIntents.create({
+      return this.runStripe(() =>
+        client.paymentIntents.create({
+          amount: input.amount,
+          currency: input.currency,
+          customer: input.customerId,
+          payment_method: input.stripePaymentMethodId.trim(),
+          payment_method_types: ['card'],
+          confirm: true,
+          capture_method: 'manual',
+          confirmation_method: 'automatic',
+          metadata: input.metadata,
+        }),
+      );
+    }
+
+    return this.runStripe(() =>
+      client.paymentIntents.create({
         amount: input.amount,
         currency: input.currency,
         customer: input.customerId,
-        payment_method: input.stripePaymentMethodId.trim(),
-        payment_method_types: ['card'],
-        confirm: true,
         capture_method: 'manual',
-        confirmation_method: 'automatic',
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
         metadata: input.metadata,
-      });
-    }
-
-    return client.paymentIntents.create({
-      amount: input.amount,
-      currency: input.currency,
-      customer: input.customerId,
-      capture_method: 'manual',
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: 'never',
-      },
-      metadata: input.metadata,
-    });
+      }),
+    );
   }
 
   async capturePaymentIntent(paymentIntentId: string) {
-    return this.getClient().paymentIntents.capture(paymentIntentId);
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.capture(paymentIntentId),
+    );
   }
 
   async retrievePaymentIntent(paymentIntentId: string) {
-    return this.getClient().paymentIntents.retrieve(paymentIntentId);
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.retrieve(paymentIntentId),
+    );
   }
 
   async cancelPaymentIntent(paymentIntentId: string) {
-    return this.getClient().paymentIntents.cancel(paymentIntentId);
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.cancel(paymentIntentId),
+    );
   }
 
   constructWebhookEvent(rawBody: Buffer, signature: string) {
@@ -104,10 +121,76 @@ export class StripeService {
       throw new BadRequestException('Stripe webhook secret is not configured.');
     }
 
-    return this.getClient().webhooks.constructEvent(
-      rawBody,
-      signature,
-      webhookSecret,
+    return this.runStripeSync(() =>
+      this.getClient().webhooks.constructEvent(
+        rawBody,
+        signature,
+        webhookSecret,
+      ),
+    );
+  }
+
+  private async runStripe<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      throw this.toStripeException(error);
+    }
+  }
+
+  private runStripeSync<T>(operation: () => T): T {
+    try {
+      return operation();
+    } catch (error) {
+      throw this.toStripeException(error);
+    }
+  }
+
+  private toStripeException(error: unknown): Error {
+    if (
+      error instanceof BadRequestException ||
+      error instanceof ServiceUnavailableException ||
+      error instanceof BadGatewayException
+    ) {
+      return error;
+    }
+
+    if (this.isStripeError(error)) {
+      const message = error.userMessage?.trim() || error.message?.trim() || 'Stripe request failed.';
+
+      switch (error.type) {
+        case 'StripeCardError':
+        case 'StripeInvalidRequestError':
+        case 'StripeAuthenticationError':
+        case 'StripePermissionError':
+        case 'StripeIdempotencyError':
+        case 'StripeInvalidGrantError':
+          return new BadRequestException(message);
+        case 'StripeRateLimitError':
+        case 'StripeConnectionError':
+          return new ServiceUnavailableException(message);
+        default:
+          return new BadGatewayException(message);
+      }
+    }
+
+    return error instanceof Error
+      ? error
+      : new BadGatewayException('Stripe request failed.');
+  }
+
+  private isStripeError(
+    error: unknown,
+  ): error is {
+    type?: string;
+    message?: string;
+    userMessage?: string;
+  } {
+    return (
+      Boolean(error) &&
+      typeof error === 'object' &&
+      'type' in error &&
+      'message' in error
     );
   }
 }
