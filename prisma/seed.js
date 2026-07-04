@@ -107,7 +107,7 @@ async function main() {
   await seedVehicleCatalog();
 
   const customerEmail = 'raed.ghanim.2014@gmail.com';
-  const customerPassword = 'VOltermot1';
+  const customerPassword = 'Voltermot1';
   const customerPasswordHash = hashPassword(customerPassword);
 
   await prisma.user.upsert({

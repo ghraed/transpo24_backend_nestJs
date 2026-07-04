@@ -54,18 +54,11 @@ export class AuthService {
     deletedUsers: number;
     keptEmail: string;
   }> {
-    const keptEmail = 'driver@test.com';
-    const deleted = await this.prisma.user.deleteMany({
-      where: {
-        email: {
-          not: keptEmail,
-        },
-      },
-    });
+    const result = await this.resetDriversForTesting();
 
     return {
-      deletedUsers: deleted.count,
-      keptEmail,
+      deletedUsers: result.deletedDrivers,
+      keptEmail: result.keptEmail,
     };
   }
 
