@@ -65,14 +65,15 @@ export class StripeService {
 
   async createManualCaptureIntent(input: CreateManualCaptureIntentInput) {
     const client = this.getClient();
+    const stripePaymentMethodId = input.stripePaymentMethodId?.trim();
 
-    if (input.stripePaymentMethodId?.trim()) {
+    if (stripePaymentMethodId) {
       return this.runStripe(() =>
         client.paymentIntents.create({
           amount: input.amount,
           currency: input.currency,
           customer: input.customerId,
-          payment_method: input.stripePaymentMethodId.trim(),
+          payment_method: stripePaymentMethodId,
           payment_method_types: ['card'],
           confirm: true,
           capture_method: 'manual',
@@ -187,7 +188,7 @@ export class StripeService {
     userMessage?: string;
   } {
     return (
-      Boolean(error) &&
+      !!error &&
       typeof error === 'object' &&
       'type' in error &&
       'message' in error
