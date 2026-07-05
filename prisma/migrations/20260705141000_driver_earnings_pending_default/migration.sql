@@ -1,0 +1,2 @@
+ALTER TABLE "driver_earnings"
+ALTER COLUMN "status" SET DEFAULT 'PENDING';

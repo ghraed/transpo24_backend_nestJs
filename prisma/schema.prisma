@@ -703,7 +703,7 @@ model DriverEarning {
   platformFeeAmount Decimal             @db.Decimal(12, 2)
   netAmount         Decimal             @db.Decimal(12, 2)
   currency          String
-  status            DriverEarningStatus @default(AVAILABLE)
+  status            DriverEarningStatus @default(PENDING)
   availableAt       DateTime?
   paidOutAt         DateTime?
   createdAt         DateTime            @default(now())

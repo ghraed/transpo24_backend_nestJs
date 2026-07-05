@@ -2347,6 +2347,7 @@ export class DriverService {
     input: DriverEarningsSummaryInput,
   ): Promise<DriverEarningsSummaryResponse> {
     const profile = await this.validateDriverCanViewEarnings(input.driverId);
+    await this.releaseAvailableDriverEarnings(profile.id);
     const dateRange = this.validateDateRange(input.from, input.to);
 
     const where: Prisma.DriverEarningWhereInput = {
@@ -2437,6 +2438,7 @@ export class DriverService {
     input: DriverEarningsListInput,
   ): Promise<PaginatedResponse<DriverEarningItemResponse>> {
     const profile = await this.validateDriverCanViewEarnings(input.driverId);
+    await this.releaseAvailableDriverEarnings(profile.id);
     const dateRange = this.validateDateRange(input.from, input.to);
     const page = this.normalizePage(input.page);
     const limit = this.normalizeLimit(input.limit);
@@ -2478,6 +2480,19 @@ export class DriverService {
       total,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  private async releaseAvailableDriverEarnings(driverId: string): Promise<void> {
+    await this.prisma.driverEarning.updateMany({
+      where: {
+        driverId,
+        status: DriverEarningStatus.PENDING,
+        availableAt: { lte: new Date() },
+      },
+      data: {
+        status: DriverEarningStatus.AVAILABLE,
+      },
+    });
   }
 
   async getDriverRatings(

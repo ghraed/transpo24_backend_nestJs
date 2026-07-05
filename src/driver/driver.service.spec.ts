@@ -1,6 +1,7 @@
 import {
   DocumentStatus,
   DriverDocumentType,
+  DriverEarningStatus,
   DriverStatus,
 } from '@prisma/client';
 
@@ -8,6 +9,32 @@ import { DriverService } from './driver.service';
 
 describe('DriverService', () => {
   const service = new DriverService({} as never, {} as never, {} as never);
+
+  it('releases due pending driver earnings into available balance', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const serviceWithPrisma = new DriverService(
+      { driverEarning: { updateMany } } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await (
+      serviceWithPrisma as unknown as {
+        releaseAvailableDriverEarnings(driverId: string): Promise<void>;
+      }
+    ).releaseAvailableDriverEarnings('driver-1');
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        driverId: 'driver-1',
+        status: DriverEarningStatus.PENDING,
+        availableAt: { lte: expect.any(Date) },
+      },
+      data: {
+        status: DriverEarningStatus.AVAILABLE,
+      },
+    });
+  });
 
   it('disables submit for review when a required onboarding document is expired', () => {
     const profile = {
