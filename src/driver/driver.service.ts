@@ -474,6 +474,8 @@ type DriverEarningSource = {
   createdAt: Date;
   availableAt: Date | null;
   paidOutAt: Date | null;
+  stripeTransferId: string | null;
+  stripeTransferStatus: string | null;
 };
 
 type DriverRatingSource = {
@@ -2468,6 +2470,8 @@ export class DriverService {
           createdAt: true,
           availableAt: true,
           paidOutAt: true,
+          stripeTransferId: true,
+          stripeTransferStatus: true,
         },
       }),
       this.prisma.driverEarning.count({ where }),
@@ -5147,6 +5151,8 @@ export class DriverService {
       createdAt: item.createdAt.toISOString(),
       availableAt: item.availableAt ? item.availableAt.toISOString() : null,
       paidOutAt: item.paidOutAt ? item.paidOutAt.toISOString() : null,
+      stripeTransferId: item.stripeTransferId,
+      stripeTransferStatus: item.stripeTransferStatus,
     };
   }
 

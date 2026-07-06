@@ -116,6 +116,80 @@ export class StripeService {
     );
   }
 
+  async createExpressAccount(input: {
+    driverId: string;
+    email: string;
+    name?: string | null;
+    country?: string;
+  }) {
+    return this.runStripe(() =>
+      this.getClient().accounts.create({
+        type: 'express',
+        email: input.email,
+        capabilities: {
+          transfers: { requested: true },
+        },
+        metadata: {
+          driverId: input.driverId,
+        },
+        ...(input.name?.trim()
+          ? { business_profile: { name: input.name.trim() } }
+          : {}),
+        ...(input.country?.trim() ? { country: input.country.trim() } : {}),
+      }),
+    );
+  }
+
+  async createAccountLink(input: {
+    accountId: string;
+    refreshUrl: string;
+    returnUrl: string;
+  }) {
+    return this.runStripe(() =>
+      this.getClient().accountLinks.create({
+        account: input.accountId,
+        refresh_url: input.refreshUrl,
+        return_url: input.returnUrl,
+        type: 'account_onboarding',
+      }),
+    );
+  }
+
+  async retrieveAccount(accountId: string) {
+    return this.runStripe(() => this.getClient().accounts.retrieve(accountId));
+  }
+
+  async createExpressLoginLink(accountId: string) {
+    return this.runStripe(() =>
+      this.getClient().accountLinks.create({
+        account: accountId,
+        refresh_url:
+          process.env.DRIVER_APP_BASE_URL?.trim() || 'http://localhost:8081',
+        return_url:
+          process.env.DRIVER_APP_BASE_URL?.trim() || 'http://localhost:8081',
+        type: 'account_onboarding',
+      }),
+    );
+  }
+
+  async createTransfer(input: {
+    amount: number;
+    currency: string;
+    destination: string;
+    transferGroup: string;
+    metadata?: Record<string, string>;
+  }) {
+    return this.runStripe(() =>
+      this.getClient().transfers.create({
+        amount: input.amount,
+        currency: input.currency,
+        destination: input.destination,
+        transfer_group: input.transferGroup,
+        ...(input.metadata ? { metadata: input.metadata } : {}),
+      }),
+    );
+  }
+
   constructWebhookEvent(rawBody: Buffer, signature: string) {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
     if (!webhookSecret) {

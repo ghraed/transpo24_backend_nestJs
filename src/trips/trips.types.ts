@@ -327,6 +327,8 @@ export type DriverEarningItemResponse = {
   createdAt: string;
   availableAt: string | null;
   paidOutAt: string | null;
+  stripeTransferId: string | null;
+  stripeTransferStatus: string | null;
 };
 
 export type DriverRatingItemResponse = {

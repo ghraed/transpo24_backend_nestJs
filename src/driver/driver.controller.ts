@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   Patch,
   Post,
@@ -139,6 +140,8 @@ const DOCUMENT_MIME_TYPES = new Set([
 @Controller(['driver', 'drive'])
 @UseGuards(DriverAuthGuard)
 export class DriverController {
+  private readonly logger = new Logger(DriverController.name);
+
   constructor(
     private readonly driverService: DriverService,
     private readonly paymentsService: PaymentsService,
@@ -582,6 +585,71 @@ export class DriverController {
     });
   }
 
+  @Post('me/stripe-connect/account')
+  async createStripeConnectAccount(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{
+    stripeAccountId: string;
+    onboardingUrl: string;
+    detailsSubmitted: boolean;
+    payoutsEnabled: boolean;
+  }> {
+    return this.paymentsService.createDriverConnectAccount({
+      driverUserId: request.user.id,
+    });
+  }
+
+  @Get('me/stripe-connect/status')
+  async getStripeConnectStatus(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{
+    stripeAccountId: string | null;
+    detailsSubmitted: boolean;
+    payoutsEnabled: boolean;
+    accountStatus: string | null;
+  }> {
+    return this.paymentsService.getDriverConnectStatus({
+      driverUserId: request.user.id,
+    });
+  }
+
+  @Post('me/stripe-connect/sync')
+  async syncStripeConnectAccount(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{
+    detailsSubmitted: boolean;
+    payoutsEnabled: boolean;
+    accountStatus: string;
+  }> {
+    return this.paymentsService.syncDriverConnectAccount({
+      driverUserId: request.user.id,
+    });
+  }
+
+  @Get('me/stripe-connect/dashboard-link')
+  async getStripeConnectDashboardLink(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{ url: string }> {
+    return this.paymentsService.getDriverConnectDashboardLink({
+      driverUserId: request.user.id,
+    });
+  }
+
+  @Post('me/stripe-connect/retry-transfer/:tripId')
+  async retryTransferForTrip(
+    @Req() request: AuthenticatedRequest,
+    @Param('tripId') tripId: string,
+  ): Promise<{
+    transferred: boolean;
+    stripeTransferId: string | null;
+    reason: string | null;
+  }> {
+    return this.paymentsService.retryTransferForTrip({
+      driverUserId: request.user.id,
+      tripId,
+    });
+  }
+
   @Post('me/vehicles')
   async createVehicle(
     @Req() request: AuthenticatedRequest,
@@ -889,6 +957,39 @@ export class DriverController {
     });
 
     this.tripsGateway.emitItemDelivered(result.delivered, result.status);
+
+    // Capture the held payment now that delivery is confirmed.
+    // This charges the customer's card and moves funds to the platform account.
+    // Best-effort: delivery is physically complete, so capture failure should
+    // not roll back the delivery. The payment can be captured/retried later.
+    try {
+      const payment = await this.paymentsService.captureRequestPayment({
+        requestId: params.tripId,
+      });
+
+      this.tripsGateway.emitPaymentCaptured(payment.customerId, payment);
+
+      // Attempt to transfer the driver's net earnings to their Stripe Connect
+      // account. If the driver has not onboarded with Stripe Connect yet, the
+      // earning stays PENDING and can be paid out later.
+      try {
+        await this.paymentsService.transferDriverEarningForTrip(
+          params.tripId,
+        );
+      } catch (transferError) {
+        this.logger?.warn?.(
+          `Delivery confirmed for trip ${params.tripId} but driver payout transfer failed: ${
+            transferError instanceof Error ? transferError.message : 'unknown error'
+          }`,
+        );
+      }
+    } catch (captureError) {
+      this.logger?.warn?.(
+        `Delivery confirmed for trip ${params.tripId} but payment capture failed: ${
+          captureError instanceof Error ? captureError.message : 'unknown error'
+        }`,
+      );
+    }
 
     return result.response;
   }

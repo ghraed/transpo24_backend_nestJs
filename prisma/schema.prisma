@@ -521,6 +521,10 @@ model DriverProfile {
   isProfileCompleted    Boolean            @default(false)
   averageRating         Decimal?           @db.Decimal(3, 2)
   ratingsCount          Int                @default(0)
+  stripeAccountId       String?            @unique
+  stripeAccountStatus   String?
+  stripeDetailsSubmitted Boolean           @default(false)
+  stripePayoutsEnabled  Boolean            @default(false)
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
@@ -706,6 +710,8 @@ model DriverEarning {
   status            DriverEarningStatus @default(PENDING)
   availableAt       DateTime?
   paidOutAt         DateTime?
+  stripeTransferId  String?
+  stripeTransferStatus String?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 

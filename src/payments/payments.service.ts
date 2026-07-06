@@ -10,6 +10,7 @@ import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 import {
   AdditionalChargeStatus,
+  DriverEarningStatus,
   PaymentMethod,
   PaymentProvider,
   PaymentStatus,
@@ -489,6 +490,354 @@ export class PaymentsService {
     return this.toAdditionalChargeResponseDto(created);
   }
 
+  async createDriverConnectAccount(input: {
+    driverUserId: string;
+  }): Promise<{
+    stripeAccountId: string;
+    onboardingUrl: string;
+    detailsSubmitted: boolean;
+    payoutsEnabled: boolean;
+  }> {
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { userId: input.driverUserId },
+      select: {
+        id: true,
+        userId: true,
+        firstName: true,
+        lastName: true,
+        stripeAccountId: true,
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: profile.userId },
+      select: { email: true, name: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Driver user account not found.');
+    }
+
+    let accountId = profile.stripeAccountId?.trim() || '';
+
+    if (!accountId) {
+      const account = await this.stripeService.createExpressAccount({
+        driverId: profile.id,
+        email: user.email,
+        name: `${profile.firstName} ${profile.lastName}`.trim() || user.name,
+      });
+
+      accountId = account.id;
+
+      await this.prisma.driverProfile.update({
+        where: { id: profile.id },
+        data: {
+          stripeAccountId: accountId,
+          stripeAccountStatus: account.details_submitted
+            ? 'details_submitted'
+            : 'pending',
+          stripeDetailsSubmitted: account.details_submitted,
+          stripePayoutsEnabled: account.payouts_enabled,
+        },
+      });
+    }
+
+    const appBaseUrl =
+      process.env.DRIVER_APP_BASE_URL?.trim() ||
+      process.env.APP_BASE_URL?.trim() ||
+      'http://localhost:8081';
+
+    const accountLink = await this.stripeService.createAccountLink({
+      accountId,
+      refreshUrl: `${appBaseUrl}/stripe-connect?refresh=1`,
+      returnUrl: `${appBaseUrl}/stripe-connect?return=1`,
+    });
+
+    return {
+      stripeAccountId: accountId,
+      onboardingUrl: accountLink.url,
+      detailsSubmitted: false,
+      payoutsEnabled: false,
+    };
+  }
+
+  async getDriverConnectStatus(input: {
+    driverUserId: string;
+  }): Promise<{
+    stripeAccountId: string | null;
+    detailsSubmitted: boolean;
+    payoutsEnabled: boolean;
+    accountStatus: string | null;
+  }> {
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { userId: input.driverUserId },
+      select: {
+        id: true,
+        stripeAccountId: true,
+        stripeAccountStatus: true,
+        stripeDetailsSubmitted: true,
+        stripePayoutsEnabled: true,
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    if (!profile.stripeAccountId) {
+      return {
+        stripeAccountId: null,
+        detailsSubmitted: false,
+        payoutsEnabled: false,
+        accountStatus: null,
+      };
+    }
+
+    return {
+      stripeAccountId: profile.stripeAccountId,
+      detailsSubmitted: profile.stripeDetailsSubmitted,
+      payoutsEnabled: profile.stripePayoutsEnabled,
+      accountStatus: profile.stripeAccountStatus,
+    };
+  }
+
+  async syncDriverConnectAccount(input: {
+    driverUserId: string;
+  }): Promise<{
+    detailsSubmitted: boolean;
+    payoutsEnabled: boolean;
+    accountStatus: string;
+  }> {
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { userId: input.driverUserId },
+      select: { id: true, stripeAccountId: true },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    if (!profile.stripeAccountId) {
+      throw new BadRequestException(
+        'Driver does not have a Stripe Connect account.',
+      );
+    }
+
+    const account = await this.stripeService.retrieveAccount(
+      profile.stripeAccountId,
+    );
+
+    await this.prisma.driverProfile.update({
+      where: { id: profile.id },
+      data: {
+        stripeAccountStatus: account.details_submitted
+          ? 'details_submitted'
+          : 'pending',
+        stripeDetailsSubmitted: account.details_submitted,
+        stripePayoutsEnabled: account.payouts_enabled,
+      },
+    });
+
+    return {
+      detailsSubmitted: account.details_submitted,
+      payoutsEnabled: account.payouts_enabled,
+      accountStatus: account.details_submitted
+        ? 'details_submitted'
+        : 'pending',
+    };
+  }
+
+  async getDriverConnectDashboardLink(input: {
+    driverUserId: string;
+  }): Promise<{ url: string }> {
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { userId: input.driverUserId },
+      select: { id: true, stripeAccountId: true },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    if (!profile.stripeAccountId) {
+      throw new BadRequestException(
+        'Driver does not have a Stripe Connect account.',
+      );
+    }
+
+    const link = await this.stripeService.createExpressLoginLink(
+      profile.stripeAccountId,
+    );
+
+    return { url: link.url };
+  }
+
+  async retryTransferForTrip(input: {
+    driverUserId: string;
+    tripId: string;
+  }): Promise<{
+    transferred: boolean;
+    stripeTransferId: string | null;
+    reason: string | null;
+  }> {
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { userId: input.driverUserId },
+      select: { id: true, stripeAccountId: true, stripePayoutsEnabled: true },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Driver profile not found.');
+    }
+
+    const earning = await this.prisma.driverEarning.findUnique({
+      where: { tripId: input.tripId },
+      select: {
+        id: true,
+        driverId: true,
+        netAmount: true,
+        currency: true,
+        status: true,
+        stripeTransferId: true,
+      },
+    });
+
+    if (!earning) {
+      throw new NotFoundException('Earning record not found for this trip.');
+    }
+
+    if (earning.driverId !== profile.id) {
+      throw new ForbiddenException('This earning does not belong to you.');
+    }
+
+    if (earning.status === DriverEarningStatus.PAID_OUT || earning.stripeTransferId) {
+      return {
+        transferred: true,
+        stripeTransferId: earning.stripeTransferId,
+        reason: 'Transfer already completed.',
+      };
+    }
+
+    if (!profile.stripeAccountId || !profile.stripePayoutsEnabled) {
+      return {
+        transferred: false,
+        stripeTransferId: null,
+        reason: 'Stripe Connect onboarding is not complete. Payouts are not enabled.',
+      };
+    }
+
+    const transferAmount = this.toStripeMinorUnit(earning.netAmount);
+    if (transferAmount <= 0) {
+      return {
+        transferred: false,
+        stripeTransferId: null,
+        reason: 'Transfer amount is zero or negative.',
+      };
+    }
+
+    const transfer = await this.stripeService.createTransfer({
+      amount: transferAmount,
+      currency: earning.currency.toLowerCase(),
+      destination: profile.stripeAccountId,
+      transferGroup: `trip_${input.tripId}`,
+      metadata: {
+        tripId: input.tripId,
+        driverEarningId: earning.id,
+        driverId: earning.driverId,
+        retry: 'true',
+      },
+    });
+
+    await this.prisma.driverEarning.update({
+      where: { id: earning.id },
+      data: {
+        status: DriverEarningStatus.PAID_OUT,
+        paidOutAt: new Date(),
+        stripeTransferId: transfer.id,
+        stripeTransferStatus: 'paid',
+      },
+    });
+
+    return {
+      transferred: true,
+      stripeTransferId: transfer.id,
+      reason: null,
+    };
+  }
+
+  async transferDriverEarningForTrip(tripId: string): Promise<void> {
+    const earning = await this.prisma.driverEarning.findUnique({
+      where: { tripId },
+      select: {
+        id: true,
+        driverId: true,
+        netAmount: true,
+        currency: true,
+        status: true,
+        stripeTransferId: true,
+      },
+    });
+
+    if (!earning) {
+      return;
+    }
+
+    if (earning.status === DriverEarningStatus.PAID_OUT) {
+      return;
+    }
+
+    if (earning.stripeTransferId) {
+      return;
+    }
+
+    const driver = await this.prisma.driverProfile.findUnique({
+      where: { id: earning.driverId },
+      select: {
+        stripeAccountId: true,
+        stripePayoutsEnabled: true,
+        stripeDetailsSubmitted: true,
+      },
+    });
+
+    if (!driver) {
+      return;
+    }
+
+    if (!driver.stripeAccountId || !driver.stripePayoutsEnabled) {
+      return;
+    }
+
+    const transferAmount = this.toStripeMinorUnit(earning.netAmount);
+    if (transferAmount <= 0) {
+      return;
+    }
+
+    const transfer = await this.stripeService.createTransfer({
+      amount: transferAmount,
+      currency: earning.currency.toLowerCase(),
+      destination: driver.stripeAccountId,
+      transferGroup: `trip_${tripId}`,
+      metadata: {
+        tripId,
+        driverEarningId: earning.id,
+        driverId: earning.driverId,
+      },
+    });
+
+    await this.prisma.driverEarning.update({
+      where: { id: earning.id },
+      data: {
+        status: DriverEarningStatus.PAID_OUT,
+        paidOutAt: new Date(),
+        stripeTransferId: transfer.id,
+        stripeTransferStatus: 'paid',
+      },
+    });
+  }
+
   async handleStripeWebhook(
     rawBody: Buffer,
     signature: string,
@@ -517,6 +866,18 @@ export class PaymentsService {
         }
         break;
       }
+      case 'account.updated': {
+        const account = event.data.object as {
+          id: string;
+          details_submitted: boolean;
+          payouts_enabled: boolean;
+        };
+        await this.syncDriverConnectAccountFromStripe(account.id, {
+          detailsSubmitted: account.details_submitted,
+          payoutsEnabled: account.payouts_enabled,
+        });
+        break;
+      }
       default:
         break;
     }
@@ -525,6 +886,31 @@ export class PaymentsService {
       received: true,
       type: event.type,
     };
+  }
+
+  private async syncDriverConnectAccountFromStripe(
+    stripeAccountId: string,
+    status: { detailsSubmitted: boolean; payoutsEnabled: boolean },
+  ): Promise<void> {
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { stripeAccountId },
+      select: { id: true },
+    });
+
+    if (!profile) {
+      return;
+    }
+
+    await this.prisma.driverProfile.update({
+      where: { id: profile.id },
+      data: {
+        stripeAccountStatus: status.detailsSubmitted
+          ? 'details_submitted'
+          : 'pending',
+        stripeDetailsSubmitted: status.detailsSubmitted,
+        stripePayoutsEnabled: status.payoutsEnabled,
+      },
+    });
   }
 
   private async syncStripePaymentIntent(
