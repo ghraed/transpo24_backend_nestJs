@@ -102,6 +102,32 @@ describe('StripeService', () => {
     );
   });
 
+  it('returns null when the Stripe payment intent no longer exists', async () => {
+    const retrieve = jest.fn().mockRejectedValue({
+      type: 'StripeInvalidRequestError',
+      message: 'No such payment_intent: pi_missing',
+    });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          paymentIntents: {
+            retrieve: typeof retrieve;
+          };
+        };
+      }
+    ).getClient = () => ({
+      paymentIntents: {
+        retrieve,
+      },
+    });
+
+    await expect(
+      service.retrievePaymentIntentIfExists('pi_missing'),
+    ).resolves.toBeNull();
+  });
+
   it('falls back to a generated Stripe customer name when profile name is blank', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'cus_created' });
     const service = new StripeService();
@@ -130,6 +156,48 @@ describe('StripeService', () => {
       expect.objectContaining({
         email: 'customer@example.com',
         name: 'Customer customer_123',
+      }),
+    );
+  });
+
+  it('recreates the Stripe customer when the stored customer id no longer exists', async () => {
+    const retrieve = jest.fn().mockRejectedValue({
+      type: 'StripeInvalidRequestError',
+      message: 'No such customer: cus_missing',
+    });
+    const create = jest.fn().mockResolvedValue({ id: 'cus_recreated' });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          customers: {
+            retrieve: typeof retrieve;
+            create: typeof create;
+          };
+        };
+      }
+    ).getClient = () => ({
+      customers: {
+        retrieve,
+        create,
+      },
+    });
+
+    await expect(
+      service.ensureCustomer({
+        customerId: 'customer_123',
+        email: 'customer@example.com',
+        name: 'Test Customer',
+        stripeCustomerId: 'cus_missing',
+      }),
+    ).resolves.toBe('cus_recreated');
+
+    expect(retrieve).toHaveBeenCalledWith('cus_missing');
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'customer@example.com',
+        name: 'Test Customer',
       }),
     );
   });

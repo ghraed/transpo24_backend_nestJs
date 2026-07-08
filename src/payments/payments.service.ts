@@ -166,13 +166,32 @@ export class PaymentsService {
       request.paymentHold.provider === PaymentProvider.STRIPE &&
       request.paymentHold.stripePaymentIntentId
     ) {
-      const paymentIntent = await this.stripeService.retrievePaymentIntent(
+      const paymentIntent = await this.stripeService.retrievePaymentIntentIfExists(
         request.paymentHold.stripePaymentIntentId,
       );
-      await this.syncStripePaymentIntent(
-        paymentIntent,
-        'payment_intent.status_checked',
-      );
+      if (!paymentIntent) {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.paymentHold.update({
+            where: { id: request.paymentHold!.id },
+            data: {
+              status: PaymentStatus.PAYMENT_FAILED,
+              failedAt: new Date(),
+            },
+          });
+
+          await tx.transportRequest.update({
+            where: { id: request.id },
+            data: {
+              paymentStatus: PaymentStatus.PAYMENT_FAILED,
+            },
+          });
+        });
+      } else {
+        await this.syncStripePaymentIntent(
+          paymentIntent,
+          'payment_intent.status_checked',
+        );
+      }
 
       const refreshedHold = await this.prisma.paymentHold.findUnique({
         where: { id: request.paymentHold.id },
@@ -255,7 +274,9 @@ export class PaymentsService {
     if (hold.provider === PaymentProvider.APP_WALLET) {
       await this.releaseWalletReservation(tx, hold);
     } else if (hold.stripePaymentIntentId) {
-      await this.stripeService.cancelPaymentIntent(hold.stripePaymentIntentId);
+      await this.stripeService.cancelPaymentIntentIfExists(
+        hold.stripePaymentIntentId,
+      );
     }
 
     const updated = await tx.paymentHold.update({

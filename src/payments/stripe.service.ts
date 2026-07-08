@@ -46,8 +46,12 @@ export class StripeService {
   }
 
   async ensureCustomer(input: EnsureStripeCustomerInput): Promise<string> {
-    if (input.stripeCustomerId?.trim()) {
-      return input.stripeCustomerId.trim();
+    const existingCustomerId = input.stripeCustomerId?.trim();
+    if (existingCustomerId) {
+      const existingCustomer = await this.tryRetrieveCustomer(existingCustomerId);
+      if (existingCustomer && !('deleted' in existingCustomer && existingCustomer.deleted)) {
+        return existingCustomerId;
+      }
     }
 
     const customer = await this.runStripe(() =>
@@ -61,6 +65,17 @@ export class StripeService {
     );
 
     return customer.id;
+  }
+
+  private async tryRetrieveCustomer(customerId: string) {
+    try {
+      return await this.runStripe(() => this.getClient().customers.retrieve(customerId));
+    } catch (error) {
+      if (this.isMissingCustomerError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async createManualCaptureIntent(input: CreateManualCaptureIntentInput) {
@@ -110,10 +125,32 @@ export class StripeService {
     );
   }
 
+  async retrievePaymentIntentIfExists(paymentIntentId: string) {
+    try {
+      return await this.retrievePaymentIntent(paymentIntentId);
+    } catch (error) {
+      if (this.isMissingPaymentIntentError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   async cancelPaymentIntent(paymentIntentId: string) {
     return this.runStripe(() =>
       this.getClient().paymentIntents.cancel(paymentIntentId),
     );
+  }
+
+  async cancelPaymentIntentIfExists(paymentIntentId: string) {
+    try {
+      return await this.cancelPaymentIntent(paymentIntentId);
+    } catch (error) {
+      if (this.isMissingPaymentIntentError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async createExpressAccount(input: {
@@ -266,6 +303,40 @@ export class StripeService {
       typeof error === 'object' &&
       'type' in error &&
       'message' in error
+    );
+  }
+
+  private isMissingCustomerError(error: unknown): boolean {
+    if (
+      error instanceof BadRequestException &&
+      typeof error.message === 'string' &&
+      /no such customer/i.test(error.message)
+    ) {
+      return true;
+    }
+
+    return (
+      this.isStripeError(error) &&
+      error.type === 'StripeInvalidRequestError' &&
+      typeof error.message === 'string' &&
+      /no such customer/i.test(error.message)
+    );
+  }
+
+  private isMissingPaymentIntentError(error: unknown): boolean {
+    if (
+      error instanceof BadRequestException &&
+      typeof error.message === 'string' &&
+      /no such payment_intent/i.test(error.message)
+    ) {
+      return true;
+    }
+
+    return (
+      this.isStripeError(error) &&
+      error.type === 'StripeInvalidRequestError' &&
+      typeof error.message === 'string' &&
+      /no such payment_intent/i.test(error.message)
     );
   }
 }
