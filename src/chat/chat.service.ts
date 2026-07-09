@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -115,6 +116,8 @@ type RoomAccessSelect = Prisma.ChatRoomGetPayload<{
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
@@ -271,13 +274,19 @@ export class ChatService {
       },
     });
 
-    void this.notificationsService.notifyChatMessage({
-      recipientUserId: access.recipientUserId,
-      recipientApp: access.recipientApp,
-      chatRoomId: access.room.id,
-      transportRequestId: access.room.transportRequestId,
-      body: normalizedBody,
-    });
+    void this.notificationsService
+      .notifyChatMessage({
+        recipientUserId: access.recipientUserId,
+        recipientApp: access.recipientApp,
+        chatRoomId: access.room.id,
+        transportRequestId: access.room.transportRequestId,
+        body: normalizedBody,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Failed to send chat notification for room ${access.room.id}: ${error instanceof Error ? error.message : 'Unexpected error'}`,
+        );
+      });
 
     return this.toChatMessageResponse(created);
   }
