@@ -245,6 +245,10 @@ export class NotificationsService {
       }
 
       const ticketDetails = 'details' in ticket ? ticket.details : undefined;
+      const ticketMessage =
+        'message' in ticket && typeof ticket.message === 'string'
+          ? ticket.message
+          : null;
       const expoError =
         typeof ticketDetails?.error === 'string' ? ticketDetails.error : null;
       if (expoError === EXPO_DEVICE_NOT_REGISTERED) {
@@ -252,7 +256,7 @@ export class NotificationsService {
       }
 
       this.logger.warn(
-        `Expo push ticket error for ${notificationType}: ${ticket.message ?? expoError ?? 'Unknown error'}`,
+        `Expo push ticket error for ${notificationType}: ${ticketMessage ?? expoError ?? 'Unknown error'}`,
       );
     });
 

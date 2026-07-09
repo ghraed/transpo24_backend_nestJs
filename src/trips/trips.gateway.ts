@@ -298,7 +298,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('socketDebugPing')
-  socketDebugPing(
+  async socketDebugPing(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SocketDebugPingPayload,
   ): Promise<SocketDebugPongPayload> {
