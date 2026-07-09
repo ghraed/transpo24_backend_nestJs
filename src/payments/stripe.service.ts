@@ -48,8 +48,12 @@ export class StripeService {
   async ensureCustomer(input: EnsureStripeCustomerInput): Promise<string> {
     const existingCustomerId = input.stripeCustomerId?.trim();
     if (existingCustomerId) {
-      const existingCustomer = await this.tryRetrieveCustomer(existingCustomerId);
-      if (existingCustomer && !('deleted' in existingCustomer && existingCustomer.deleted)) {
+      const existingCustomer =
+        await this.tryRetrieveCustomer(existingCustomerId);
+      if (
+        existingCustomer &&
+        !('deleted' in existingCustomer && existingCustomer.deleted)
+      ) {
         return existingCustomerId;
       }
     }
@@ -69,7 +73,9 @@ export class StripeService {
 
   private async tryRetrieveCustomer(customerId: string) {
     try {
-      return await this.runStripe(() => this.getClient().customers.retrieve(customerId));
+      return await this.runStripe(() =>
+        this.getClient().customers.retrieve(customerId),
+      );
     } catch (error) {
       if (this.isMissingCustomerError(error)) {
         return null;
@@ -268,7 +274,10 @@ export class StripeService {
     }
 
     if (this.isStripeError(error)) {
-      const message = error.userMessage?.trim() || error.message?.trim() || 'Stripe request failed.';
+      const message =
+        error.userMessage?.trim() ||
+        error.message?.trim() ||
+        'Stripe request failed.';
 
       switch (error.type) {
         case 'StripeCardError':
@@ -291,9 +300,7 @@ export class StripeService {
       : new BadGatewayException('Stripe request failed.');
   }
 
-  private isStripeError(
-    error: unknown,
-  ): error is {
+  private isStripeError(error: unknown): error is {
     type?: string;
     message?: string;
     userMessage?: string;

@@ -1665,7 +1665,8 @@ export class DriverService {
     });
 
     const existingAlert =
-      request.driverAlerts.find((alert) => alert.driverId === profile.id) ?? null;
+      request.driverAlerts.find((alert) => alert.driverId === profile.id) ??
+      null;
     const isSelectedDriver = request.assignedDriverId === profile.id;
     const hasOfferAccess = Boolean(offer);
     const hasAlertAccess =
@@ -2486,7 +2487,9 @@ export class DriverService {
     };
   }
 
-  private async releaseAvailableDriverEarnings(driverId: string): Promise<void> {
+  private async releaseAvailableDriverEarnings(
+    driverId: string,
+  ): Promise<void> {
     await this.prisma.driverEarning.updateMany({
       where: {
         driverId,
@@ -3436,7 +3439,9 @@ export class DriverService {
         : input.existingProfile.postalCode;
     const nextPreferredLanguages =
       input.changes.preferredLanguages !== undefined
-        ? this.normalizePreferredLanguages(input.changes.preferredLanguages ?? [])
+        ? this.normalizePreferredLanguages(
+            input.changes.preferredLanguages ?? [],
+          )
         : input.existingProfile.preferredLanguages;
     const nextEmergencyContactName =
       input.changes.emergencyContactName !== undefined
@@ -4627,7 +4632,9 @@ export class DriverService {
         ),
       );
 
-      return hasRequiredDocuments && this.hasVehicleLoadCapacityProfile(vehicle);
+      return (
+        hasRequiredDocuments && this.hasVehicleLoadCapacityProfile(vehicle)
+      );
     });
   }
 
@@ -5316,7 +5323,9 @@ export class DriverService {
     const eligibleDocuments = documents.filter(
       (document) => document.status !== DocumentStatus.REJECTED,
     );
-    const documentTypes = new Set(eligibleDocuments.map((document) => document.type));
+    const documentTypes = new Set(
+      eligibleDocuments.map((document) => document.type),
+    );
 
     const hasBasicInfo =
       vehicle.make.trim().length > 0 &&
@@ -5340,23 +5349,37 @@ export class DriverService {
     const missingFields: string[] = [];
     if (!vehicle.make.trim()) missingFields.push('brand');
     if (!vehicle.model.trim()) missingFields.push('model');
-    if (!Number.isInteger(vehicle.year) || vehicle.year < 1980) missingFields.push('year');
+    if (!Number.isInteger(vehicle.year) || vehicle.year < 1980)
+      missingFields.push('year');
     if (!vehicle.plateNumber.trim()) missingFields.push('plateNumber');
-    if (!vehicle.allowedCargoTypes.length) missingFields.push('allowedCargoTypes');
-    if (!this.hasVehicleWorkingSchedule(vehicle)) missingFields.push('workingSchedule');
+    if (!vehicle.allowedCargoTypes.length)
+      missingFields.push('allowedCargoTypes');
+    if (!this.hasVehicleWorkingSchedule(vehicle))
+      missingFields.push('workingSchedule');
     if (!isCarCarrierVehicleType(vehicle.vehicleType)) {
-      if (vehicle.capacityKg === null || vehicle.capacityKg <= 0) missingFields.push('maxLoadKg');
-      if (vehicle.lengthCm === null || vehicle.lengthCm <= 0) missingFields.push('cargoLengthM');
-      if (vehicle.widthCm === null || vehicle.widthCm <= 0) missingFields.push('cargoWidthM');
-      if (vehicle.heightCm === null || vehicle.heightCm <= 0) missingFields.push('cargoHeightM');
+      if (vehicle.capacityKg === null || vehicle.capacityKg <= 0)
+        missingFields.push('maxLoadKg');
+      if (vehicle.lengthCm === null || vehicle.lengthCm <= 0)
+        missingFields.push('cargoLengthM');
+      if (vehicle.widthCm === null || vehicle.widthCm <= 0)
+        missingFields.push('cargoWidthM');
+      if (vehicle.heightCm === null || vehicle.heightCm <= 0)
+        missingFields.push('cargoHeightM');
     }
-    if (!documentTypes.has(DriverDocumentType.VEHICLE_FRONT_PHOTO)) missingFields.push('frontPhoto');
-    if (!documentTypes.has(DriverDocumentType.VEHICLE_REAR_PHOTO)) missingFields.push('rearPhoto');
-    if (!documentTypes.has(DriverDocumentType.VEHICLE_SIDE_PHOTO)) missingFields.push('sidePhoto');
-    if (!documentTypes.has(DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO)) missingFields.push('licensePlatePhoto');
-    if (!documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_FRONT)) missingFields.push('registrationFrontDocument');
-    if (!documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_BACK)) missingFields.push('registrationBackDocument');
-    if (!documentTypes.has(DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT)) missingFields.push('insuranceDocument');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_FRONT_PHOTO))
+      missingFields.push('frontPhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_REAR_PHOTO))
+      missingFields.push('rearPhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_SIDE_PHOTO))
+      missingFields.push('sidePhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO))
+      missingFields.push('licensePlatePhoto');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_FRONT))
+      missingFields.push('registrationFrontDocument');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_REGISTRATION_BACK))
+      missingFields.push('registrationBackDocument');
+    if (!documentTypes.has(DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT))
+      missingFields.push('insuranceDocument');
 
     return {
       hasBasicInfo,
@@ -5384,7 +5407,10 @@ export class DriverService {
       | 'workingSchedule'
     >,
   ): boolean {
-    if (!vehicle.allowedCargoTypes.length || !this.hasVehicleWorkingSchedule(vehicle)) {
+    if (
+      !vehicle.allowedCargoTypes.length ||
+      !this.hasVehicleWorkingSchedule(vehicle)
+    ) {
       return false;
     }
 
@@ -5408,9 +5434,7 @@ export class DriverService {
     vehicle: Pick<VehicleSource, 'workingSchedule'>,
   ): boolean {
     const schedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
-    return schedule.some(
-      (day) => day.isAvailable && day.timeRanges.length > 0,
-    );
+    return schedule.some((day) => day.isAvailable && day.timeRanges.length > 0);
   }
 
   private toDocumentResponse(

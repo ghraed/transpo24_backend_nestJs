@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { PushApp, PushPlatform, UserRole } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';

@@ -1,9 +1,6 @@
 import { Prisma } from '@prisma/client';
 
-import {
-  DRIVER_PAYOUT_DELAY_HOURS,
-  TripsService,
-} from './trips.service';
+import { DRIVER_PAYOUT_DELAY_HOURS, TripsService } from './trips.service';
 
 describe('TripsService', () => {
   const service = new TripsService({} as never);

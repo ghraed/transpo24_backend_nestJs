@@ -600,9 +600,7 @@ export class DriverController {
   }
 
   @Get('me/stripe-connect/status')
-  async getStripeConnectStatus(
-    @Req() request: AuthenticatedRequest,
-  ): Promise<{
+  async getStripeConnectStatus(@Req() request: AuthenticatedRequest): Promise<{
     stripeAccountId: string | null;
     detailsSubmitted: boolean;
     payoutsEnabled: boolean;
@@ -973,13 +971,13 @@ export class DriverController {
       // account. If the driver has not onboarded with Stripe Connect yet, the
       // earning stays PENDING and can be paid out later.
       try {
-        await this.paymentsService.transferDriverEarningForTrip(
-          params.tripId,
-        );
+        await this.paymentsService.transferDriverEarningForTrip(params.tripId);
       } catch (transferError) {
         this.logger?.warn?.(
           `Delivery confirmed for trip ${params.tripId} but driver payout transfer failed: ${
-            transferError instanceof Error ? transferError.message : 'unknown error'
+            transferError instanceof Error
+              ? transferError.message
+              : 'unknown error'
           }`,
         );
       }
@@ -1059,9 +1057,7 @@ export class DriverController {
             }
           } else if (!isImage) {
             callback(
-              new BadRequestException(
-                'Documents must be JPEG, PNG, or WEBP.',
-              ),
+              new BadRequestException('Documents must be JPEG, PNG, or WEBP.'),
               false,
             );
             return;

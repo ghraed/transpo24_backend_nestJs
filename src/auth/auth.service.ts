@@ -162,29 +162,30 @@ export class AuthService {
       }),
     ]);
 
-    if (existingDriverPhone && existingDriverPhone.userId !== existingUser?.id) {
+    if (
+      existingDriverPhone &&
+      existingDriverPhone.userId !== existingUser?.id
+    ) {
       throw new ConflictException('Phone is already in use.');
     }
 
-    let created:
-      | {
-          id: string;
-          email: string;
-          role: UserRole;
-          driverProfile: {
-            id: string;
-            firstName: string;
-            lastName: string;
-            phone: string;
-            countryCode: string | null;
-            countryCodes: string[];
-            city: string | null;
-            cities: string[];
-            status: DriverStatus;
-            isProfileCompleted: boolean;
-          } | null;
-        }
-      | null = null;
+    let created: {
+      id: string;
+      email: string;
+      role: UserRole;
+      driverProfile: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        phone: string;
+        countryCode: string | null;
+        countryCodes: string[];
+        city: string | null;
+        cities: string[];
+        status: DriverStatus;
+        isProfileCompleted: boolean;
+      } | null;
+    } | null = null;
 
     if (existingUser) {
       if (existingUser.driverProfile) {
@@ -202,7 +203,8 @@ export class AuthService {
       created = await this.prisma.user.update({
         where: { id: existingUser.id },
         data: {
-          name: `${input.firstName} ${input.lastName}`.trim() || existingUser.name,
+          name:
+            `${input.firstName} ${input.lastName}`.trim() || existingUser.name,
           driverProfile: {
             create: {
               firstName: input.firstName,

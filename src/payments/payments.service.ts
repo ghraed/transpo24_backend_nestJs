@@ -166,9 +166,10 @@ export class PaymentsService {
       request.paymentHold.provider === PaymentProvider.STRIPE &&
       request.paymentHold.stripePaymentIntentId
     ) {
-      const paymentIntent = await this.stripeService.retrievePaymentIntentIfExists(
-        request.paymentHold.stripePaymentIntentId,
-      );
+      const paymentIntent =
+        await this.stripeService.retrievePaymentIntentIfExists(
+          request.paymentHold.stripePaymentIntentId,
+        );
       if (!paymentIntent) {
         await this.prisma.$transaction(async (tx) => {
           await tx.paymentHold.update({
@@ -511,9 +512,7 @@ export class PaymentsService {
     return this.toAdditionalChargeResponseDto(created);
   }
 
-  async createDriverConnectAccount(input: {
-    driverUserId: string;
-  }): Promise<{
+  async createDriverConnectAccount(input: { driverUserId: string }): Promise<{
     stripeAccountId: string;
     onboardingUrl: string;
     detailsSubmitted: boolean;
@@ -586,9 +585,7 @@ export class PaymentsService {
     };
   }
 
-  async getDriverConnectStatus(input: {
-    driverUserId: string;
-  }): Promise<{
+  async getDriverConnectStatus(input: { driverUserId: string }): Promise<{
     stripeAccountId: string | null;
     detailsSubmitted: boolean;
     payoutsEnabled: boolean;
@@ -626,9 +623,7 @@ export class PaymentsService {
     };
   }
 
-  async syncDriverConnectAccount(input: {
-    driverUserId: string;
-  }): Promise<{
+  async syncDriverConnectAccount(input: { driverUserId: string }): Promise<{
     detailsSubmitted: boolean;
     payoutsEnabled: boolean;
     accountStatus: string;
@@ -734,7 +729,10 @@ export class PaymentsService {
       throw new ForbiddenException('This earning does not belong to you.');
     }
 
-    if (earning.status === DriverEarningStatus.PAID_OUT || earning.stripeTransferId) {
+    if (
+      earning.status === DriverEarningStatus.PAID_OUT ||
+      earning.stripeTransferId
+    ) {
       return {
         transferred: true,
         stripeTransferId: earning.stripeTransferId,
@@ -746,7 +744,8 @@ export class PaymentsService {
       return {
         transferred: false,
         stripeTransferId: null,
-        reason: 'Stripe Connect onboarding is not complete. Payouts are not enabled.',
+        reason:
+          'Stripe Connect onboarding is not complete. Payouts are not enabled.',
       };
     }
 

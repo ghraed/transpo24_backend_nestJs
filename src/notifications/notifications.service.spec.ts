@@ -30,9 +30,9 @@ describe('NotificationsService', () => {
   it('deactivates invalid Expo tokens and skips sending them', async () => {
     const prisma = {
       pushToken: {
-        findMany: jest.fn().mockResolvedValue([
-          { id: 'token-1', token: 'invalid-token' },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'token-1', token: 'invalid-token' }]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
