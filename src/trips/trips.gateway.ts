@@ -8,11 +8,22 @@ import {
   WebSocketServer,
   WsException,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger, forwardRef } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
 
 import { AuthService } from '../auth/auth.service';
+import { ChatService } from '../chat/chat.service';
+import {
+  ChatJoinRoomDto,
+  ChatLeaveRoomDto,
+  ChatSendMessageSocketDto,
+  ChatTypingDto,
+} from '../chat/dto/chat-socket.dto';
+import type {
+  ChatMessageReadResponseDto,
+  ChatMessageResponseDto,
+} from '../chat/chat.types';
 import { DriverArrivedPickupDto } from './dto/driver-arrived-pickup.dto';
 import { DriverLocationUpdateDto } from './dto/driver-location-update.dto';
 import { JoinTripRoomDto } from './dto/join-trip-room.dto';
@@ -70,6 +81,8 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly authService: AuthService,
     private readonly tripsService: TripsService,
+    @Inject(forwardRef(() => ChatService))
+    private readonly chatService: ChatService,
   ) {}
 
   handleConnection(client: Socket): void {
@@ -93,7 +106,8 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    client.data.user = user;
+    const socketData = client.data as { user?: SocketUser };
+    socketData.user = user;
     this.logger.log(
       `Socket connected: socketId=${client.id}, userId=${user.id}, role=${user.role}`,
     );
@@ -133,6 +147,88 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const room = this.getTripRoom(payload.tripId);
       await client.leave(room);
       return { tripId: payload.tripId, room };
+    } catch (error) {
+      throw this.toWsException(error);
+    }
+  }
+
+  @SubscribeMessage('chat.join')
+  async joinChatRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ChatJoinRoomDto,
+  ): Promise<{ roomId: string; room: string }> {
+    try {
+      const user = this.getAuthenticatedSocketUser(client);
+      await this.chatService.assertCanAccessRoom({
+        user,
+        roomId: payload.roomId,
+      });
+      const room = this.getChatRoom(payload.roomId);
+      await client.join(room);
+      return { roomId: payload.roomId, room };
+    } catch (error) {
+      throw this.toWsException(error);
+    }
+  }
+
+  @SubscribeMessage('chat.leave')
+  async leaveChatRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ChatLeaveRoomDto,
+  ): Promise<{ roomId: string; room: string }> {
+    try {
+      const room = this.getChatRoom(payload.roomId);
+      await client.leave(room);
+      return { roomId: payload.roomId, room };
+    } catch (error) {
+      throw this.toWsException(error);
+    }
+  }
+
+  @SubscribeMessage('chat.message.send')
+  async sendChatMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ChatSendMessageSocketDto,
+  ): Promise<ChatMessageResponseDto> {
+    try {
+      const user = this.getAuthenticatedSocketUser(client);
+      const created = await this.chatService.sendTextMessage({
+        user,
+        roomId: payload.roomId,
+        body: payload.body,
+      });
+
+      this.emitChatMessageCreated(created);
+      return created;
+    } catch (error) {
+      throw this.toWsException(error);
+    }
+  }
+
+  @SubscribeMessage('chat.typing')
+  async emitChatTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ChatTypingDto,
+  ): Promise<{ roomId: string; isTyping: boolean }> {
+    try {
+      const user = this.getAuthenticatedSocketUser(client);
+      await this.chatService.assertCanAccessRoom({
+        user,
+        roomId: payload.roomId,
+      });
+
+      const isTyping = payload.isTyping ?? true;
+      client.to(this.getChatRoom(payload.roomId)).emit('chat.typing', {
+        roomId: payload.roomId,
+        isTyping,
+        userRole: user.role,
+        sentAt: new Date().toISOString(),
+      });
+
+      return {
+        roomId: payload.roomId,
+        isTyping,
+      };
     } catch (error) {
       throw this.toWsException(error);
     }
@@ -202,7 +298,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('socketDebugPing')
-  async socketDebugPing(
+  socketDebugPing(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SocketDebugPingPayload,
   ): Promise<SocketDebugPongPayload> {
@@ -363,8 +459,22 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       .to(this.getTripRoom(payload.tripId))
       .emit('driverNearDelivery', payload);
   }
+
+  emitChatMessageCreated(payload: ChatMessageResponseDto): void {
+    this.server
+      .to(this.getChatRoom(payload.chatRoomId))
+      .emit('chat.message.created', payload);
+  }
+
+  emitChatMessageRead(payload: ChatMessageReadResponseDto): void {
+    this.server
+      .to(this.getChatRoom(payload.roomId))
+      .emit('chat.message.read', payload);
+  }
+
   private getAuthenticatedSocketUser(client: Socket): SocketUser {
-    const user = client.data.user as SocketUser | undefined;
+    const socketData = client.data as { user?: SocketUser };
+    const user = socketData.user;
 
     if (!user) {
       throw new WsException('Unauthorized socket connection.');
@@ -374,7 +484,8 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private getSocketToken(client: Socket): string | null {
-    const authToken = client.handshake.auth?.token;
+    const auth = client.handshake.auth as { token?: unknown } | undefined;
+    const authToken = auth?.token;
     if (typeof authToken === 'string' && authToken.trim()) {
       return authToken.trim();
     }
@@ -392,6 +503,10 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private getTripRoom(tripId: string): string {
     return `trip_${tripId}`;
+  }
+
+  private getChatRoom(roomId: string): string {
+    return `chat:${roomId}`;
   }
 
   private getDriverRoom(driverId: string): string {

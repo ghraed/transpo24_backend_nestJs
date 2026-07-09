@@ -4,7 +4,6 @@ import {
   Expo,
   type ExpoPushMessage,
   type ExpoPushReceipt,
-  type ExpoPushSuccessTicket,
   type ExpoPushTicket,
 } from 'expo-server-sdk';
 
@@ -78,7 +77,9 @@ export class NotificationsService {
         to: storedToken.token,
         title: input.title,
         body: input.body,
-        ...(storedToken.platform === 'ios' ? { sound: 'default' as const } : {}),
+        ...(storedToken.platform === 'ios'
+          ? { sound: 'default' as const }
+          : {}),
         priority: 'high',
         channelId: TRANSPORT_JOBS_CHANNEL_ID,
         data: {
@@ -105,7 +106,12 @@ export class NotificationsService {
           continue;
         }
 
-        await this.handleTickets(chunkTokens, tickets, receiptTokenIds, input.type);
+        await this.handleTickets(
+          chunkTokens,
+          tickets,
+          receiptTokenIds,
+          input.type,
+        );
       }
 
       await this.resolveReceipts(receiptTokenIds, input.type);
@@ -189,6 +195,32 @@ export class NotificationsService {
     });
   }
 
+  async notifyChatMessage(input: {
+    recipientUserId: string;
+    recipientApp: PushApp;
+    chatRoomId: string;
+    transportRequestId: string;
+    body: string;
+  }): Promise<void> {
+    const preview = input.body.trim().slice(0, 120);
+
+    if (!preview) {
+      return;
+    }
+
+    await this.sendToUsers({
+      userIds: [input.recipientUserId],
+      app: input.recipientApp,
+      title: 'New message',
+      body: preview,
+      type: 'CHAT_MESSAGE',
+      data: {
+        chatRoomId: input.chatRoomId,
+        transportRequestId: input.transportRequestId,
+      },
+    });
+  }
+
   private async handleTickets(
     chunkTokens: PushTokenRecord[],
     tickets: ExpoPushTicket[],
@@ -203,11 +235,12 @@ export class NotificationsService {
         return;
       }
 
-      if (ticket.status === 'ok') {
-        const receiptId = (ticket as ExpoPushSuccessTicket).id;
-        if (receiptId) {
-          receiptTokenIds.set(receiptId, tokenRecord.id);
-        }
+      if (
+        ticket.status === 'ok' &&
+        'id' in ticket &&
+        typeof ticket.id === 'string'
+      ) {
+        receiptTokenIds.set(ticket.id, tokenRecord.id);
         return;
       }
 
@@ -239,7 +272,8 @@ export class NotificationsService {
 
     for (const chunk of receiptChunks) {
       try {
-        const receipts = await this.expo.getPushNotificationReceiptsAsync(chunk);
+        const receipts =
+          await this.expo.getPushNotificationReceiptsAsync(chunk);
         await this.handleReceipts(receipts, receiptTokenIds, notificationType);
       } catch (error) {
         this.logger.error(
@@ -262,7 +296,9 @@ export class NotificationsService {
       }
 
       const expoError =
-        typeof receipt.details?.error === 'string' ? receipt.details.error : null;
+        typeof receipt.details?.error === 'string'
+          ? receipt.details.error
+          : null;
       const tokenId = receiptTokenIds.get(receiptId);
 
       if (expoError === EXPO_DEVICE_NOT_REGISTERED && tokenId) {

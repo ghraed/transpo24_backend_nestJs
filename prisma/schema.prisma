@@ -276,6 +276,23 @@ enum TransportProofPhotoType {
   DELIVERY
 }
 
+enum ChatRoomStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum ChatMessageSenderRole {
+  CLIENT
+  DRIVER
+}
+
+enum ChatMessageType {
+  TEXT
+  IMAGE
+  SYSTEM
+}
+
 model User {
   id            String             @id @default(cuid())
   name          String
@@ -293,6 +310,7 @@ model User {
   paymentHolds  PaymentHold[]
   additionalCharges AdditionalCharge[]
   pushTokens    PushToken[]
+  chatRooms     ChatRoom[]           @relation("ChatRoomClient")
 }
 
 model PushToken {
@@ -426,6 +444,7 @@ model TransportRequest {
   driverRating   DriverRating?
   paymentHold    PaymentHold?
   additionalCharges AdditionalCharge[]
+  chatRoom       ChatRoom?
 
   @@index([customerId])
   @@index([serviceId])
@@ -540,6 +559,7 @@ model DriverProfile {
   ratings       DriverRating[]
   paymentHolds  PaymentHold[]
   additionalCharges AdditionalCharge[]
+  chatRooms     ChatRoom[]           @relation("ChatRoomDriver")
 
   @@index([status])
   @@map("driver_profiles")
@@ -691,12 +711,56 @@ model DriverOffer {
   alert              DriverRequestAlert? @relation(fields: [alertId], references: [id], onDelete: SetNull)
   acceptedForRequest TransportRequest?  @relation("AcceptedOfferForRequest")
   paymentHold        PaymentHold?
+  chatRoom           ChatRoom?
 
   @@unique([requestId, driverId])
   @@index([driverId, status])
   @@index([requestId, status])
   @@index([alertId])
   @@map("driver_offers")
+}
+
+model ChatRoom {
+  id                 String         @id @default(cuid())
+  transportRequestId String         @unique
+  clientId           String
+  driverId           String
+  acceptedOfferId    String         @unique
+  status             ChatRoomStatus @default(ACTIVE)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  closedAt           DateTime?
+
+  transportRequest TransportRequest @relation(fields: [transportRequestId], references: [id], onDelete: Cascade)
+  client           User             @relation("ChatRoomClient", fields: [clientId], references: [id], onDelete: Cascade)
+  driver           DriverProfile    @relation("ChatRoomDriver", fields: [driverId], references: [id], onDelete: Cascade)
+  acceptedOffer    DriverOffer      @relation(fields: [acceptedOfferId], references: [id], onDelete: Cascade)
+  messages         ChatMessage[]
+
+  @@index([transportRequestId])
+  @@index([clientId])
+  @@index([driverId])
+  @@index([createdAt])
+  @@map("chat_rooms")
+}
+
+model ChatMessage {
+  id            String                @id @default(cuid())
+  chatRoomId    String
+  senderId      String
+  senderRole    ChatMessageSenderRole
+  type          ChatMessageType       @default(TEXT)
+  body          String?
+  attachmentUrl String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  readAt        DateTime?
+
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+
+  @@index([chatRoomId])
+  @@index([createdAt])
+  @@map("chat_messages")
 }
 
 model DriverEarning {

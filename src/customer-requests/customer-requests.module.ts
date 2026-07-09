@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
+import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,7 @@ import { CustomerRequestsService } from './customer-requests.service';
 @Module({
   imports: [
     AuthModule,
+    forwardRef(() => ChatModule),
     NotificationsModule,
     forwardRef(() => PaymentsModule),
     forwardRef(() => TripsModule),

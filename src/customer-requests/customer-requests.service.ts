@@ -36,6 +36,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatService } from '../chat/chat.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PaymentSummaryDto } from '../payments/dto/request-payment.dto';
 import { TripsGateway } from '../trips/trips.gateway';
@@ -764,6 +765,7 @@ export class CustomerRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
+    private readonly chatService: ChatService,
     @Inject(forwardRef(() => TripsGateway))
     private readonly tripsGateway: TripsGateway,
     private readonly notificationsService: NotificationsService,
@@ -839,7 +841,10 @@ export class CustomerRequestsService {
       );
     }
 
-    if (input.scheduledPickupAt && Number.isNaN(input.scheduledPickupAt.getTime())) {
+    if (
+      input.scheduledPickupAt &&
+      Number.isNaN(input.scheduledPickupAt.getTime())
+    ) {
       throw new BadRequestException(
         'scheduledPickupAt must be a valid ISO date.',
       );
@@ -934,7 +939,10 @@ export class CustomerRequestsService {
       );
     }
 
-    if (input.scheduledPickupAt && Number.isNaN(input.scheduledPickupAt.getTime())) {
+    if (
+      input.scheduledPickupAt &&
+      Number.isNaN(input.scheduledPickupAt.getTime())
+    ) {
       throw new BadRequestException(
         'scheduledPickupAt must be a valid ISO date.',
       );
@@ -997,7 +1005,9 @@ export class CustomerRequestsService {
     input: CreateFurnitureTransportRequestInput,
   ): Promise<CustomerRequestResponseDto> {
     if (!input.files || input.files.length === 0) {
-      throw new BadRequestException('At least one furniture photo is required.');
+      throw new BadRequestException(
+        'At least one furniture photo is required.',
+      );
     }
 
     const service = await this.prisma.service.findUnique({
@@ -1043,7 +1053,10 @@ export class CustomerRequestsService {
       throw new BadRequestException('movingDate must be a valid ISO date.');
     }
 
-    if (input.scheduledPickupAt && Number.isNaN(input.scheduledPickupAt.getTime())) {
+    if (
+      input.scheduledPickupAt &&
+      Number.isNaN(input.scheduledPickupAt.getTime())
+    ) {
       await this.cleanupFiles(input.files);
       throw new BadRequestException(
         'scheduledPickupAt must be a valid ISO date.',
@@ -1844,9 +1857,8 @@ export class CustomerRequestsService {
       },
     });
 
-    const dispatchResult = await this.dispatchSubmittedRequestToEligibleDrivers(
-      updatedRequest,
-    );
+    const dispatchResult =
+      await this.dispatchSubmittedRequestToEligibleDrivers(updatedRequest);
 
     void this.notificationsService
       .notifyDriversAboutNewTransportRequest({
@@ -2133,7 +2145,7 @@ export class CustomerRequestsService {
         ? request.deliveredAt.toISOString()
         : null,
       ratingAvailable:
-        Boolean(request.ratingAvailableAt) && !Boolean(request.driverRating),
+        Boolean(request.ratingAvailableAt) && !request.driverRating,
       updatedAt: request.updatedAt.toISOString(),
     };
   }
@@ -2250,6 +2262,13 @@ export class CustomerRequestsService {
             'The accepted offer payment is not authorized successfully yet.',
           );
         }
+
+        await this.chatService.ensureRoomForAcceptedOffer(tx, {
+          transportRequestId: request.id,
+          clientId: request.customerId,
+          driverId: acceptedOffer.driverId,
+          acceptedOfferId: acceptedOffer.id,
+        });
 
         return {
           acceptedOffer,
@@ -2374,16 +2393,19 @@ export class CustomerRequestsService {
         );
       }
 
-      const payment = await this.paymentsService.createHoldForAcceptedOffer(tx, {
-        customerId: input.customerId,
-        requestId: request.id,
-        acceptedOfferId: offer.id,
-        driverId: offer.driverId,
-        amount: offer.price,
-        currency: offer.currency,
-        paymentMethod: input.paymentMethod,
-        stripePaymentMethodId: input.stripePaymentMethodId,
-      });
+      const payment = await this.paymentsService.createHoldForAcceptedOffer(
+        tx,
+        {
+          customerId: input.customerId,
+          requestId: request.id,
+          acceptedOfferId: offer.id,
+          driverId: offer.driverId,
+          amount: offer.price,
+          currency: offer.currency,
+          paymentMethod: input.paymentMethod,
+          stripePaymentMethodId: input.stripePaymentMethodId,
+        },
+      );
       return {
         acceptedOffer: offer,
         payment,
@@ -2483,7 +2505,9 @@ export class CustomerRequestsService {
         }
 
         if (request.customerId !== input.customerId) {
-          throw new ForbiddenException('You are not allowed to finalize this request.');
+          throw new ForbiddenException(
+            'You are not allowed to finalize this request.',
+          );
         }
 
         if (!request.paymentHold) {
@@ -2491,7 +2515,9 @@ export class CustomerRequestsService {
         }
 
         if (!SUCCESSFUL_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)) {
-          throw new BadRequestException('Payment has not been authorized successfully.');
+          throw new BadRequestException(
+            'Payment has not been authorized successfully.',
+          );
         }
 
         if (request.acceptedOfferId && request.assignedDriverId) {
@@ -2529,7 +2555,9 @@ export class CustomerRequestsService {
         }
 
         if (!ACCEPTABLE_OFFER_REQUEST_STATUSES.includes(request.status)) {
-          throw new BadRequestException('Request is not in a state where offers can be accepted.');
+          throw new BadRequestException(
+            'Request is not in a state where offers can be accepted.',
+          );
         }
 
         const offer = await tx.driverOffer.findUnique({
@@ -2555,7 +2583,9 @@ export class CustomerRequestsService {
         }
 
         if (offer.status !== DriverOfferStatus.PENDING) {
-          throw new BadRequestException('Only pending offers can be finalized.');
+          throw new BadRequestException(
+            'Only pending offers can be finalized.',
+          );
         }
 
         const acceptedAt = new Date();
@@ -2624,6 +2654,13 @@ export class CustomerRequestsService {
           },
         });
 
+        await this.chatService.ensureRoomForAcceptedOffer(tx, {
+          transportRequestId: request.id,
+          clientId: request.customerId,
+          driverId: offer.driverId,
+          acceptedOfferId: offer.id,
+        });
+
         return {
           acceptedOffer,
           payment: this.toPaymentSummaryResponse(request.paymentHold),
@@ -2677,7 +2714,9 @@ export class CustomerRequestsService {
       !result.updatedRequest.acceptedOfferId ||
       !result.updatedRequest.acceptedAt
     ) {
-      throw new BadRequestException('Request assignment failed after payment authorization.');
+      throw new BadRequestException(
+        'Request assignment failed after payment authorization.',
+      );
     }
 
     const acceptedRequest = await this.prisma.transportRequest.findUnique({
@@ -2924,7 +2963,9 @@ export class CustomerRequestsService {
     );
   }
 
-  async deleteCustomerRequest(input: DeleteCustomerRequestInput): Promise<void> {
+  async deleteCustomerRequest(
+    input: DeleteCustomerRequestInput,
+  ): Promise<void> {
     const request = await this.prisma.transportRequest.findUnique({
       where: { id: input.requestId },
       select: {
@@ -2947,7 +2988,9 @@ export class CustomerRequestsService {
     }
 
     if (request.customerId !== input.customerId) {
-      throw new ForbiddenException('You are not allowed to delete this request.');
+      throw new ForbiddenException(
+        'You are not allowed to delete this request.',
+      );
     }
 
     if (!DELETABLE_REQUEST_STATUSES.includes(request.status)) {
@@ -2957,7 +3000,9 @@ export class CustomerRequestsService {
     await this.prisma.$transaction(async (tx) => {
       if (request.paymentHold?.id) {
         if (!HOLD_DELETABLE_REQUEST_STATUSES.includes(request.status)) {
-          throw new ConflictException('Requests with active payment holds cannot be deleted.');
+          throw new ConflictException(
+            'Requests with active payment holds cannot be deleted.',
+          );
         }
 
         await this.paymentsService.cancelRequestPaymentTx(tx, request.id);
@@ -2968,7 +3013,9 @@ export class CustomerRequestsService {
       });
     });
 
-    const uniqueDriverIds = [...new Set(request.driverAlerts.map((alert) => alert.driverId))];
+    const uniqueDriverIds = [
+      ...new Set(request.driverAlerts.map((alert) => alert.driverId)),
+    ];
     for (const driverId of uniqueDriverIds) {
       this.tripsGateway.emitRequestDeleted(driverId, {
         requestId: request.id,
@@ -3339,7 +3386,9 @@ export class CustomerRequestsService {
         ? Number(hold.amount)
         : 0,
       capturedAmount:
-        hold.status === PaymentStatus.PAYMENT_CAPTURED ? Number(hold.amount) : 0,
+        hold.status === PaymentStatus.PAYMENT_CAPTURED
+          ? Number(hold.amount)
+          : 0,
       currency: hold.currency,
       paymentMethod: hold.paymentMethod,
       provider: hold.provider as PaymentSummaryDto['provider'],
@@ -3355,11 +3404,16 @@ export class CustomerRequestsService {
   private toCustomerRequestOfferSummary(
     offer: CustomerRequestOfferSource,
   ): CustomerRequestOfferSummaryDto {
-    const driverName = `${offer.driver.firstName} ${offer.driver.lastName}`.trim();
+    const driverName =
+      `${offer.driver.firstName} ${offer.driver.lastName}`.trim();
     const driverVehiclePhoto =
-      offer.driver.vehicles[0]?.documents[0]?.url ?? offer.driver.profilePhotoUrl ?? null;
+      offer.driver.vehicles[0]?.documents[0]?.url ??
+      offer.driver.profilePhotoUrl ??
+      null;
     const driverRating =
-      offer.driver.averageRating !== null ? Number(offer.driver.averageRating) : null;
+      offer.driver.averageRating !== null
+        ? Number(offer.driver.averageRating)
+        : null;
     const estimatedPickupAt = offer.estimatedPickupAt
       ? offer.estimatedPickupAt.toISOString()
       : null;
@@ -3520,16 +3574,14 @@ export class CustomerRequestsService {
         distanceKm,
       });
 
-      const roomConnections = this.tripsGateway.getDriverConnectionCount(driver.id);
+      const roomConnections = this.tripsGateway.getDriverConnectionCount(
+        driver.id,
+      );
       if (roomConnections > 0) {
         connectedDriversCount += 1;
         this.tripsGateway.emitRequestNew(
           driver.id,
-          this.toDriverRequestAlertSummaryPayload(
-            request,
-            alert,
-            distanceKm,
-          ),
+          this.toDriverRequestAlertSummaryPayload(request, alert, distanceKm),
         );
       }
     }
@@ -3663,15 +3715,24 @@ export class CustomerRequestsService {
 
     const scheduledDate = request.isImmediate
       ? new Date()
-      : request.scheduledPickupAt ?? new Date();
+      : (request.scheduledPickupAt ?? new Date());
 
     return vehicles.some((vehicle) => {
-      if (!this.isServiceCompatibleWithDriverVehicles(request.service!.key, new Set([vehicle.vehicleType]))) {
+      if (
+        !this.isServiceCompatibleWithDriverVehicles(
+          request.service!.key,
+          new Set([vehicle.vehicleType]),
+        )
+      ) {
         return false;
       }
 
-      const normalizedSchedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
-      if (!isWorkingScheduleAvailableForDate(normalizedSchedule, scheduledDate)) {
+      const normalizedSchedule = this.parseVehicleWorkingSchedule(
+        vehicle.workingSchedule,
+      );
+      if (
+        !isWorkingScheduleAvailableForDate(normalizedSchedule, scheduledDate)
+      ) {
         return false;
       }
 
@@ -3733,7 +3794,9 @@ export class CustomerRequestsService {
             ) {
               return [];
             }
-            return [{ startTime: timeRange.startTime, endTime: timeRange.endTime }];
+            return [
+              { startTime: timeRange.startTime, endTime: timeRange.endTime },
+            ];
           }),
         },
       ];
@@ -3843,7 +3906,9 @@ export class CustomerRequestsService {
       },
       distanceKm,
       createdAt: alert.createdAt.toISOString(),
-      submittedAt: request.submittedAt ? request.submittedAt.toISOString() : null,
+      submittedAt: request.submittedAt
+        ? request.submittedAt.toISOString()
+        : null,
     };
   }
 }
