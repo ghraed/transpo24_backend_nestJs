@@ -74,6 +74,9 @@ describe('VehiclesService', () => {
           fuel: {
             fuel_type: 'Gasoline',
           },
+          dimensions: {
+            gvwr: 'Class 1C: 4,001 - 5,000 lb (1,814 - 2,268 kg)',
+          },
         },
       }),
     });
@@ -98,9 +101,9 @@ describe('VehiclesService', () => {
         brand: 'HONDA',
         model: 'Accord',
         variant: 'EX',
-        series: null,
+        series: 'EX',
         manufactureYear: 2003,
-        estimatedWeightKg: null,
+        estimatedWeightKg: 2268,
         bodyType: 'Sedan/Saloon',
         make: 'HONDA',
         year: '2003',

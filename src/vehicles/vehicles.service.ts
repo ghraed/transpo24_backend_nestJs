@@ -54,6 +54,10 @@ interface VehicleDatabasesFuelSection {
   fuel_type?: string | null;
 }
 
+interface VehicleDatabasesDimensionsSection {
+  gvwr?: string | null;
+}
+
 interface VehicleDatabasesBasicVinDecodeData {
   intro?: VehicleDatabasesBasicVinDecodeSection | null;
   basic?: VehicleDatabasesBasicVinDecodeSection | null;
@@ -62,6 +66,7 @@ interface VehicleDatabasesBasicVinDecodeData {
   transmission?: VehicleDatabasesTransmissionSection | null;
   drivetrain?: VehicleDatabasesDrivetrainSection | null;
   fuel?: VehicleDatabasesFuelSection | null;
+  dimensions?: VehicleDatabasesDimensionsSection | null;
 }
 
 interface VehicleDatabasesBasicVinDecodeResponse {
@@ -196,7 +201,8 @@ export class VehiclesService {
         (await response.json()) as VehicleDatabasesBasicVinDecodeResponse;
       const decoded = this.normalizeVehicleDatabasesResult(vin, body);
       const manufactureYear = this.toNumber(decoded.year);
-      let estimatedWeightKg: number | null = null;
+      let estimatedWeightKg: number | null =
+        this.extractWeightKgFromDimensions(body.data?.dimensions);
       if (!estimatedWeightKg)
         estimatedWeightKg = await this.estimateWeightFromCatalog({
           brand: decoded.make,
@@ -298,6 +304,7 @@ export class VehiclesService {
     const transmission = response?.data?.transmission;
     const drivetrain = response?.data?.drivetrain;
     const fuel = response?.data?.fuel;
+    const dimensions = response?.data?.dimensions;
 
     return {
       vin: this.normalizeText(intro?.vin) ?? vin,
@@ -315,7 +322,7 @@ export class VehiclesService {
       transmissionStyle: this.normalizeText(transmission?.transmission_style),
       driveType: this.normalizeText(drivetrain?.drive_type),
       doors: this.normalizeText(basic?.doors),
-      series: null,
+      series: this.normalizeText(basic?.trim),
       errorCode: this.normalizeText(
         response?.status && response.status !== 'success'
           ? String(response.code ?? '')
@@ -363,6 +370,27 @@ export class VehiclesService {
     if (!value) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private extractWeightKgFromDimensions(
+    dimensions?: VehicleDatabasesDimensionsSection | null,
+  ): number | null {
+    const gvwr = this.normalizeText(dimensions?.gvwr);
+    if (!gvwr) return null;
+
+    const metricMatch = gvwr.match(/\(([\d,]+(?:\.\d+)?)\s*kg/i);
+    if (metricMatch) {
+      const metricValue = Number(metricMatch[1].replace(/,/g, ''));
+      if (Number.isFinite(metricValue) && metricValue > 0)
+        return Math.round(metricValue);
+    }
+
+    const poundsMatch = gvwr.match(/([\d,]+(?:\.\d+)?)\s*lb/i);
+    if (!poundsMatch) return null;
+
+    const poundsValue = Number(poundsMatch[1].replace(/,/g, ''));
+    if (!Number.isFinite(poundsValue) || poundsValue <= 0) return null;
+    return Math.round(poundsValue * 0.453592);
   }
 
   private async estimateWeightFromCatalog(input: {
