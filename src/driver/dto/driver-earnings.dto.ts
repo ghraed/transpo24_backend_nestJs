@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   Max,
   Min,
@@ -62,7 +63,7 @@ export class DriverRatingsQueryDto {
 
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 1 })
   @Min(1)
   @Max(5)
   rating?: number;

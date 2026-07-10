@@ -1,5 +1,5 @@
 import {
-  IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -8,7 +8,7 @@ import {
 } from 'class-validator';
 
 export class CreateDriverRatingDto {
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 1 })
   @Min(1)
   @Max(5)
   rating!: number;

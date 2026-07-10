@@ -2511,10 +2511,13 @@ export class DriverService {
 
     if (
       input.rating !== undefined &&
-      (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5)
+      (!Number.isFinite(input.rating) ||
+        input.rating < 1 ||
+        input.rating > 5 ||
+        !Number.isInteger(input.rating * 2))
     ) {
       throw new BadRequestException(
-        'rating must be an integer between 1 and 5.',
+        'rating must be between 1 and 5 in 0.5 increments.',
       );
     }
 

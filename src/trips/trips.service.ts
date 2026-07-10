@@ -1472,9 +1472,14 @@ export class TripsService {
   }
 
   private validateCustomerRatingInput(rating: number, comment?: string): void {
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    if (
+      !Number.isFinite(rating) ||
+      rating < 1 ||
+      rating > 5 ||
+      !Number.isInteger(rating * 2)
+    ) {
       throw new BadRequestException(
-        'rating must be an integer between 1 and 5.',
+        'rating must be between 1 and 5 in 0.5 increments.',
       );
     }
     if (comment && comment.trim().length > 500) {
