@@ -37,11 +37,27 @@ export class VehicleVinDecodeDataDto {
   manufactureYear!: number | null;
   estimatedWeightKg!: number | null;
   bodyType!: string | null;
+  make?: string | null;
+  year?: string | null;
+  trim?: string | null;
+  vehicleType?: string | null;
+  bodyClass?: string | null;
+  manufacturer?: string | null;
+  plantCountry?: string | null;
+  engineCylinders?: string | null;
+  displacementL?: string | null;
+  fuelTypePrimary?: string | null;
+  transmissionStyle?: string | null;
+  driveType?: string | null;
+  doors?: string | null;
+  errorCode?: string | null;
+  errorText?: string | null;
+  source?: 'NHTSA_VPIC';
 }
 
 export class VehicleVinDecodeResponseDto {
   success!: boolean;
-  source!: 'VIN_API';
+  source!: 'VIN_API' | 'NHTSA_VPIC';
   requiresManualSelection!: boolean;
   message?: string;
   data!: VehicleVinDecodeDataDto | null;

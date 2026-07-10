@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -9,15 +14,68 @@ import {
   VehicleVinDecodeResponseDto,
 } from './dto/vehicle-response.dto';
 
-const VPIC_TIMEOUT_MS = 5000;
+const DEFAULT_VPIC_BASE_URL = 'https://vpic.nhtsa.dot.gov/api';
+const DEFAULT_VPIC_TIMEOUT_MS = 10000;
 const FALLBACK_MESSAGE =
   'Vehicle details could not be fetched from the VIN. Please select vehicle details manually.';
 
-type VpicVariable = { Variable: string; Value: string | null };
-type VpicResponse = { Results?: VpicVariable[] };
+interface NhtsaDecodeVinValuesExtendedResult {
+  VIN?: string | null;
+  Make?: string | null;
+  Model?: string | null;
+  ModelYear?: string | null;
+  Trim?: string | null;
+  VehicleType?: string | null;
+  BodyClass?: string | null;
+  Manufacturer?: string | null;
+  PlantCountry?: string | null;
+  EngineCylinders?: string | null;
+  DisplacementL?: string | null;
+  FuelTypePrimary?: string | null;
+  TransmissionStyle?: string | null;
+  DriveType?: string | null;
+  Doors?: string | null;
+  Series?: string | null;
+  ErrorCode?: string | null;
+  ErrorText?: string | null;
+  CurbWeightPounds?: string | null;
+  GVWR?: string | null;
+  GrossVehicleWeightRatingFrom?: string | null;
+}
+
+interface NhtsaDecodeVinValuesExtendedResponse {
+  Count?: number;
+  Message?: string;
+  SearchCriteria?: string;
+  Results?: NhtsaDecodeVinValuesExtendedResult[];
+}
+
+interface DecodedVinResult {
+  vin: string;
+  make: string | null;
+  model: string | null;
+  year: string | null;
+  trim: string | null;
+  vehicleType: string | null;
+  bodyClass: string | null;
+  manufacturer: string | null;
+  plantCountry: string | null;
+  engineCylinders: string | null;
+  displacementL: string | null;
+  fuelTypePrimary: string | null;
+  transmissionStyle: string | null;
+  driveType: string | null;
+  doors: string | null;
+  series: string | null;
+  errorCode: string | null;
+  errorText: string | null;
+  source: 'NHTSA_VPIC';
+}
 
 @Injectable()
 export class VehiclesService {
+  private readonly logger = new Logger(VehiclesService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listBrands(): Promise<VehicleCatalogBrandDto[]> {
@@ -88,80 +146,150 @@ export class VehiclesService {
 
   async decodeVin(rawVin: string): Promise<VehicleVinDecodeResponseDto> {
     const vin = this.sanitizeVin(rawVin);
-    const endpoint = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/${encodeURIComponent(vin)}?format=json`;
+
     try {
-      const response = await fetch(endpoint, {
-        signal: AbortSignal.timeout(VPIC_TIMEOUT_MS),
+      const response = await fetch(this.buildDecodeVinEndpoint(vin), {
+        signal: AbortSignal.timeout(this.getVpicTimeoutMs()),
       });
-      if (!response.ok) return this.fallback();
-      const body = (await response.json()) as VpicResponse;
-      const variables = body.Results ?? [];
-      const brand = this.getValue(variables, 'Make');
-      const model = this.getValue(variables, 'Model');
-      const series = this.getValue(variables, 'Series');
-      const variant = this.getValue(variables, 'Trim') ?? series;
-      const bodyType = this.getValue(variables, 'Body Class');
-      const manufactureYear = this.toNumber(
-        this.getValue(variables, 'Model Year'),
-      );
-      let estimatedWeightKg = this.extractWeightKg(variables);
+      if (!response.ok) {
+        this.logger.warn(
+          `NHTSA vPIC returned HTTP ${response.status} for VIN decode.`,
+        );
+        throw new ServiceUnavailableException(
+          'VIN decoding service is temporarily unavailable.',
+        );
+      }
+      const body =
+        (await response.json()) as NhtsaDecodeVinValuesExtendedResponse;
+      const decoded = this.normalizeNhtsaResult(vin, body.Results?.[0]);
+      const manufactureYear = this.toNumber(decoded.year);
+      let estimatedWeightKg = this.extractWeightKg(body.Results?.[0]);
       if (!estimatedWeightKg)
         estimatedWeightKg = await this.estimateWeightFromCatalog({
-          brand,
-          model,
-          series,
+          brand: decoded.make,
+          model: decoded.model,
+          series: decoded.series,
           manufactureYear,
         });
       const hasUseful = Boolean(
-        brand || model || manufactureYear || estimatedWeightKg || bodyType,
+        decoded.make ||
+          decoded.model ||
+          manufactureYear ||
+          estimatedWeightKg ||
+          decoded.bodyClass,
       );
       if (!hasUseful) return this.fallback();
       const requiresManualSelection =
-        !brand || !model || !manufactureYear || !estimatedWeightKg;
+        !decoded.make || !decoded.model || !manufactureYear || !estimatedWeightKg;
+      const variant = decoded.trim ?? decoded.series;
+      const bodyType = decoded.bodyClass;
       return {
         success: !requiresManualSelection,
-        source: 'VIN_API',
+        source: 'NHTSA_VPIC',
         requiresManualSelection,
         message: requiresManualSelection ? FALLBACK_MESSAGE : undefined,
         data: {
           vin,
-          brand,
-          model,
-          series,
+          brand: decoded.make,
+          model: decoded.model,
+          series: decoded.series,
           variant,
           manufactureYear,
           estimatedWeightKg,
           bodyType,
+          make: decoded.make,
+          year: decoded.year,
+          trim: decoded.trim,
+          vehicleType: decoded.vehicleType,
+          bodyClass: decoded.bodyClass,
+          manufacturer: decoded.manufacturer,
+          plantCountry: decoded.plantCountry,
+          engineCylinders: decoded.engineCylinders,
+          displacementL: decoded.displacementL,
+          fuelTypePrimary: decoded.fuelTypePrimary,
+          transmissionStyle: decoded.transmissionStyle,
+          driveType: decoded.driveType,
+          doors: decoded.doors,
+          errorCode: decoded.errorCode,
+          errorText: decoded.errorText,
+          source: decoded.source,
         },
       };
-    } catch {
-      return this.fallback();
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      if (error instanceof ServiceUnavailableException) throw error;
+      this.logger.error(
+        `NHTSA vPIC VIN decode failed for ${this.maskVin(vin)}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new ServiceUnavailableException(
+        'VIN decoding service is temporarily unavailable.',
+      );
     }
   }
 
   private sanitizeVin(rawVin: string): string {
     const vin = rawVin.trim().toUpperCase();
-    if (vin.length < 6 || vin.length > 32)
-      throw new BadRequestException('VIN/chassis number length is invalid.');
-    if (!/^[A-HJ-NPR-Z0-9]+$/.test(vin))
-      throw new BadRequestException(
-        'VIN/chassis number contains invalid characters.',
-      );
+    if (vin.length !== 17)
+      throw new BadRequestException('VIN must be exactly 17 characters long.');
+    if (!/^[A-Z0-9]+$/.test(vin))
+      throw new BadRequestException('VIN must contain only letters and numbers.');
+    if (/[IOQ]/.test(vin))
+      throw new BadRequestException('VIN cannot contain the letters I, O, or Q.');
     return vin;
   }
 
-  private getValue(variables: VpicVariable[], key: string): string | null {
-    const hit = variables.find(
-      (entry) => entry.Variable?.toLowerCase() === key.toLowerCase(),
-    );
-    const value = hit?.Value?.trim();
+  private buildDecodeVinEndpoint(vin: string): string {
+    const baseUrl =
+      process.env.NHTSA_VPIC_BASE_URL?.trim().replace(/\/+$/, '') ||
+      DEFAULT_VPIC_BASE_URL;
+    return `${baseUrl}/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`;
+  }
+
+  private getVpicTimeoutMs(): number {
+    const rawTimeout = process.env.NHTSA_VPIC_TIMEOUT_MS?.trim();
+    const parsedTimeout = rawTimeout ? Number(rawTimeout) : NaN;
+    if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0)
+      return DEFAULT_VPIC_TIMEOUT_MS;
+    return parsedTimeout;
+  }
+
+  private normalizeNhtsaResult(
+    vin: string,
+    result?: NhtsaDecodeVinValuesExtendedResult,
+  ): DecodedVinResult {
+    return {
+      vin: this.normalizeText(result?.VIN) ?? vin,
+      make: this.normalizeText(result?.Make),
+      model: this.normalizeText(result?.Model),
+      year: this.normalizeText(result?.ModelYear),
+      trim: this.normalizeText(result?.Trim),
+      vehicleType: this.normalizeText(result?.VehicleType),
+      bodyClass: this.normalizeText(result?.BodyClass),
+      manufacturer: this.normalizeText(result?.Manufacturer),
+      plantCountry: this.normalizeText(result?.PlantCountry),
+      engineCylinders: this.normalizeText(result?.EngineCylinders),
+      displacementL: this.normalizeText(result?.DisplacementL),
+      fuelTypePrimary: this.normalizeText(result?.FuelTypePrimary),
+      transmissionStyle: this.normalizeText(result?.TransmissionStyle),
+      driveType: this.normalizeText(result?.DriveType),
+      doors: this.normalizeText(result?.Doors),
+      series: this.normalizeText(result?.Series),
+      errorCode: this.normalizeText(result?.ErrorCode),
+      errorText: this.normalizeText(result?.ErrorText),
+      source: 'NHTSA_VPIC',
+    };
+  }
+
+  private normalizeText(value: string | null | undefined): string | null {
+    const normalized = value?.trim();
     if (
-      !value ||
-      value.toLowerCase() === 'null' ||
-      value.toLowerCase() === 'not applicable'
+      !normalized ||
+      normalized.toLowerCase() === 'null' ||
+      normalized.toLowerCase() === 'not applicable'
     )
       return null;
-    return value;
+    return normalized;
   }
 
   private toNumber(value: string | null): number | null {
@@ -170,21 +298,33 @@ export class VehiclesService {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  private extractWeightKg(variables: VpicVariable[]): number | null {
+  private extractWeightKg(
+    result?: NhtsaDecodeVinValuesExtendedResult,
+  ): number | null {
     const candidates = [
-      this.getValue(variables, 'Curb Weight (pounds)'),
-      this.getValue(variables, 'GVWR'),
-      this.getValue(variables, 'Gross Vehicle Weight Rating From'),
+      {
+        value: this.normalizeText(result?.CurbWeightPounds),
+        appearsPounds: true,
+      },
+      {
+        value: this.normalizeText(result?.GVWR),
+        appearsPounds: false,
+      },
+      {
+        value: this.normalizeText(result?.GrossVehicleWeightRatingFrom),
+        appearsPounds: false,
+      },
     ];
     for (const candidate of candidates) {
-      if (!candidate) continue;
-      const numeric = candidate.match(/\d+(\.\d+)?/);
+      if (!candidate.value) continue;
+      const numeric = candidate.value.match(/\d+(\.\d+)?/);
       if (!numeric) continue;
       const value = Number(numeric[0]);
       if (!Number.isFinite(value) || value <= 0) continue;
       const appearsPounds =
-        candidate.toLowerCase().includes('lb') ||
-        candidate.toLowerCase().includes('pound');
+        candidate.appearsPounds ||
+        candidate.value.toLowerCase().includes('lb') ||
+        candidate.value.toLowerCase().includes('pound');
       return Math.round(appearsPounds ? value * 0.453592 : value);
     }
     return null;
@@ -225,10 +365,15 @@ export class VehiclesService {
   private fallback(): VehicleVinDecodeResponseDto {
     return {
       success: false,
-      source: 'VIN_API',
+      source: 'NHTSA_VPIC',
       requiresManualSelection: true,
       message: FALLBACK_MESSAGE,
       data: null,
     };
+  }
+
+  private maskVin(vin: string): string {
+    if (vin.length <= 6) return vin;
+    return `${vin.slice(0, 3)}********${vin.slice(-3)}`;
   }
 }
