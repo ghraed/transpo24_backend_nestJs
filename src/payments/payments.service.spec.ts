@@ -3,7 +3,7 @@ import { AdditionalChargeStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 
 describe('PaymentsService', () => {
-  const service = new PaymentsService({} as never, {} as never);
+  const service = new PaymentsService({} as never, {} as never, {} as never);
 
   it('converts decimals to Stripe minor units', () => {
     expect(

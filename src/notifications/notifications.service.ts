@@ -221,6 +221,98 @@ export class NotificationsService {
     });
   }
 
+  async notifyCustomerItemPickedUp(input: {
+    customerId: string;
+    tripId: string;
+    proofPhotoCount: number;
+  }): Promise<void> {
+    const proofLabel =
+      input.proofPhotoCount <= 0
+        ? 'pickup proof'
+        : input.proofPhotoCount === 1
+          ? '1 proof photo'
+          : `${input.proofPhotoCount} proof photos`;
+
+    await this.sendToUsers({
+      userIds: [input.customerId],
+      app: PushApp.CUSTOMER,
+      title: 'Pickup confirmed',
+      body: `Driver confirmed pickup and uploaded ${proofLabel}.`,
+      type: 'ITEM_PICKED_UP',
+      data: {
+        requestId: input.tripId,
+        tripId: input.tripId,
+      },
+    });
+  }
+
+  async notifyCustomerItemDelivered(input: {
+    customerId: string;
+    tripId: string;
+    proofPhotoCount: number;
+  }): Promise<void> {
+    const proofLabel =
+      input.proofPhotoCount <= 0
+        ? 'delivery proof'
+        : input.proofPhotoCount === 1
+          ? '1 proof photo'
+          : `${input.proofPhotoCount} proof photos`;
+
+    await this.sendToUsers({
+      userIds: [input.customerId],
+      app: PushApp.CUSTOMER,
+      title: 'Delivery confirmed',
+      body: `Driver confirmed delivery and uploaded ${proofLabel}.`,
+      type: 'ITEM_DELIVERED',
+      data: {
+        requestId: input.tripId,
+        tripId: input.tripId,
+      },
+    });
+  }
+
+  async notifyTripFundsTransferred(input: {
+    customerId: string;
+    driverUserId: string;
+    tripId: string;
+    amount: string;
+    currency: string;
+    stripeTransferId: string;
+  }): Promise<void> {
+    const normalizedCurrency = input.currency.trim().toUpperCase();
+    const amountLabel = `${input.amount} ${normalizedCurrency}`;
+
+    await this.sendToUsers({
+      userIds: [input.customerId],
+      app: PushApp.CUSTOMER,
+      title: 'Trip payout transferred',
+      body: `The driver payout for your completed trip was transferred (${amountLabel}).`,
+      type: 'TRIP_FUNDS_TRANSFERRED',
+      data: {
+        requestId: input.tripId,
+        tripId: input.tripId,
+        stripeTransferId: input.stripeTransferId,
+        amount: input.amount,
+        currency: normalizedCurrency,
+      },
+    });
+
+    await this.sendToUsers({
+      userIds: [input.driverUserId],
+      app: PushApp.DRIVER,
+      title: 'Payout transferred',
+      body: `Your trip payout of ${amountLabel} was transferred to your Stripe payout account.`,
+      type: 'TRIP_FUNDS_TRANSFERRED',
+      data: {
+        requestId: input.tripId,
+        tripId: input.tripId,
+        stripeTransferId: input.stripeTransferId,
+        amount: input.amount,
+        currency: normalizedCurrency,
+      },
+    });
+  }
+
   private async handleTickets(
     chunkTokens: PushTokenRecord[],
     tickets: ExpoPushTicket[],

@@ -71,6 +71,7 @@ import { DriverService } from './driver.service';
 import { PaymentsService } from '../payments/payments.service';
 import { DriverTripParamDto, PickupItemDto } from './dto/pickup-item.dto';
 import { TripsGateway } from '../trips/trips.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { TripsService } from '../trips/trips.service';
 import {
   DeliverItemResponse,
@@ -147,6 +148,7 @@ export class DriverController {
     private readonly paymentsService: PaymentsService,
     private readonly tripsService: TripsService,
     private readonly tripsGateway: TripsGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   @Get('me')
@@ -867,6 +869,11 @@ export class DriverController {
     });
 
     this.tripsGateway.emitItemPickedUp(result.itemPickedUp, result.status);
+    await this.notificationsService.notifyCustomerItemPickedUp({
+      customerId: result.itemPickedUp.customerId,
+      tripId: result.itemPickedUp.tripId,
+      proofPhotoCount: result.itemPickedUp.pickupProofPhotos.length,
+    });
 
     return result.response;
   }
@@ -955,6 +962,11 @@ export class DriverController {
     });
 
     this.tripsGateway.emitItemDelivered(result.delivered, result.status);
+    await this.notificationsService.notifyCustomerItemDelivered({
+      customerId: result.delivered.customerId,
+      tripId: result.delivered.tripId,
+      proofPhotoCount: result.delivered.deliveryProofPhotos.length,
+    });
 
     // Capture the held payment now that delivery is confirmed.
     // This charges the customer's card and moves funds to the platform account.

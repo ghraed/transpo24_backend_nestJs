@@ -19,6 +19,7 @@ import {
   TransportRequestStatus,
 } from '@prisma/client';
 
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AdditionalChargeResponseDto,
@@ -100,6 +101,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createHoldForAcceptedOffer(
@@ -781,6 +783,22 @@ export class PaymentsService {
       },
     });
 
+    const trip = await this.prisma.transportRequest.findUnique({
+      where: { id: input.tripId },
+      select: { customerId: true },
+    });
+
+    if (trip) {
+      await this.notificationsService.notifyTripFundsTransferred({
+        customerId: trip.customerId,
+        driverUserId: input.driverUserId,
+        tripId: input.tripId,
+        amount: earning.netAmount.toFixed(2),
+        currency: earning.currency,
+        stripeTransferId: transfer.id,
+      });
+    }
+
     return {
       transferred: true,
       stripeTransferId: transfer.id,
@@ -816,6 +834,7 @@ export class PaymentsService {
     const driver = await this.prisma.driverProfile.findUnique({
       where: { id: earning.driverId },
       select: {
+        userId: true,
         stripeAccountId: true,
         stripePayoutsEnabled: true,
         stripeDetailsSubmitted: true,
@@ -856,6 +875,22 @@ export class PaymentsService {
         stripeTransferStatus: 'paid',
       },
     });
+
+    const trip = await this.prisma.transportRequest.findUnique({
+      where: { id: tripId },
+      select: { customerId: true },
+    });
+
+    if (trip) {
+      await this.notificationsService.notifyTripFundsTransferred({
+        customerId: trip.customerId,
+        driverUserId: driver.userId,
+        tripId,
+        amount: earning.netAmount.toFixed(2),
+        currency: earning.currency,
+        stripeTransferId: transfer.id,
+      });
+    }
   }
 
   async handleStripeWebhook(
