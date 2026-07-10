@@ -52,12 +52,12 @@ export class VehicleVinDecodeDataDto {
   doors?: string | null;
   errorCode?: string | null;
   errorText?: string | null;
-  source?: 'NHTSA_VPIC';
+  source?: 'VEHICLE_DATABASES';
 }
 
 export class VehicleVinDecodeResponseDto {
   success!: boolean;
-  source!: 'VIN_API' | 'NHTSA_VPIC';
+  source!: 'VIN_API' | 'VEHICLE_DATABASES';
   requiresManualSelection!: boolean;
   message?: string;
   data!: VehicleVinDecodeDataDto | null;

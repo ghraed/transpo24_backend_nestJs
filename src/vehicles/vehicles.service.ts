@@ -14,40 +14,61 @@ import {
   VehicleVinDecodeResponseDto,
 } from './dto/vehicle-response.dto';
 
-const DEFAULT_VPIC_BASE_URL = 'https://vpic.nhtsa.dot.gov/api';
-const DEFAULT_VPIC_TIMEOUT_MS = 10000;
+const DEFAULT_VEHICLE_DATABASES_BASE_URL =
+  'https://api.vehicledatabases.com';
+const DEFAULT_VEHICLE_DATABASES_TIMEOUT_MS = 10000;
 const FALLBACK_MESSAGE =
   'Vehicle details could not be fetched from the VIN. Please select vehicle details manually.';
 
-interface NhtsaDecodeVinValuesExtendedResult {
-  VIN?: string | null;
-  Make?: string | null;
-  Model?: string | null;
-  ModelYear?: string | null;
-  Trim?: string | null;
-  VehicleType?: string | null;
-  BodyClass?: string | null;
-  Manufacturer?: string | null;
-  PlantCountry?: string | null;
-  EngineCylinders?: string | null;
-  DisplacementL?: string | null;
-  FuelTypePrimary?: string | null;
-  TransmissionStyle?: string | null;
-  DriveType?: string | null;
-  Doors?: string | null;
-  Series?: string | null;
-  ErrorCode?: string | null;
-  ErrorText?: string | null;
-  CurbWeightPounds?: string | null;
-  GVWR?: string | null;
-  GrossVehicleWeightRatingFrom?: string | null;
+interface VehicleDatabasesBasicVinDecodeSection {
+  vin?: string | null;
+  make?: string | null;
+  model?: string | null;
+  year?: string | null;
+  trim?: string | null;
+  body_type?: string | null;
+  vehicle_type?: string | null;
+  doors?: string | null;
 }
 
-interface NhtsaDecodeVinValuesExtendedResponse {
-  Count?: number;
-  Message?: string;
-  SearchCriteria?: string;
-  Results?: NhtsaDecodeVinValuesExtendedResult[];
+interface VehicleDatabasesEngineSection {
+  cylinders?: string | null;
+  engine_size?: string | null;
+  engine_capacity?: string | null;
+}
+
+interface VehicleDatabasesManufacturerSection {
+  manufacturer?: string | null;
+  country?: string | null;
+}
+
+interface VehicleDatabasesTransmissionSection {
+  transmission_style?: string | null;
+}
+
+interface VehicleDatabasesDrivetrainSection {
+  drive_type?: string | null;
+}
+
+interface VehicleDatabasesFuelSection {
+  fuel_type?: string | null;
+}
+
+interface VehicleDatabasesBasicVinDecodeData {
+  intro?: VehicleDatabasesBasicVinDecodeSection | null;
+  basic?: VehicleDatabasesBasicVinDecodeSection | null;
+  engine?: VehicleDatabasesEngineSection | null;
+  manufacturer?: VehicleDatabasesManufacturerSection | null;
+  transmission?: VehicleDatabasesTransmissionSection | null;
+  drivetrain?: VehicleDatabasesDrivetrainSection | null;
+  fuel?: VehicleDatabasesFuelSection | null;
+}
+
+interface VehicleDatabasesBasicVinDecodeResponse {
+  status?: string;
+  data?: VehicleDatabasesBasicVinDecodeData | null;
+  code?: number | string | null;
+  message?: string | null;
 }
 
 interface DecodedVinResult {
@@ -69,7 +90,7 @@ interface DecodedVinResult {
   series: string | null;
   errorCode: string | null;
   errorText: string | null;
-  source: 'NHTSA_VPIC';
+  source: 'VEHICLE_DATABASES';
 }
 
 @Injectable()
@@ -146,24 +167,36 @@ export class VehiclesService {
 
   async decodeVin(rawVin: string): Promise<VehicleVinDecodeResponseDto> {
     const vin = this.sanitizeVin(rawVin);
+    const apiKey = process.env.VEHICLE_DATABASES_API_KEY?.trim();
+
+    if (!apiKey) {
+      this.logger.error('Vehicle Databases API key is not configured.');
+      throw new ServiceUnavailableException(
+        'VIN decoding service is temporarily unavailable.',
+      );
+    }
 
     try {
       const response = await fetch(this.buildDecodeVinEndpoint(vin), {
-        signal: AbortSignal.timeout(this.getVpicTimeoutMs()),
+        headers: { 'x-authkey': apiKey },
+        signal: AbortSignal.timeout(this.getVehicleDatabasesTimeoutMs()),
       });
+
+      if (response.status === 400) return this.fallback();
+
       if (!response.ok) {
         this.logger.warn(
-          `NHTSA vPIC returned HTTP ${response.status} for VIN decode.`,
+          `Vehicle Databases returned HTTP ${response.status} for VIN decode.`,
         );
         throw new ServiceUnavailableException(
           'VIN decoding service is temporarily unavailable.',
         );
       }
       const body =
-        (await response.json()) as NhtsaDecodeVinValuesExtendedResponse;
-      const decoded = this.normalizeNhtsaResult(vin, body.Results?.[0]);
+        (await response.json()) as VehicleDatabasesBasicVinDecodeResponse;
+      const decoded = this.normalizeVehicleDatabasesResult(vin, body);
       const manufactureYear = this.toNumber(decoded.year);
-      let estimatedWeightKg = this.extractWeightKg(body.Results?.[0]);
+      let estimatedWeightKg: number | null = null;
       if (!estimatedWeightKg)
         estimatedWeightKg = await this.estimateWeightFromCatalog({
           brand: decoded.make,
@@ -180,12 +213,12 @@ export class VehiclesService {
       );
       if (!hasUseful) return this.fallback();
       const requiresManualSelection =
-        !decoded.make || !decoded.model || !manufactureYear || !estimatedWeightKg;
+        !decoded.make || !decoded.model || !manufactureYear;
       const variant = decoded.trim ?? decoded.series;
       const bodyType = decoded.bodyClass;
       return {
         success: !requiresManualSelection,
-        source: 'NHTSA_VPIC',
+        source: 'VEHICLE_DATABASES',
         requiresManualSelection,
         message: requiresManualSelection ? FALLBACK_MESSAGE : undefined,
         data: {
@@ -219,7 +252,7 @@ export class VehiclesService {
       if (error instanceof BadRequestException) throw error;
       if (error instanceof ServiceUnavailableException) throw error;
       this.logger.error(
-        `NHTSA vPIC VIN decode failed for ${this.maskVin(vin)}.`,
+        `Vehicle Databases VIN decode failed for ${this.maskVin(vin)}.`,
         error instanceof Error ? error.stack : undefined,
       );
       throw new ServiceUnavailableException(
@@ -241,43 +274,60 @@ export class VehiclesService {
 
   private buildDecodeVinEndpoint(vin: string): string {
     const baseUrl =
-      process.env.NHTSA_VPIC_BASE_URL?.trim().replace(/\/+$/, '') ||
-      DEFAULT_VPIC_BASE_URL;
-    return `${baseUrl}/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`;
+      process.env.VEHICLE_DATABASES_BASE_URL?.trim().replace(/\/+$/, '') ||
+      DEFAULT_VEHICLE_DATABASES_BASE_URL;
+    return `${baseUrl}/vin-decode/${encodeURIComponent(vin)}`;
   }
 
-  private getVpicTimeoutMs(): number {
-    const rawTimeout = process.env.NHTSA_VPIC_TIMEOUT_MS?.trim();
+  private getVehicleDatabasesTimeoutMs(): number {
+    const rawTimeout = process.env.VEHICLE_DATABASES_TIMEOUT_MS?.trim();
     const parsedTimeout = rawTimeout ? Number(rawTimeout) : NaN;
     if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0)
-      return DEFAULT_VPIC_TIMEOUT_MS;
+      return DEFAULT_VEHICLE_DATABASES_TIMEOUT_MS;
     return parsedTimeout;
   }
 
-  private normalizeNhtsaResult(
+  private normalizeVehicleDatabasesResult(
     vin: string,
-    result?: NhtsaDecodeVinValuesExtendedResult,
+    response?: VehicleDatabasesBasicVinDecodeResponse,
   ): DecodedVinResult {
+    const basic = response?.data?.basic;
+    const intro = response?.data?.intro;
+    const engine = response?.data?.engine;
+    const manufacturer = response?.data?.manufacturer;
+    const transmission = response?.data?.transmission;
+    const drivetrain = response?.data?.drivetrain;
+    const fuel = response?.data?.fuel;
+
     return {
-      vin: this.normalizeText(result?.VIN) ?? vin,
-      make: this.normalizeText(result?.Make),
-      model: this.normalizeText(result?.Model),
-      year: this.normalizeText(result?.ModelYear),
-      trim: this.normalizeText(result?.Trim),
-      vehicleType: this.normalizeText(result?.VehicleType),
-      bodyClass: this.normalizeText(result?.BodyClass),
-      manufacturer: this.normalizeText(result?.Manufacturer),
-      plantCountry: this.normalizeText(result?.PlantCountry),
-      engineCylinders: this.normalizeText(result?.EngineCylinders),
-      displacementL: this.normalizeText(result?.DisplacementL),
-      fuelTypePrimary: this.normalizeText(result?.FuelTypePrimary),
-      transmissionStyle: this.normalizeText(result?.TransmissionStyle),
-      driveType: this.normalizeText(result?.DriveType),
-      doors: this.normalizeText(result?.Doors),
-      series: this.normalizeText(result?.Series),
-      errorCode: this.normalizeText(result?.ErrorCode),
-      errorText: this.normalizeText(result?.ErrorText),
-      source: 'NHTSA_VPIC',
+      vin: this.normalizeText(intro?.vin) ?? vin,
+      make: this.normalizeText(basic?.make),
+      model: this.normalizeText(basic?.model),
+      year: this.normalizeText(basic?.year),
+      trim: this.normalizeText(basic?.trim),
+      vehicleType: this.normalizeText(basic?.vehicle_type),
+      bodyClass: this.normalizeText(basic?.body_type),
+      manufacturer: this.normalizeText(manufacturer?.manufacturer),
+      plantCountry: this.normalizeText(manufacturer?.country),
+      engineCylinders: this.normalizeText(engine?.cylinders),
+      displacementL: this.normalizeDisplacementL(engine),
+      fuelTypePrimary: this.normalizeText(fuel?.fuel_type),
+      transmissionStyle: this.normalizeText(transmission?.transmission_style),
+      driveType: this.normalizeText(drivetrain?.drive_type),
+      doors: this.normalizeText(basic?.doors),
+      series: null,
+      errorCode: this.normalizeText(
+        response?.status && response.status !== 'success'
+          ? String(response.code ?? '')
+          : null,
+      ),
+      errorText:
+        this.normalizeText(
+          response?.status && response.status !== 'success'
+            ? response.message
+            : null,
+        ) ?? null,
+      source: 'VEHICLE_DATABASES',
     };
   }
 
@@ -292,42 +342,27 @@ export class VehiclesService {
     return normalized;
   }
 
+  private normalizeDisplacementL(
+    engine?: VehicleDatabasesEngineSection | null,
+  ): string | null {
+    const engineSize = this.normalizeText(engine?.engine_size);
+    if (engineSize) return engineSize;
+
+    const engineCapacity = this.normalizeText(engine?.engine_capacity);
+    if (!engineCapacity) return null;
+
+    const parsedCapacity = Number(engineCapacity);
+    if (!Number.isFinite(parsedCapacity) || parsedCapacity <= 0)
+      return engineCapacity;
+
+    if (parsedCapacity >= 50) return (parsedCapacity / 1000).toFixed(1);
+    return String(parsedCapacity);
+  }
+
   private toNumber(value: string | null): number | null {
     if (!value) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  private extractWeightKg(
-    result?: NhtsaDecodeVinValuesExtendedResult,
-  ): number | null {
-    const candidates = [
-      {
-        value: this.normalizeText(result?.CurbWeightPounds),
-        appearsPounds: true,
-      },
-      {
-        value: this.normalizeText(result?.GVWR),
-        appearsPounds: false,
-      },
-      {
-        value: this.normalizeText(result?.GrossVehicleWeightRatingFrom),
-        appearsPounds: false,
-      },
-    ];
-    for (const candidate of candidates) {
-      if (!candidate.value) continue;
-      const numeric = candidate.value.match(/\d+(\.\d+)?/);
-      if (!numeric) continue;
-      const value = Number(numeric[0]);
-      if (!Number.isFinite(value) || value <= 0) continue;
-      const appearsPounds =
-        candidate.appearsPounds ||
-        candidate.value.toLowerCase().includes('lb') ||
-        candidate.value.toLowerCase().includes('pound');
-      return Math.round(appearsPounds ? value * 0.453592 : value);
-    }
-    return null;
   }
 
   private async estimateWeightFromCatalog(input: {
@@ -365,7 +400,7 @@ export class VehiclesService {
   private fallback(): VehicleVinDecodeResponseDto {
     return {
       success: false,
-      source: 'NHTSA_VPIC',
+      source: 'VEHICLE_DATABASES',
       requiresManualSelection: true,
       message: FALLBACK_MESSAGE,
       data: null,

@@ -18,8 +18,9 @@ describe('VehiclesService', () => {
   afterEach(() => {
     global.fetch = originalFetch;
     jest.restoreAllMocks();
-    delete process.env.NHTSA_VPIC_BASE_URL;
-    delete process.env.NHTSA_VPIC_TIMEOUT_MS;
+    delete process.env.VEHICLE_DATABASES_API_KEY;
+    delete process.env.VEHICLE_DATABASES_BASE_URL;
+    delete process.env.VEHICLE_DATABASES_TIMEOUT_MS;
   });
 
   it('rejects VINs that are not exactly 17 characters', async () => {
@@ -38,35 +39,42 @@ describe('VehiclesService', () => {
     );
   });
 
-  it('normalizes a successful NHTSA DecodeVinValuesExtended response', async () => {
+  it('normalizes a successful Vehicle Databases basic VIN decode response', async () => {
     const service = createService();
+    process.env.VEHICLE_DATABASES_API_KEY = 'test-key';
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        Count: 1,
-        Results: [
-          {
-            VIN: '1HGCM82633A004352',
-            Make: 'HONDA',
-            Model: 'Accord',
-            ModelYear: '2003',
-            Trim: 'EX',
-            VehicleType: 'PASSENGER CAR',
-            BodyClass: 'Sedan/Saloon',
-            Manufacturer: 'HONDA OF AMERICA MFG., INC.',
-            PlantCountry: 'UNITED STATES (USA)',
-            EngineCylinders: '4',
-            DisplacementL: '2.4',
-            FuelTypePrimary: 'Gasoline',
-            TransmissionStyle: 'Automatic',
-            DriveType: '4x2',
-            Doors: '4',
-            Series: 'CM5',
-            ErrorCode: '0',
-            ErrorText: '0 - VIN decoded clean. Check Digit (9th position) is correct',
-            CurbWeightPounds: '3200',
+        status: 'success',
+        data: {
+          intro: { vin: '1HGCM82633A004352' },
+          basic: {
+            make: 'HONDA',
+            model: 'Accord',
+            year: '2003',
+            trim: 'EX',
+            vehicle_type: 'PASSENGER CAR',
+            body_type: 'Sedan/Saloon',
+            doors: '4',
           },
-        ],
+          engine: {
+            cylinders: '4',
+            engine_size: '2.4',
+          },
+          manufacturer: {
+            manufacturer: 'HONDA OF AMERICA MFG., INC.',
+            country: 'UNITED STATES (USA)',
+          },
+          transmission: {
+            transmission_style: 'Automatic',
+          },
+          drivetrain: {
+            drive_type: '4x2',
+          },
+          fuel: {
+            fuel_type: 'Gasoline',
+          },
+        },
       }),
     });
     global.fetch = fetchMock as typeof global.fetch;
@@ -74,22 +82,25 @@ describe('VehiclesService', () => {
     const result = await service.decodeVin('1hgcm82633a004352');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/1HGCM82633A004352?format=json',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      'https://api.vehicledatabases.com/vin-decode/1HGCM82633A004352',
+      expect.objectContaining({
+        headers: { 'x-authkey': 'test-key' },
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(result).toEqual({
       success: true,
-      source: 'NHTSA_VPIC',
+      source: 'VEHICLE_DATABASES',
       requiresManualSelection: false,
       message: undefined,
       data: {
         vin: '1HGCM82633A004352',
         brand: 'HONDA',
         model: 'Accord',
-        series: 'CM5',
         variant: 'EX',
+        series: null,
         manufactureYear: 2003,
-        estimatedWeightKg: 1451,
+        estimatedWeightKg: null,
         bodyType: 'Sedan/Saloon',
         make: 'HONDA',
         year: '2003',
@@ -104,27 +115,29 @@ describe('VehiclesService', () => {
         transmissionStyle: 'Automatic',
         driveType: '4x2',
         doors: '4',
-        errorCode: '0',
-        errorText:
-          '0 - VIN decoded clean. Check Digit (9th position) is correct',
-        source: 'NHTSA_VPIC',
+        errorCode: null,
+        errorText: null,
+        source: 'VEHICLE_DATABASES',
       },
     });
   });
 
-  it('returns the existing controlled fallback when NHTSA has no useful vehicle details', async () => {
+  it('returns the existing controlled fallback when Vehicle Databases has no useful vehicle details', async () => {
     const service = createService();
+    process.env.VEHICLE_DATABASES_API_KEY = 'test-key';
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        Count: 1,
-        Results: [{ VIN: '1HGCM82633A004352', ErrorCode: '1', ErrorText: 'Invalid VIN' }],
+        status: 'error',
+        code: 400,
+        message: 'Record(s) were not found for this vehicle.',
+        data: null,
       }),
     }) as typeof global.fetch;
 
     await expect(service.decodeVin('1HGCM82633A004352')).resolves.toEqual({
       success: false,
-      source: 'NHTSA_VPIC',
+      source: 'VEHICLE_DATABASES',
       requiresManualSelection: true,
       message:
         'Vehicle details could not be fetched from the VIN. Please select vehicle details manually.',
@@ -134,10 +147,19 @@ describe('VehiclesService', () => {
 
   it('throws ServiceUnavailableException when the provider is unavailable', async () => {
     const service = createService();
+    process.env.VEHICLE_DATABASES_API_KEY = 'test-key';
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       status: 503,
     }) as typeof global.fetch;
+
+    await expect(service.decodeVin('1HGCM82633A004352')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('throws ServiceUnavailableException when the Vehicle Databases API key is missing', async () => {
+    const service = createService();
 
     await expect(service.decodeVin('1HGCM82633A004352')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
