@@ -4,6 +4,6 @@ export interface RegisterResponseDto {
     id: string;
     name: string;
     email: string;
-    role: 'CUSTOMER' | 'DRIVER';
+    role: 'CUSTOMER' | 'DRIVER' | 'ADMIN';
   };
 }

@@ -34,6 +34,11 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('admin/login')
+  loginAdmin(@Body() dto: LoginDto): Promise<LoginResponseDto> {
+    return this.authService.loginAdmin(dto);
+  }
+
   @Post('testing/reset-users')
   resetUsersForTesting(): Promise<{ deletedUsers: number; keptEmail: string }> {
     return this.authService.resetUsersForTesting();

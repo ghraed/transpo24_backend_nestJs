@@ -412,6 +412,19 @@ export class AuthService {
     };
   }
 
+  async loginAdmin(dto: LoginDto): Promise<LoginResponseDto> {
+    const response = await this.login(dto);
+
+    if (response.user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access is required.');
+    }
+
+    return {
+      accessToken: response.accessToken,
+      user: response.user,
+    };
+  }
+
   private normalizeCountryCodes(values: string[]): string[] {
     return Array.from(
       new Set(

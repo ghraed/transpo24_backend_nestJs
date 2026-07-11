@@ -170,6 +170,25 @@ async function main() {
       },
     },
   });
+
+  const adminEmail = 'admin@transpo24.com';
+  const adminPassword = 'admin12345';
+  const adminPasswordHash = hashPassword(adminPassword);
+
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: {
+      name: 'Admin User',
+      role: UserRole.ADMIN,
+      passwordHash: adminPasswordHash,
+    },
+    create: {
+      name: 'Admin User',
+      email: adminEmail,
+      role: UserRole.ADMIN,
+      passwordHash: adminPasswordHash,
+    },
+  });
 }
 
 main()

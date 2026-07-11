@@ -1,0 +1,62 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+
+import { AdminService } from './admin.service';
+import { AuthenticatedUserGuard } from '../auth/guards/authenticated-user.guard';
+import { AdminRoleGuard } from './guards/admin-role.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/auth.types';
+import { CreateAdminUserDto } from './dto/create-admin-user.dto';
+import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
+import { AdminUserResponseDto } from './dto/admin-user-response.dto';
+
+@Controller('admin')
+@UseGuards(AuthenticatedUserGuard, AdminRoleGuard)
+export class AdminController {
+  constructor(private readonly adminService: AdminService) {}
+
+  @Get('users')
+  findAll(): Promise<AdminUserResponseDto[]> {
+    return this.adminService.findAll();
+  }
+
+  @Get('users/:id')
+  findById(@Param('id') id: string): Promise<AdminUserResponseDto> {
+    return this.adminService.findById(id);
+  }
+
+  @Post('users')
+  create(@Body() dto: CreateAdminUserDto): Promise<AdminUserResponseDto> {
+    return this.adminService.create(dto);
+  }
+
+  @Put('users/:id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateAdminUserDto,
+  ): Promise<AdminUserResponseDto> {
+    return this.adminService.update(id, dto);
+  }
+
+  @Post('users/:id/reactivate')
+  reactivate(@Param('id') id: string): Promise<AdminUserResponseDto> {
+    return this.adminService.reactivate(id);
+  }
+
+  @Delete('users/:id')
+  async softDelete(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{ success: boolean }> {
+    await this.adminService.softDelete(id, user.id);
+    return { success: true };
+  }
+}

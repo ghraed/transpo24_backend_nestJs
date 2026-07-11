@@ -3,7 +3,7 @@ export interface RegisterDriverResponseDto {
   user: {
     id: string;
     email: string;
-    role: 'CUSTOMER' | 'DRIVER';
+    role: 'CUSTOMER' | 'DRIVER' | 'ADMIN';
   };
   driver: {
     id: string;

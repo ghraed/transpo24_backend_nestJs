@@ -90,6 +90,7 @@ enum GoodsHeavyShipmentType {
 enum UserRole {
   CUSTOMER
   DRIVER
+  ADMIN
 }
 
 enum PushApp {
@@ -300,6 +301,7 @@ model User {
   passwordHash  String
   role          UserRole           @default(CUSTOMER)
   stripeCustomerId String?         @unique
+  deletedAt     DateTime?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   requests      TransportRequest[]
@@ -311,6 +313,9 @@ model User {
   additionalCharges AdditionalCharge[]
   pushTokens    PushToken[]
   chatRooms     ChatRoom[]           @relation("ChatRoomClient")
+
+  @@index([deletedAt])
+  @@index([role, deletedAt])
 }
 
 model PushToken {

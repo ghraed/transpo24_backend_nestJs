@@ -4,7 +4,7 @@ export interface LoginResponseDto {
     id: string;
     name: string;
     email: string;
-    role: 'CUSTOMER' | 'DRIVER';
+    role: 'CUSTOMER' | 'DRIVER' | 'ADMIN';
   };
   driver?: {
     id: string;
