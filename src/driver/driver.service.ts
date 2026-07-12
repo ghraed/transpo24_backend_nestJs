@@ -3657,6 +3657,10 @@ export class DriverService {
       return 'ADD_VEHICLE_DOCUMENTS';
     }
 
+    if (profile.status === DriverStatus.PENDING_REVIEW) {
+      return 'WAITING_APPROVAL';
+    }
+
     if (
       profile.status === DriverStatus.SUSPENDED ||
       profile.status === DriverStatus.REJECTED
@@ -3664,14 +3668,10 @@ export class DriverService {
       return 'WAITING_APPROVAL';
     }
 
-    if (profile.status === DriverStatus.PENDING_REVIEW) {
+    if (profile.status === DriverStatus.APPROVED) {
       if (!availability || !this.isStoredAvailabilityValid(availability)) {
         return 'SET_AVAILABILITY';
       }
-      return 'WAITING_APPROVAL';
-    }
-
-    if (profile.status === DriverStatus.APPROVED) {
       return 'HOME';
     }
 
@@ -5046,6 +5046,14 @@ export class DriverService {
 
     if (status === DriverStatus.PENDING_DOCUMENTS) {
       return 'ADD_VEHICLE_DOCUMENTS';
+    }
+
+    if (
+      status === DriverStatus.PENDING_REVIEW ||
+      status === DriverStatus.SUSPENDED ||
+      status === DriverStatus.REJECTED
+    ) {
+      return 'WAITING_APPROVAL';
     }
 
     if (!this.isStoredAvailabilityValid(availability)) {

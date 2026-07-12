@@ -17,6 +17,8 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 import { AdminUserResponseDto } from './dto/admin-user-response.dto';
+import { AdminDriverReviewResponseDto } from './dto/admin-driver-review-response.dto';
+import { ReviewDriverRequestDto } from './dto/review-driver-request.dto';
 
 @Controller('admin')
 @UseGuards(AuthenticatedUserGuard, AdminRoleGuard)
@@ -49,6 +51,33 @@ export class AdminController {
   @Post('users/:id/reactivate')
   reactivate(@Param('id') id: string): Promise<AdminUserResponseDto> {
     return this.adminService.reactivate(id);
+  }
+
+  @Get('driver-reviews')
+  findDriverReviews(): Promise<AdminDriverReviewResponseDto[]> {
+    return this.adminService.findDriverReviews();
+  }
+
+  @Get('driver-reviews/:id')
+  findDriverReviewById(
+    @Param('id') id: string,
+  ): Promise<AdminDriverReviewResponseDto> {
+    return this.adminService.findDriverReviewById(id);
+  }
+
+  @Post('driver-reviews/:id/approve')
+  approveDriverReview(
+    @Param('id') id: string,
+  ): Promise<AdminDriverReviewResponseDto> {
+    return this.adminService.approveDriverReview(id);
+  }
+
+  @Post('driver-reviews/:id/decline')
+  declineDriverReview(
+    @Param('id') id: string,
+    @Body() dto: ReviewDriverRequestDto,
+  ): Promise<AdminDriverReviewResponseDto> {
+    return this.adminService.declineDriverReview(id, dto.reason);
   }
 
   @Delete('users/:id')
