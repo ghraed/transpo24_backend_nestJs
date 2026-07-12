@@ -74,11 +74,12 @@ export class UpsertDriverVehicleLoadCapacityDto {
   @IsEnum(VehicleCargoType, { each: true })
   allowedCargoTypes!: VehicleCargoType[];
 
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => WorkingDayScheduleDto)
-  workingSchedule!: WorkingDayScheduleDto[];
+  workingSchedule?: WorkingDayScheduleDto[];
 
   @IsOptional()
   @IsBoolean()

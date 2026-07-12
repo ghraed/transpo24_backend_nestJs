@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -15,6 +16,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { hashPassword } from '../common/security/password.util';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
@@ -100,7 +102,12 @@ type ReviewProfileSource = {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AdminService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async findAll(): Promise<AdminUserResponseDto[]> {
     const users = await this.prisma.user.findMany({
@@ -277,9 +284,7 @@ export class AdminService {
     return this.mapDriverReview(profile);
   }
 
-  async approveDriverReview(
-    id: string,
-  ): Promise<AdminDriverReviewResponseDto> {
+  async approveDriverReview(id: string): Promise<AdminDriverReviewResponseDto> {
     const profile = await this.getDriverReviewProfile(id);
     const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
 
@@ -359,6 +364,17 @@ export class AdminService {
       }),
     ]);
 
+    void this.notificationsService
+      .notifyDriverApproved({
+        driverUserId: profile.userId,
+        driverName: profile.user.name,
+      })
+      .catch((notificationError: unknown) => {
+        this.logger.error(
+          `Failed to notify approved driver ${profile.id}: ${notificationError instanceof Error ? notificationError.message : 'Unexpected error'}`,
+        );
+      });
+
     return this.findDriverReviewById(id);
   }
 
@@ -368,8 +384,7 @@ export class AdminService {
   ): Promise<AdminDriverReviewResponseDto> {
     const profile = await this.getDriverReviewProfile(id);
     const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
-    const normalizedReason =
-      reason?.trim() || 'Declined by admin review.';
+    const normalizedReason = reason?.trim() || 'Declined by admin review.';
     const reviewedAt = new Date();
 
     await this.prisma.$transaction([
@@ -459,7 +474,9 @@ export class AdminService {
     });
   }
 
-  private async getDriverReviewProfile(id: string): Promise<ReviewProfileSource> {
+  private async getDriverReviewProfile(
+    id: string,
+  ): Promise<ReviewProfileSource> {
     const profile = await this.prisma.driverProfile.findUnique({
       where: { id },
       select: this.driverReviewSelect(),
@@ -646,7 +663,9 @@ export class AdminService {
       status: document.status,
       rejectionReason: document.rejectionReason,
       expiresAt: document.expiresAt ? document.expiresAt.toISOString() : null,
-      reviewedAt: document.reviewedAt ? document.reviewedAt.toISOString() : null,
+      reviewedAt: document.reviewedAt
+        ? document.reviewedAt.toISOString()
+        : null,
       uploadedAt: document.createdAt.toISOString(),
     };
   }
@@ -689,7 +708,9 @@ export class AdminService {
     const latestDocuments = this.uniqueLatestDocumentsByType(
       documents as ReviewDocumentSource[],
     ).filter((document) => document.status !== DocumentStatus.REJECTED);
-    const documentTypes = new Set(latestDocuments.map((document) => document.type));
+    const documentTypes = new Set(
+      latestDocuments.map((document) => document.type),
+    );
 
     return DRIVER_CANONICAL_VEHICLE_DOCUMENT_TYPES.every((type) =>
       documentTypes.has(type),
@@ -705,13 +726,9 @@ export class AdminService {
       | 'widthCm'
       | 'heightCm'
       | 'allowedCargoTypes'
-      | 'workingSchedule'
     >,
   ): boolean {
-    if (
-      !vehicle.allowedCargoTypes.length ||
-      !this.hasVehicleWorkingSchedule(vehicle.workingSchedule)
-    ) {
+    if (!vehicle.allowedCargoTypes.length) {
       return false;
     }
 
@@ -732,30 +749,5 @@ export class AdminService {
       vehicle.heightCm !== null &&
       vehicle.heightCm > 0
     );
-  }
-
-  private hasVehicleWorkingSchedule(workingSchedule: unknown): boolean {
-    if (!Array.isArray(workingSchedule) || workingSchedule.length === 0) {
-      return false;
-    }
-
-    return workingSchedule.some((day) => {
-      if (!day || typeof day !== 'object') {
-        return false;
-      }
-
-      const candidate = day as {
-        isAvailable?: unknown;
-        timeRanges?: unknown;
-      };
-
-      if (candidate.isAvailable !== true) {
-        return false;
-      }
-
-      return (
-        Array.isArray(candidate.timeRanges) && candidate.timeRanges.length > 0
-      );
-    });
   }
 }

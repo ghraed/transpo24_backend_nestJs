@@ -10,16 +10,16 @@ jest.mock('expo-server-sdk', () => ({
       return [messages];
     }
 
-    async sendPushNotificationsAsync(): Promise<unknown[]> {
-      return [];
+    sendPushNotificationsAsync(): Promise<unknown[]> {
+      return Promise.resolve([]);
     }
 
     chunkPushNotificationReceiptIds(receiptIds: string[]): string[][] {
       return [receiptIds];
     }
 
-    async getPushNotificationReceiptsAsync(): Promise<Record<string, unknown>> {
-      return {};
+    getPushNotificationReceiptsAsync(): Promise<Record<string, unknown>> {
+      return Promise.resolve({});
     }
   },
 }));
@@ -27,6 +27,15 @@ jest.mock('expo-server-sdk', () => ({
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationsService', () => {
+  function createService(prisma: object): NotificationsService {
+    return new NotificationsService(
+      prisma as never,
+      {
+        sendToUser: jest.fn().mockResolvedValue(undefined),
+      } as never,
+    );
+  }
+
   it('deactivates invalid Expo tokens and skips sending them', async () => {
     const prisma = {
       pushToken: {
@@ -37,7 +46,7 @@ describe('NotificationsService', () => {
       },
     };
 
-    const service = new NotificationsService(prisma as never);
+    const service = createService(prisma);
     const expo = {
       chunkPushNotifications: jest.fn(),
       sendPushNotificationsAsync: jest.fn(),
@@ -65,6 +74,7 @@ describe('NotificationsService', () => {
       select: {
         id: true,
         token: true,
+        platform: true,
       },
     });
     expect(prisma.pushToken.updateMany).toHaveBeenCalledWith({
@@ -82,7 +92,7 @@ describe('NotificationsService', () => {
       },
     };
 
-    const service = new NotificationsService(prisma as never);
+    const service = createService(prisma);
     const sendToUsersSpy = jest
       .spyOn(service, 'sendToUsers')
       .mockResolvedValue(undefined);
@@ -105,5 +115,118 @@ describe('NotificationsService', () => {
         offerId: 'offer-1',
       },
     });
+  });
+
+  it('builds the correct payload for approved drivers', async () => {
+    const prisma = {
+      pushToken: {
+        findMany: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    };
+
+    const service = createService(prisma);
+    const sendToUsersSpy = jest
+      .spyOn(service, 'sendToUsers')
+      .mockResolvedValue(undefined);
+
+    await service.notifyDriverApproved({
+      driverUserId: 'driver-user-1',
+      driverName: 'John Driver',
+    });
+
+    expect(sendToUsersSpy).toHaveBeenCalledWith({
+      userIds: ['driver-user-1'],
+      app: PushApp.DRIVER,
+      title: 'Driver account approved',
+      body: 'John Driver, your driver account is approved. You can now start receiving transport requests.',
+      type: 'DRIVER_APPROVED',
+      data: {
+        driverApproved: true,
+      },
+    });
+  });
+
+  it('maps a normalized browser payload to a safe relative admin URL', () => {
+    const service = createService({
+      pushToken: {
+        findMany: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    });
+
+    expect(
+      service.toBrowserPushPayload({
+        type: 'DRIVER_REVIEW_SUBMITTED',
+        title: 'New driver review request',
+        body: 'A driver submitted onboarding documents for review.',
+        url: 'https://evil.example.com',
+        data: {
+          driverProfileId: 'driver-profile-1',
+        },
+      }),
+    ).toMatchObject({
+      type: 'DRIVER_REVIEW_SUBMITTED',
+      title: 'New driver review request',
+      body: 'A driver submitted onboarding documents for review.',
+      url: '/',
+      tag: 'driver_review_submitted',
+      data: {
+        driverProfileId: 'driver-profile-1',
+      },
+    });
+  });
+
+  it('sends browser push notifications to every active admin user', async () => {
+    const sendToUser = jest.fn().mockResolvedValue(undefined);
+    const prisma = {
+      user: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'admin-1' }, { id: 'admin-2' }]),
+      },
+      pushToken: {
+        findMany: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    };
+
+    const service = new NotificationsService(
+      prisma as never,
+      { sendToUser } as never,
+    );
+
+    await service.notifyAdminsAboutDriverReviewSubmission({
+      driverProfileId: 'driver-profile-1',
+      driverName: 'Review Driver',
+    });
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: {
+        role: 'ADMIN',
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(sendToUser).toHaveBeenCalledTimes(2);
+    expect(sendToUser).toHaveBeenNthCalledWith(
+      1,
+      'admin-1',
+      expect.objectContaining({
+        type: 'DRIVER_REVIEW_SUBMITTED',
+        title: 'New driver review request',
+        body: 'Review Driver submitted onboarding documents for review.',
+        url: '/driver-reviews',
+      }),
+    );
+    expect(sendToUser).toHaveBeenNthCalledWith(
+      2,
+      'admin-2',
+      expect.objectContaining({
+        type: 'DRIVER_REVIEW_SUBMITTED',
+      }),
+    );
   });
 });

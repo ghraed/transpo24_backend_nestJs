@@ -1159,6 +1159,19 @@ export class DriverService {
       select: DRIVER_DOCUMENT_SELECT,
     });
 
+    void this.notificationsService
+      .notifyAdminsAboutDriverReviewSubmission({
+        driverProfileId: profile.id,
+        driverName:
+          `${profile.firstName?.trim() ?? ''} ${profile.lastName?.trim() ?? ''}`.trim() ||
+          null,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Failed to notify admins about driver review submission ${profile.id}: ${error instanceof Error ? error.message : 'Unexpected error'}`,
+        );
+      });
+
     return this.toOnboardingDocumentsStatusResponse(profile, updatedDocuments);
   }
 
@@ -2229,9 +2242,6 @@ export class DriverService {
     const normalizedVehicleType = normalizeDriverVehicleTypeInput(
       vehicle.vehicleType,
     ) as VehicleType;
-    const normalizedWorkingSchedule = this.validateLoadCapacitySchedule(
-      input.workingSchedule,
-    );
     const normalizedPayload = this.normalizeVehicleLoadCapacityInput({
       vehicleType: normalizedVehicleType,
       name: input.name,
@@ -2241,7 +2251,10 @@ export class DriverService {
       cargoHeightM: input.cargoHeightM,
       dimensionsAreStandard: input.dimensionsAreStandard,
       allowedCargoTypes: input.allowedCargoTypes,
-      workingSchedule: normalizedWorkingSchedule,
+      workingSchedule:
+        input.workingSchedule !== undefined
+          ? this.validateLoadCapacitySchedule(input.workingSchedule)
+          : this.parseVehicleWorkingSchedule(vehicle.workingSchedule),
       isDefault: input.isDefault,
     });
 
@@ -5365,8 +5378,6 @@ export class DriverService {
     if (!vehicle.plateNumber.trim()) missingFields.push('plateNumber');
     if (!vehicle.allowedCargoTypes.length)
       missingFields.push('allowedCargoTypes');
-    if (!this.hasVehicleWorkingSchedule(vehicle))
-      missingFields.push('workingSchedule');
     if (!isCarCarrierVehicleType(vehicle.vehicleType)) {
       if (vehicle.capacityKg === null || vehicle.capacityKg <= 0)
         missingFields.push('maxLoadKg');
@@ -5415,13 +5426,9 @@ export class DriverService {
       | 'widthCm'
       | 'heightCm'
       | 'allowedCargoTypes'
-      | 'workingSchedule'
     >,
   ): boolean {
-    if (
-      !vehicle.allowedCargoTypes.length ||
-      !this.hasVehicleWorkingSchedule(vehicle)
-    ) {
+    if (!vehicle.allowedCargoTypes.length) {
       return false;
     }
 
@@ -5439,13 +5446,6 @@ export class DriverService {
       vehicle.heightCm !== null &&
       vehicle.heightCm > 0
     );
-  }
-
-  private hasVehicleWorkingSchedule(
-    vehicle: Pick<VehicleSource, 'workingSchedule'>,
-  ): boolean {
-    const schedule = this.parseVehicleWorkingSchedule(vehicle.workingSchedule);
-    return schedule.some((day) => day.isAvailable && day.timeRanges.length > 0);
   }
 
   private toDocumentResponse(

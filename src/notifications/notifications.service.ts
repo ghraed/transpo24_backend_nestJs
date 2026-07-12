@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
+
 import { Injectable, Logger } from '@nestjs/common';
-import { PushApp } from '@prisma/client';
+import { PushApp, UserRole } from '@prisma/client';
 import {
   Expo,
   type ExpoPushMessage,
@@ -9,9 +11,11 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import type {
+  BrowserPushNotificationPayload,
   PushNotificationType,
   SendPushNotificationInput,
 } from './notifications.types';
+import { WebPushProvider } from './web-push.provider';
 
 type PushTokenRecord = {
   id: string;
@@ -27,7 +31,10 @@ export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly expo = new Expo();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webPushProvider: WebPushProvider,
+  ) {}
 
   async sendToUsers(input: SendPushNotificationInput): Promise<void> {
     const userIds = Array.from(
@@ -195,6 +202,28 @@ export class NotificationsService {
     });
   }
 
+  async notifyDriverApproved(input: {
+    driverUserId: string;
+    driverName?: string | null;
+  }): Promise<void> {
+    const normalizedDriverName = input.driverName?.trim();
+    const greeting =
+      normalizedDriverName && normalizedDriverName.length > 0
+        ? `${normalizedDriverName}, your driver account is approved.`
+        : 'Your driver account is approved.';
+
+    await this.sendToUsers({
+      userIds: [input.driverUserId],
+      app: PushApp.DRIVER,
+      title: 'Driver account approved',
+      body: `${greeting} You can now start receiving transport requests.`,
+      type: 'DRIVER_APPROVED',
+      data: {
+        driverApproved: true,
+      },
+    });
+  }
+
   async notifyChatMessage(input: {
     recipientUserId: string;
     recipientApp: PushApp;
@@ -313,6 +342,63 @@ export class NotificationsService {
     });
   }
 
+  async notifyAdminsAboutDriverReviewSubmission(input: {
+    driverProfileId: string;
+    driverName?: string | null;
+  }): Promise<void> {
+    const adminUsers = await this.prisma.user.findMany({
+      where: {
+        role: UserRole.ADMIN,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (adminUsers.length === 0) {
+      return;
+    }
+
+    const normalizedDriverName = input.driverName?.trim();
+    const payload = this.toBrowserPushPayload({
+      type: 'DRIVER_REVIEW_SUBMITTED',
+      title: 'New driver review request',
+      body:
+        normalizedDriverName && normalizedDriverName.length > 0
+          ? `${normalizedDriverName} submitted onboarding documents for review.`
+          : 'A driver submitted onboarding documents for review.',
+      url: '/driver-reviews',
+      data: {
+        driverProfileId: input.driverProfileId,
+      },
+    });
+
+    await Promise.allSettled(
+      adminUsers.map((admin) =>
+        this.webPushProvider.sendToUser(admin.id, payload),
+      ),
+    );
+  }
+
+  toBrowserPushPayload(input: {
+    type: string;
+    title: string;
+    body: string;
+    url?: string;
+    data?: Record<string, string | number | boolean | null>;
+  }): BrowserPushNotificationPayload {
+    return {
+      id: randomUUID(),
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      url: this.toSafeRelativeUrl(input.url),
+      tag: input.type.toLowerCase(),
+      data: input.data,
+    };
+  }
+
   private async handleTickets(
     chunkTokens: PushTokenRecord[],
     tickets: ExpoPushTicket[],
@@ -423,5 +509,17 @@ export class NotificationsService {
 
   private toErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Unexpected error';
+  }
+
+  private toSafeRelativeUrl(url?: string): string | undefined {
+    if (!url) {
+      return '/';
+    }
+
+    if (url.startsWith('/')) {
+      return url;
+    }
+
+    return '/';
   }
 }

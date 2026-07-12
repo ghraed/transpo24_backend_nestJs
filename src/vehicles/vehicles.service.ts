@@ -14,8 +14,7 @@ import {
   VehicleVinDecodeResponseDto,
 } from './dto/vehicle-response.dto';
 
-const DEFAULT_VEHICLE_DATABASES_BASE_URL =
-  'https://api.vehicledatabases.com';
+const DEFAULT_VEHICLE_DATABASES_BASE_URL = 'https://api.vehicledatabases.com';
 const DEFAULT_VEHICLE_DATABASES_TIMEOUT_MS = 10000;
 const FALLBACK_MESSAGE =
   'Vehicle details could not be fetched from the VIN. Please select vehicle details manually.';
@@ -201,8 +200,9 @@ export class VehiclesService {
         (await response.json()) as VehicleDatabasesBasicVinDecodeResponse;
       const decoded = this.normalizeVehicleDatabasesResult(vin, body);
       const manufactureYear = this.toNumber(decoded.year);
-      let estimatedWeightKg: number | null =
-        this.extractWeightKgFromDimensions(body.data?.dimensions);
+      let estimatedWeightKg: number | null = this.extractWeightKgFromDimensions(
+        body.data?.dimensions,
+      );
       if (!estimatedWeightKg)
         estimatedWeightKg = await this.estimateWeightFromCatalog({
           brand: decoded.make,
@@ -212,10 +212,10 @@ export class VehiclesService {
         });
       const hasUseful = Boolean(
         decoded.make ||
-          decoded.model ||
-          manufactureYear ||
-          estimatedWeightKg ||
-          decoded.bodyClass,
+        decoded.model ||
+        manufactureYear ||
+        estimatedWeightKg ||
+        decoded.bodyClass,
       );
       if (!hasUseful) return this.fallback();
       const requiresManualSelection =
@@ -272,9 +272,13 @@ export class VehiclesService {
     if (vin.length !== 17)
       throw new BadRequestException('VIN must be exactly 17 characters long.');
     if (!/^[A-Z0-9]+$/.test(vin))
-      throw new BadRequestException('VIN must contain only letters and numbers.');
+      throw new BadRequestException(
+        'VIN must contain only letters and numbers.',
+      );
     if (/[IOQ]/.test(vin))
-      throw new BadRequestException('VIN cannot contain the letters I, O, or Q.');
+      throw new BadRequestException(
+        'VIN cannot contain the letters I, O, or Q.',
+      );
     return vin;
   }
 
