@@ -42,6 +42,11 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# sensitive local credential files
+*.service-account.json
+*google-credentials*.json
+*google-translate*.json
+
 # temp directory
 .temp
 .tmp

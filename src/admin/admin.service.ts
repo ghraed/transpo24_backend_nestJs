@@ -691,14 +691,25 @@ export class AdminService {
       return null;
     }
 
+    const hasReviewEvidence = (vehicle: ReviewVehicleSource): boolean =>
+      vehicle.documents.some(
+        (document) =>
+          DRIVER_CANONICAL_VEHICLE_DOCUMENT_TYPES.includes(document.type) ||
+          document.status === DocumentStatus.UNDER_REVIEW,
+      );
+
     return (
-      vehicles.find((vehicle) =>
-        vehicle.documents.some(
-          (document) =>
-            DRIVER_CANONICAL_VEHICLE_DOCUMENT_TYPES.includes(document.type) ||
-            document.status === DocumentStatus.UNDER_REVIEW,
-        ),
-      ) ?? vehicles[0]
+      vehicles.find(
+        (vehicle) =>
+          vehicle.status === DriverVehicleReviewStatus.PENDING_REVIEW &&
+          hasReviewEvidence(vehicle),
+      ) ??
+      vehicles.find(hasReviewEvidence) ??
+      vehicles.find(
+        (vehicle) =>
+          vehicle.status === DriverVehicleReviewStatus.PENDING_REVIEW,
+      ) ??
+      vehicles[0]
     );
   }
 

@@ -365,9 +365,10 @@ export class AuthService {
 
     const driverProfile = user.driverProfile;
     const nextStep = driverProfile
-      ? driverProfile.isProfileCompleted
-        ? 'ADD_VEHICLE_DOCUMENTS'
-        : 'COMPLETE_PROFILE'
+      ? this.getDriverLoginNextStep({
+          status: driverProfile.status,
+          isProfileCompleted: driverProfile.isProfileCompleted,
+        })
       : undefined;
 
     return {
@@ -410,6 +411,40 @@ export class AuthService {
           ? 'UPLOAD_DOCUMENTS'
           : response.nextStep,
     };
+  }
+
+  private getDriverLoginNextStep(profile: {
+    status: DriverStatus;
+    isProfileCompleted: boolean;
+  }):
+    | 'COMPLETE_PROFILE'
+    | 'ADD_VEHICLE_DOCUMENTS'
+    | 'WAITING_APPROVAL'
+    | 'HOME' {
+    if (
+      !profile.isProfileCompleted ||
+      profile.status === DriverStatus.PENDING_PROFILE
+    ) {
+      return 'COMPLETE_PROFILE';
+    }
+
+    if (profile.status === DriverStatus.PENDING_DOCUMENTS) {
+      return 'ADD_VEHICLE_DOCUMENTS';
+    }
+
+    if (
+      profile.status === DriverStatus.PENDING_REVIEW ||
+      profile.status === DriverStatus.SUSPENDED ||
+      profile.status === DriverStatus.REJECTED
+    ) {
+      return 'WAITING_APPROVAL';
+    }
+
+    if (profile.status === DriverStatus.APPROVED) {
+      return 'HOME';
+    }
+
+    return 'COMPLETE_PROFILE';
   }
 
   async loginAdmin(dto: LoginDto): Promise<LoginResponseDto> {

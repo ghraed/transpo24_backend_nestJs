@@ -1,0 +1,13 @@
+export const SUPPORTED_TRANSLATION_LANGUAGES = [
+  'en',
+  'ar',
+  'fr',
+  'de',
+  'es',
+] as const;
+
+export const MAX_TRANSLATION_TEXT_LENGTH = 1000;
+export const MAX_TRANSLATION_BATCH_SIZE = 20;
+export const DEFAULT_TRANSLATION_CACHE_TTL_SECONDS = 60 * 60 * 24;
+export const DEFAULT_TRANSLATION_RATE_LIMIT_WINDOW_SECONDS = 60;
+export const DEFAULT_TRANSLATION_RATE_LIMIT_MAX_REQUESTS = 30;
