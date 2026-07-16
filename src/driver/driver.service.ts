@@ -832,6 +832,9 @@ const ACCEPTED_JOB_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.DRIVER_ASSIGNED,
   TransportRequestStatus.DRIVER_GOING_TO_PICKUP,
   TransportRequestStatus.DRIVER_ARRIVED_PICKUP,
+  TransportRequestStatus.ITEM_PICKED_UP,
+  TransportRequestStatus.PICKUP_IN_PROGRESS,
+  TransportRequestStatus.IN_TRANSIT,
   TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
 ];
 
@@ -2738,13 +2741,7 @@ export class DriverService {
       throw new NotFoundException('Accepted job not found.');
     }
 
-    if (
-      request.status !== TransportRequestStatus.ACCEPTED &&
-      request.status !== TransportRequestStatus.DRIVER_ASSIGNED &&
-      request.status !== TransportRequestStatus.DRIVER_GOING_TO_PICKUP &&
-      request.status !== TransportRequestStatus.DRIVER_ARRIVED_PICKUP &&
-      request.status !== TransportRequestStatus.DRIVER_GOING_TO_DROPOFF
-    ) {
+    if (!ACCEPTED_JOB_REQUEST_STATUSES.includes(request.status)) {
       throw new BadRequestException('Request is not in accepted job state.');
     }
 

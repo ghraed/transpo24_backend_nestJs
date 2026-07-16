@@ -359,9 +359,6 @@ export class TripsService {
     const trip = await this.validateTripAssignedToDriver(
       input.tripId,
       driverProfile.id,
-      {
-        allowStatuses: [TransportRequestStatus.DELIVERED],
-      },
     );
     this.ensureProofPhotoInput({
       proofPhotos: input.proofPhotos,
@@ -632,6 +629,9 @@ export class TripsService {
     const trip = await this.validateTripAssignedToDriver(
       input.tripId,
       driverProfile.id,
+      {
+        allowStatuses: [TransportRequestStatus.DELIVERED],
+      },
     );
     this.ensureProofPhotoInput({
       proofPhotos: input.proofPhotos,
