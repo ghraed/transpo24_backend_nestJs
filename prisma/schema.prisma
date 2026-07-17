@@ -247,12 +247,16 @@ enum PaymentStatus {
   DELIVERY_CONFIRMED
   PAYMENT_CAPTURE_PENDING
   PAYMENT_CAPTURED
+  PAYMENT_REFUND_PENDING
+  PAYMENT_PARTIALLY_REFUNDED
   PAYMENT_RELEASED
   PAYMENT_CANCELLED
   PAYMENT_REFUNDED
+  PAYMENT_DISPUTED
 }
 
 enum PaymentTransactionType {
+  TOP_UP
   HOLD
   CAPTURE
   RELEASE
@@ -263,6 +267,31 @@ enum PaymentTransactionType {
 enum PaymentProvider {
   STRIPE
   APP_WALLET
+}
+
+enum CustomerWalletTopUpStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum TripPaymentSettlementStatus {
+  COLLECTED
+  REFUND_PENDING
+  PARTIALLY_REFUNDED
+  REFUNDED
+  DISPUTED
+  MANUAL_REVIEW
+}
+
+enum DriverPayoutState {
+  NOT_EARNED
+  EARNING_CREATED
+  PENDING_TRANSFER
+  PAID_OUT
+  TRANSFER_FAILED
+  NOT_APPLICABLE
 }
 
 enum AdditionalChargeStatus {
@@ -309,6 +338,8 @@ model User {
   customerRatings DriverRating[]
   wallet        CustomerWallet?
   walletTransactions CustomerWalletTransaction[]
+  walletTopUps  CustomerWalletTopUp[]
+  paymentSettlements TripPaymentSettlement[]
   paymentHolds  PaymentHold[]
   additionalCharges AdditionalCharge[]
   pushTokens    PushToken[]
@@ -467,6 +498,7 @@ model TransportRequest {
   driverEarning  DriverEarning?
   driverRating   DriverRating?
   paymentHold    PaymentHold?
+  paymentSettlement TripPaymentSettlement?
   additionalCharges AdditionalCharge[]
   chatRoom       ChatRoom?
 
@@ -580,6 +612,7 @@ model DriverProfile {
   assignedRequests TransportRequest[] @relation("AssignedDriverForRequest")
   locations     DriverLocation[]
   earnings      DriverEarning[]
+  paymentSettlements TripPaymentSettlement[]
   ratings       DriverRating[]
   paymentHolds  PaymentHold[]
   additionalCharges AdditionalCharge[]
@@ -841,6 +874,7 @@ model CustomerWallet {
 
   customer       User                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   transactions   CustomerWalletTransaction[]
+  topUps         CustomerWalletTopUp[]
 
   @@index([customerId, currency])
   @@map("customer_wallets")
@@ -874,6 +908,7 @@ model PaymentHold {
   request               TransportRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
   acceptedOffer         DriverOffer               @relation(fields: [acceptedOfferId], references: [id], onDelete: Cascade)
   driver                DriverProfile             @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  settlement            TripPaymentSettlement?
   walletTransactions    CustomerWalletTransaction[]
 
   @@index([customerId, status])
@@ -882,11 +917,45 @@ model PaymentHold {
   @@map("payment_holds")
 }
 
+model TripPaymentSettlement {
+  id                    String                      @id @default(cuid())
+  requestId             String                      @unique
+  paymentHoldId         String                      @unique
+  customerId            String
+  driverId              String?
+  currency              String
+  collectedAmount       Decimal                     @db.Decimal(12, 2)
+  refundableAmount      Decimal                     @db.Decimal(12, 2)
+  refundedAmount        Decimal                     @default(0) @db.Decimal(12, 2)
+  retainedAmount        Decimal                     @default(0) @db.Decimal(12, 2)
+  driverShareAmount     Decimal                     @default(0) @db.Decimal(12, 2)
+  platformShareAmount   Decimal                     @default(0) @db.Decimal(12, 2)
+  status                TripPaymentSettlementStatus @default(COLLECTED)
+  driverPayoutState     DriverPayoutState           @default(NOT_EARNED)
+  requiresManualReview  Boolean                     @default(false)
+  lastStripeRefundId    String?
+  disputeReportedAt     DateTime?
+  payoutFailureReason   String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  request               TransportRequest            @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  paymentHold           PaymentHold                 @relation(fields: [paymentHoldId], references: [id], onDelete: Cascade)
+  customer              User                        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  driver                DriverProfile?              @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([customerId, status])
+  @@index([driverId, driverPayoutState])
+  @@index([status, driverPayoutState])
+  @@map("trip_payment_settlements")
+}
+
 model CustomerWalletTransaction {
   id                String                 @id @default(cuid())
   walletId          String
   customerId        String
   paymentHoldId     String?
+  walletTopUpId     String?
   additionalChargeId String?
   amount            Decimal                @db.Decimal(12, 2)
   currency          String
@@ -899,13 +968,43 @@ model CustomerWalletTransaction {
   wallet            CustomerWallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
   customer          User                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   paymentHold       PaymentHold?           @relation(fields: [paymentHoldId], references: [id], onDelete: SetNull)
+  walletTopUp       CustomerWalletTopUp?   @relation(fields: [walletTopUpId], references: [id], onDelete: SetNull)
   additionalCharge  AdditionalCharge?      @relation(fields: [additionalChargeId], references: [id], onDelete: SetNull)
 
   @@index([walletId, createdAt])
   @@index([customerId, type])
   @@index([paymentHoldId])
+  @@index([walletTopUpId])
   @@index([additionalChargeId])
   @@map("customer_wallet_transactions")
+}
+
+model CustomerWalletTopUp {
+  id                    String                   @id @default(cuid())
+  walletId              String?
+  customerId            String
+  amount                Decimal                  @db.Decimal(12, 2)
+  currency              String
+  paymentMethod         PaymentMethod
+  provider              PaymentProvider
+  status                CustomerWalletTopUpStatus
+  stripePaymentIntentId String?                  @unique
+  stripeClientSecret    String?
+  stripeChargeId        String?
+  failureReason         String?
+  completedAt           DateTime?
+  failedAt              DateTime?
+  cancelledAt           DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  wallet                CustomerWallet?          @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  customer              User                     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  walletTransactions    CustomerWalletTransaction[]
+
+  @@index([customerId, status])
+  @@index([walletId, createdAt])
+  @@map("customer_wallet_top_ups")
 }
 
 model AdditionalCharge {

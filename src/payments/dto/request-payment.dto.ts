@@ -1,4 +1,12 @@
-import { PaymentMethod, PaymentProvider, PaymentStatus } from '@prisma/client';
+import {
+  CustomerWalletTopUpStatus,
+  DriverPayoutState,
+  PaymentMethod,
+  PaymentProvider,
+  PaymentStatus,
+  PaymentTransactionType,
+  TripPaymentSettlementStatus,
+} from '@prisma/client';
 
 export interface SavedPaymentMethodSummaryDto {
   id: string;
@@ -60,4 +68,78 @@ export interface AdditionalChargeResponseDto {
   status: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CustomerWalletTransactionDto {
+  id: string;
+  amount: number;
+  currency: string;
+  type: PaymentTransactionType;
+  description: string | null;
+  paymentHoldId: string | null;
+  walletTopUpId: string | null;
+  additionalChargeId: string | null;
+  createdAt: string;
+}
+
+export interface CustomerWalletSummaryDto {
+  id: string | null;
+  customerId: string;
+  currency: string | null;
+  balance: number;
+  reservedBalance: number;
+  availableBalance: number;
+  recentTransactions: CustomerWalletTransactionDto[];
+}
+
+export interface CustomerWalletTopUpDto {
+  id: string;
+  walletId: string | null;
+  customerId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: PaymentMethod;
+  provider: PaymentProvider;
+  status: CustomerWalletTopUpStatus;
+  stripePaymentIntentId: string | null;
+  stripeClientSecret: string | null;
+  stripeChargeId: string | null;
+  failureReason: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerWalletTopUpResponseDto {
+  topUp: CustomerWalletTopUpDto;
+  wallet: CustomerWalletSummaryDto;
+}
+
+export interface TripPaymentSettlementDto {
+  id: string;
+  requestId: string;
+  paymentHoldId: string;
+  customerId: string;
+  driverId: string | null;
+  currency: string;
+  collectedAmount: number;
+  refundableAmount: number;
+  refundedAmount: number;
+  retainedAmount: number;
+  driverShareAmount: number;
+  platformShareAmount: number;
+  status: TripPaymentSettlementStatus;
+  driverPayoutState: DriverPayoutState;
+  requiresManualReview: boolean;
+  lastStripeRefundId: string | null;
+  disputeReportedAt: string | null;
+  payoutFailureReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CancelTripPaymentResponseDto {
+  payment: PaymentSummaryDto;
+  settlement: TripPaymentSettlementDto;
+  requestStatus: string;
 }

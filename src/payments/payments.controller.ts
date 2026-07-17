@@ -19,8 +19,12 @@ import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
 import { CustomerRequestsService } from '../customer-requests/customer-requests.service';
 import { TripsGateway } from '../trips/trips.gateway';
 import { ApproveAdditionalChargeDto } from './dto/approve-additional-charge.dto';
+import { CreateWalletTopUpDto } from './dto/create-wallet-top-up.dto';
 import {
   AdditionalChargeResponseDto,
+  CancelTripPaymentResponseDto,
+  CustomerWalletSummaryDto,
+  CustomerWalletTopUpResponseDto,
   PaymentSummaryDto,
   SavedPaymentMethodSummaryDto,
 } from './dto/request-payment.dto';
@@ -94,6 +98,21 @@ export class PaymentsController {
     return payment;
   }
 
+  @Post('customer/requests/:requestId/cancel')
+  @UseGuards(CustomerAuthGuard)
+  async cancelCollectedTrip(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ): Promise<CancelTripPaymentResponseDto> {
+    const result = await this.paymentsService.cancelCollectedTrip({
+      customerId: request.user.id,
+      requestId,
+    });
+
+    this.tripsGateway.emitPaymentCancelled(result.payment.customerId, result.payment);
+    return result;
+  }
+
   @Post('customer/requests/:requestId/payment/capture')
   @UseGuards(CustomerAuthGuard)
   async captureRequestPayment(
@@ -128,6 +147,42 @@ export class PaymentsController {
     return this.paymentsService.saveCustomerDefaultPaymentMethod({
       customerId: request.user.id,
       stripePaymentMethodId: dto.stripePaymentMethodId,
+    });
+  }
+
+  @Get('customer/wallet')
+  @UseGuards(CustomerAuthGuard)
+  async getCustomerWallet(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CustomerWalletSummaryDto> {
+    return this.paymentsService.getCustomerWalletSummary({
+      customerId: request.user.id,
+    });
+  }
+
+  @Post('customer/wallet/top-ups')
+  @UseGuards(CustomerAuthGuard)
+  async createCustomerWalletTopUp(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateWalletTopUpDto,
+  ): Promise<CustomerWalletTopUpResponseDto> {
+    return this.paymentsService.createCustomerWalletTopUp({
+      customerId: request.user.id,
+      amount: dto.amount,
+      currency: dto.currency,
+      paymentMethod: dto.paymentMethod,
+    });
+  }
+
+  @Get('customer/wallet/top-ups/:topUpId')
+  @UseGuards(CustomerAuthGuard)
+  async getCustomerWalletTopUp(
+    @Req() request: AuthenticatedRequest,
+    @Param('topUpId') topUpId: string,
+  ): Promise<CustomerWalletTopUpResponseDto> {
+    return this.paymentsService.getCustomerWalletTopUp({
+      customerId: request.user.id,
+      topUpId,
     });
   }
 

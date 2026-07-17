@@ -10,12 +10,15 @@ import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 import {
   AdditionalChargeStatus,
+  CustomerWalletTopUpStatus,
+  DriverPayoutState,
   DriverEarningStatus,
   PaymentMethod,
   PaymentProvider,
   PaymentStatus,
   PaymentTransactionType,
   Prisma,
+  TripPaymentSettlementStatus,
   TransportRequestStatus,
 } from '@prisma/client';
 
@@ -23,8 +26,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AdditionalChargeResponseDto,
+  CancelTripPaymentResponseDto,
+  CustomerWalletSummaryDto,
+  CustomerWalletTopUpDto,
+  CustomerWalletTopUpResponseDto,
+  CustomerWalletTransactionDto,
   PaymentSummaryDto,
   SavedPaymentMethodSummaryDto,
+  TripPaymentSettlementDto,
 } from './dto/request-payment.dto';
 import {
   StripeCardPaymentMethodSummary,
@@ -52,6 +61,11 @@ type CapturePaymentInput = {
   customerId?: string;
 };
 
+type CancelTripInput = {
+  customerId: string;
+  requestId: string;
+};
+
 type CreateAdditionalChargeInput = {
   driverUserId: string;
   requestId: string;
@@ -75,12 +89,36 @@ type SaveDefaultPaymentMethodInput = {
   stripePaymentMethodId: string;
 };
 
+type CreateWalletTopUpInput = {
+  customerId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: PaymentMethod;
+};
+
+type GetWalletTopUpInput = {
+  customerId: string;
+  topUpId: string;
+};
+
 type WalletRecord = {
   id: string;
   customerId: string;
   currency: string;
   balance: Prisma.Decimal;
   reservedBalance: Prisma.Decimal;
+};
+
+type WalletTransactionRecord = {
+  id: string;
+  amount: Prisma.Decimal;
+  currency: string;
+  type: PaymentTransactionType;
+  description: string | null;
+  paymentHoldId: string | null;
+  walletTopUpId: string | null;
+  additionalChargeId: string | null;
+  createdAt: Date;
 };
 
 type PaymentHoldRecord = {
@@ -101,11 +139,58 @@ type PaymentHoldRecord = {
   updatedAt: Date;
 };
 
+type WalletTopUpRecord = {
+  id: string;
+  walletId: string | null;
+  customerId: string;
+  amount: Prisma.Decimal;
+  currency: string;
+  paymentMethod: PaymentMethod;
+  provider: PaymentProvider;
+  status: CustomerWalletTopUpStatus;
+  stripePaymentIntentId: string | null;
+  stripeClientSecret: string | null;
+  stripeChargeId: string | null;
+  failureReason: string | null;
+  completedAt: Date | null;
+  failedAt: Date | null;
+  cancelledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type TripPaymentSettlementRecord = {
+  id: string;
+  requestId: string;
+  paymentHoldId: string;
+  customerId: string;
+  driverId: string | null;
+  currency: string;
+  collectedAmount: Prisma.Decimal;
+  refundableAmount: Prisma.Decimal;
+  refundedAmount: Prisma.Decimal;
+  retainedAmount: Prisma.Decimal;
+  driverShareAmount: Prisma.Decimal;
+  platformShareAmount: Prisma.Decimal;
+  status: TripPaymentSettlementStatus;
+  driverPayoutState: DriverPayoutState;
+  requiresManualReview: boolean;
+  lastStripeRefundId: string | null;
+  disputeReportedAt: Date | null;
+  payoutFailureReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type StripePaymentIntentRecord = {
   id: string;
   status: string;
   latest_charge?: string | { id: string } | null;
   client_secret?: string | null;
+  cancellation_reason?: string | null;
+  last_payment_error?: {
+    message?: string | null;
+  } | null;
 };
 
 const ACTIVE_PAYMENT_STATUSES = new Set<PaymentStatus>([
@@ -113,7 +198,14 @@ const ACTIVE_PAYMENT_STATUSES = new Set<PaymentStatus>([
   PaymentStatus.PAYMENT_HELD,
   PaymentStatus.PAYMENT_CAPTURE_PENDING,
 ]);
+const SUCCESSFUL_COLLECTION_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.PAYMENT_CAPTURED,
+  PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
+  PaymentStatus.PAYMENT_REFUNDED,
+]);
 const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
+const TRIP_CANCELLATION_FEE_RATE = new Prisma.Decimal(0.15);
+const DRIVER_CANCELLATION_SHARE_RATE = new Prisma.Decimal(0.5);
 const SUPPORTED_ADDITIONAL_CHARGE_CURRENCIES = new Set([
   'CHF',
   'EUR',
@@ -420,6 +512,233 @@ export class PaymentsService {
     return this.toPaymentSummaryDto(updated);
   }
 
+  async cancelCollectedTrip(
+    input: CancelTripInput,
+  ): Promise<CancelTripPaymentResponseDto> {
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: input.requestId },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+        itemPickedUpAt: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    if (request.customerId !== input.customerId) {
+      throw new ForbiddenException('You are not allowed to cancel this trip.');
+    }
+
+    if (
+      request.itemPickedUpAt ||
+      request.status === TransportRequestStatus.ITEM_PICKED_UP ||
+      request.status === TransportRequestStatus.DRIVER_GOING_TO_DROPOFF ||
+      request.status === TransportRequestStatus.DELIVERED ||
+      request.status === TransportRequestStatus.COMPLETED
+    ) {
+      await this.markSettlementManualReview(input.requestId);
+      throw new ConflictException(
+        'Automatic cancellation after pickup requires manual review.',
+      );
+    }
+
+    return this.prisma.$transaction((tx) =>
+      this.cancelCollectedTripTx(tx, input.requestId, input.customerId),
+    );
+  }
+
+  private async cancelCollectedTripTx(
+    tx: Prisma.TransactionClient,
+    requestId: string,
+    customerId: string,
+  ): Promise<CancelTripPaymentResponseDto> {
+    const request = await tx.transportRequest.findUnique({
+      where: { id: requestId },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+        acceptedOfferId: true,
+        assignedDriverId: true,
+        itemPickedUpAt: true,
+        paymentHold: {
+          select: PAYMENT_HOLD_SELECT,
+        },
+        paymentSettlement: {
+          select: TRIP_PAYMENT_SETTLEMENT_SELECT,
+        },
+      },
+    });
+
+    if (!request || request.customerId !== customerId) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    if (!request.paymentHold || !request.paymentSettlement) {
+      throw new ConflictException('Collected trip payment not found.');
+    }
+
+    if (request.status === TransportRequestStatus.CANCELLED) {
+      return {
+        payment: this.toPaymentSummaryDto(request.paymentHold),
+        settlement: this.toTripPaymentSettlementDto(request.paymentSettlement),
+        requestStatus: request.status,
+      };
+    }
+
+    if (
+      request.itemPickedUpAt ||
+      request.status === TransportRequestStatus.ITEM_PICKED_UP ||
+      request.status === TransportRequestStatus.DRIVER_GOING_TO_DROPOFF ||
+      request.status === TransportRequestStatus.DELIVERED ||
+      request.status === TransportRequestStatus.COMPLETED
+    ) {
+      const settlement = await tx.tripPaymentSettlement.update({
+        where: { requestId },
+        data: {
+          status: TripPaymentSettlementStatus.MANUAL_REVIEW,
+          requiresManualReview: true,
+        },
+        select: TRIP_PAYMENT_SETTLEMENT_SELECT,
+      });
+      throw new ConflictException(
+        `Automatic cancellation after pickup requires manual review. Settlement ${settlement.id} flagged.`,
+      );
+    }
+
+    if (!SUCCESSFUL_COLLECTION_STATUSES.has(request.paymentHold.status)) {
+      throw new ConflictException('This trip has not been collected successfully.');
+    }
+
+    const refundableAmount = this.calculateCustomerCancellationRefund(
+      request.paymentSettlement.collectedAmount,
+    );
+    const retainedAmount = request.paymentSettlement.collectedAmount
+      .sub(refundableAmount)
+      .toDecimalPlaces(2);
+    const driverShareAmount =
+      request.acceptedOfferId && request.assignedDriverId
+        ? retainedAmount
+            .mul(DRIVER_CANCELLATION_SHARE_RATE)
+            .toDecimalPlaces(2)
+        : new Prisma.Decimal(0);
+    const platformShareAmount = retainedAmount
+      .sub(driverShareAmount)
+      .toDecimalPlaces(2);
+
+    let refundId: string | null = null;
+    if (request.paymentHold.provider === PaymentProvider.APP_WALLET) {
+      const wallet = await this.ensureWallet(
+        tx,
+        request.paymentHold.customerId,
+        request.paymentHold.currency,
+      );
+      await tx.customerWallet.update({
+        where: { id: wallet.id },
+        data: {
+          balance: wallet.balance.add(refundableAmount),
+        },
+      });
+      await tx.customerWalletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          customerId: request.paymentHold.customerId,
+          paymentHoldId: request.paymentHold.id,
+          amount: refundableAmount,
+          currency: request.paymentHold.currency,
+          type: PaymentTransactionType.REFUND,
+          description: 'Refunded cancelled trip amount to app wallet.',
+          metadata: {
+            requestId,
+            kind: 'trip_cancellation_refund',
+          },
+        },
+      });
+    } else if (request.paymentHold.stripePaymentIntentId) {
+      const refund = await this.stripeService.createRefund({
+        paymentIntentId: request.paymentHold.stripePaymentIntentId,
+        amount: this.toStripeMinorUnit(refundableAmount),
+        metadata: {
+          requestId,
+          kind: 'trip_cancellation_refund',
+        },
+        idempotencyKey: `trip_cancel_refund_${requestId}_${request.paymentSettlement.updatedAt.getTime()}`,
+      });
+      refundId = refund.id;
+    }
+
+    if (driverShareAmount.gt(0) && request.assignedDriverId) {
+      await tx.driverEarning.upsert({
+        where: { tripId: requestId },
+        update: {
+          grossAmount: driverShareAmount,
+          platformFeeAmount: new Prisma.Decimal(0),
+          netAmount: driverShareAmount,
+          currency: request.paymentSettlement.currency,
+          status: DriverEarningStatus.PENDING,
+          availableAt: new Date(),
+        },
+        create: {
+          driverId: request.assignedDriverId,
+          tripId: requestId,
+          grossAmount: driverShareAmount,
+          platformFeeAmount: new Prisma.Decimal(0),
+          netAmount: driverShareAmount,
+          currency: request.paymentSettlement.currency,
+          status: DriverEarningStatus.PENDING,
+          availableAt: new Date(),
+        },
+      });
+    }
+
+    const settlement = await tx.tripPaymentSettlement.update({
+      where: { requestId },
+      data: {
+        refundableAmount: new Prisma.Decimal(0),
+        refundedAmount: refundableAmount,
+        retainedAmount,
+        driverShareAmount,
+        platformShareAmount,
+        status: TripPaymentSettlementStatus.PARTIALLY_REFUNDED,
+        driverPayoutState:
+          driverShareAmount.gt(0)
+            ? DriverPayoutState.EARNING_CREATED
+            : DriverPayoutState.NOT_APPLICABLE,
+        requiresManualReview: false,
+        lastStripeRefundId: refundId,
+        payoutFailureReason: null,
+      },
+      select: TRIP_PAYMENT_SETTLEMENT_SELECT,
+    });
+
+    const payment = await tx.paymentHold.update({
+      where: { id: request.paymentHold.id },
+      data: {
+        status: PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
+      },
+      select: PAYMENT_HOLD_SELECT,
+    });
+
+    await tx.transportRequest.update({
+      where: { id: requestId },
+      data: {
+        status: TransportRequestStatus.CANCELLED,
+        paymentStatus: PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
+        capturedAmount: retainedAmount,
+      },
+    });
+
+    return {
+      payment: this.toPaymentSummaryDto(payment),
+      settlement: this.toTripPaymentSettlementDto(settlement),
+      requestStatus: TransportRequestStatus.CANCELLED,
+    };
+  }
+
   async createAdditionalCharge(
     input: CreateAdditionalChargeInput,
   ): Promise<AdditionalChargeResponseDto> {
@@ -602,6 +921,174 @@ export class PaymentsService {
     });
 
     return this.toSavedPaymentMethodSummary(paymentMethod);
+  }
+
+  async getCustomerWalletSummary(input: {
+    customerId: string;
+  }): Promise<CustomerWalletSummaryDto> {
+    const [customer, wallet, transactions] = await this.prisma.$transaction([
+      this.prisma.user.findUnique({
+        where: { id: input.customerId },
+        select: { id: true },
+      }),
+      this.prisma.customerWallet.findUnique({
+        where: { customerId: input.customerId },
+        select: WALLET_SELECT,
+      }),
+      this.prisma.customerWalletTransaction.findMany({
+        where: { customerId: input.customerId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: WALLET_TRANSACTION_SELECT,
+      }),
+    ]);
+
+    if (!customer) {
+      throw new NotFoundException('Customer account not found.');
+    }
+
+    return this.toCustomerWalletSummaryDto(input.customerId, wallet, transactions);
+  }
+
+  async createCustomerWalletTopUp(
+    input: CreateWalletTopUpInput,
+  ): Promise<CustomerWalletTopUpResponseDto> {
+    const amount = this.toMoneyDecimal(input.amount);
+    if (amount.lte(0)) {
+      throw new BadRequestException('Top-up amount must be greater than zero.');
+    }
+
+    const currency = this.normalizeCurrency(input.currency);
+    const wallet = await this.prisma.customerWallet.findUnique({
+      where: { customerId: input.customerId },
+      select: WALLET_SELECT,
+    });
+
+    if (wallet && wallet.currency !== currency) {
+      throw new BadRequestException(
+        `Wallet top-ups must use ${wallet.currency}.`,
+      );
+    }
+
+    const customer = await this.prisma.user.findUnique({
+      where: { id: input.customerId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        stripeCustomerId: true,
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer account not found.');
+    }
+
+    const stripeCustomerId = await this.stripeService.ensureCustomer({
+      customerId: customer.id,
+      email: customer.email,
+      name: customer.name,
+      stripeCustomerId: customer.stripeCustomerId,
+    });
+
+    if (stripeCustomerId !== customer.stripeCustomerId) {
+      await this.prisma.user.update({
+        where: { id: customer.id },
+        data: { stripeCustomerId },
+      });
+    }
+
+    const paymentIntent = await this.stripeService.createCustomerFundingIntent({
+      customerId: stripeCustomerId,
+      amount: this.toStripeMinorUnit(amount),
+      currency: currency.toLowerCase(),
+      metadata: {
+        customerId: input.customerId,
+        walletId: wallet?.id ?? '',
+        kind: 'wallet_top_up',
+      },
+    });
+
+    const topUp = await this.prisma.customerWalletTopUp.create({
+      data: {
+        walletId: wallet?.id ?? null,
+        customerId: input.customerId,
+        amount,
+        currency,
+        paymentMethod: input.paymentMethod,
+        provider: PaymentProvider.STRIPE,
+        status: CustomerWalletTopUpStatus.PENDING,
+        stripePaymentIntentId: paymentIntent.id,
+        stripeClientSecret: paymentIntent.client_secret,
+        stripeChargeId: this.getStripeChargeId(paymentIntent),
+      },
+      select: WALLET_TOP_UP_SELECT,
+    });
+
+    const transactions = await this.prisma.customerWalletTransaction.findMany({
+      where: { customerId: input.customerId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: WALLET_TRANSACTION_SELECT,
+    });
+
+    return {
+      topUp: this.toCustomerWalletTopUpDto(topUp),
+      wallet: this.toCustomerWalletSummaryDto(input.customerId, wallet, transactions),
+    };
+  }
+
+  async getCustomerWalletTopUp(
+    input: GetWalletTopUpInput,
+  ): Promise<CustomerWalletTopUpResponseDto> {
+    let topUp = await this.prisma.customerWalletTopUp.findFirst({
+      where: {
+        id: input.topUpId,
+        customerId: input.customerId,
+      },
+      select: WALLET_TOP_UP_SELECT,
+    });
+
+    if (!topUp) {
+      throw new NotFoundException('Wallet top-up not found.');
+    }
+
+    if (
+      topUp.status === CustomerWalletTopUpStatus.PENDING &&
+      topUp.stripePaymentIntentId
+    ) {
+      const paymentIntent =
+        await this.stripeService.retrievePaymentIntentIfExists(
+          topUp.stripePaymentIntentId,
+        );
+      if (paymentIntent) {
+        await this.syncStripeWalletTopUp(paymentIntent, paymentIntent.status);
+        topUp = await this.prisma.customerWalletTopUp.findUnique({
+          where: { id: topUp.id },
+          select: WALLET_TOP_UP_SELECT,
+        });
+      }
+    }
+
+    if (!topUp) {
+      throw new NotFoundException('Wallet top-up not found.');
+    }
+
+    const wallet = await this.prisma.customerWallet.findUnique({
+      where: { customerId: input.customerId },
+      select: WALLET_SELECT,
+    });
+    const transactions = await this.prisma.customerWalletTransaction.findMany({
+      where: { customerId: input.customerId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: WALLET_TRANSACTION_SELECT,
+    });
+
+    return {
+      topUp: this.toCustomerWalletTopUpDto(topUp),
+      wallet: this.toCustomerWalletSummaryDto(input.customerId, wallet, transactions),
+    };
   }
 
   async approveAdditionalCharge(
@@ -1071,11 +1558,14 @@ export class PaymentsService {
       };
     }
 
-    const transfer = await this.stripeService.createTransfer({
-      amount: transferAmount,
-      currency: earning.currency.toLowerCase(),
-      destination: profile.stripeAccountId,
-      transferGroup: `trip_${input.tripId}`,
+    return this.executeDriverTransfer({
+      tripId: input.tripId,
+      driverUserId: input.driverUserId,
+      earningId: earning.id,
+      driverId: earning.driverId,
+      currency: earning.currency,
+      netAmount: earning.netAmount,
+      destinationAccountId: profile.stripeAccountId,
       metadata: {
         tripId: input.tripId,
         driverEarningId: earning.id,
@@ -1083,38 +1573,6 @@ export class PaymentsService {
         retry: 'true',
       },
     });
-
-    await this.prisma.driverEarning.update({
-      where: { id: earning.id },
-      data: {
-        status: DriverEarningStatus.PAID_OUT,
-        paidOutAt: new Date(),
-        stripeTransferId: transfer.id,
-        stripeTransferStatus: 'paid',
-      },
-    });
-
-    const trip = await this.prisma.transportRequest.findUnique({
-      where: { id: input.tripId },
-      select: { customerId: true },
-    });
-
-    if (trip) {
-      await this.notificationsService.notifyTripFundsTransferred({
-        customerId: trip.customerId,
-        driverUserId: input.driverUserId,
-        tripId: input.tripId,
-        amount: earning.netAmount.toFixed(2),
-        currency: earning.currency,
-        stripeTransferId: transfer.id,
-      });
-    }
-
-    return {
-      transferred: true,
-      stripeTransferId: transfer.id,
-      reason: null,
-    };
   }
 
   async transferDriverEarningForTrip(tripId: string): Promise<void> {
@@ -1165,42 +1623,112 @@ export class PaymentsService {
       return;
     }
 
-    const transfer = await this.stripeService.createTransfer({
-      amount: transferAmount,
-      currency: earning.currency.toLowerCase(),
-      destination: driver.stripeAccountId,
-      transferGroup: `trip_${tripId}`,
+    await this.executeDriverTransfer({
+      tripId,
+      driverUserId: driver.userId,
+      earningId: earning.id,
+      driverId: earning.driverId,
+      currency: earning.currency,
+      netAmount: earning.netAmount,
+      destinationAccountId: driver.stripeAccountId,
       metadata: {
         tripId,
         driverEarningId: earning.id,
         driverId: earning.driverId,
       },
     });
+  }
 
-    await this.prisma.driverEarning.update({
-      where: { id: earning.id },
+  private async executeDriverTransfer(input: {
+    tripId: string;
+    driverUserId: string;
+    earningId: string;
+    driverId: string;
+    currency: string;
+    netAmount: Prisma.Decimal;
+    destinationAccountId: string;
+    metadata: Record<string, string>;
+  }): Promise<{
+    transferred: boolean;
+    stripeTransferId: string | null;
+    reason: string | null;
+  }> {
+    await this.prisma.tripPaymentSettlement.updateMany({
+      where: { requestId: input.tripId },
       data: {
-        status: DriverEarningStatus.PAID_OUT,
-        paidOutAt: new Date(),
-        stripeTransferId: transfer.id,
-        stripeTransferStatus: 'paid',
+        driverPayoutState: DriverPayoutState.PENDING_TRANSFER,
+        payoutFailureReason: null,
       },
     });
 
-    const trip = await this.prisma.transportRequest.findUnique({
-      where: { id: tripId },
-      select: { customerId: true },
-    });
-
-    if (trip) {
-      await this.notificationsService.notifyTripFundsTransferred({
-        customerId: trip.customerId,
-        driverUserId: driver.userId,
-        tripId,
-        amount: earning.netAmount.toFixed(2),
-        currency: earning.currency,
-        stripeTransferId: transfer.id,
+    try {
+      const transfer = await this.stripeService.createTransfer({
+        amount: this.toStripeMinorUnit(input.netAmount),
+        currency: input.currency.toLowerCase(),
+        destination: input.destinationAccountId,
+        transferGroup: `trip_${input.tripId}`,
+        metadata: input.metadata,
       });
+
+      await this.prisma.driverEarning.update({
+        where: { id: input.earningId },
+        data: {
+          status: DriverEarningStatus.PAID_OUT,
+          paidOutAt: new Date(),
+          stripeTransferId: transfer.id,
+          stripeTransferStatus: 'paid',
+        },
+      });
+
+      await this.prisma.tripPaymentSettlement.updateMany({
+        where: { requestId: input.tripId },
+        data: {
+          driverPayoutState: DriverPayoutState.PAID_OUT,
+          payoutFailureReason: null,
+        },
+      });
+
+      const trip = await this.prisma.transportRequest.findUnique({
+        where: { id: input.tripId },
+        select: { customerId: true },
+      });
+
+      if (trip) {
+        await this.notificationsService.notifyTripFundsTransferred({
+          customerId: trip.customerId,
+          driverUserId: input.driverUserId,
+          tripId: input.tripId,
+          amount: input.netAmount.toFixed(2),
+          currency: input.currency,
+          stripeTransferId: transfer.id,
+        });
+      }
+
+      return {
+        transferred: true,
+        stripeTransferId: transfer.id,
+        reason: null,
+      };
+    } catch (error) {
+      const reason =
+        error instanceof Error ? error.message : 'Driver payout transfer failed.';
+
+      await this.prisma.driverEarning.update({
+        where: { id: input.earningId },
+        data: {
+          stripeTransferStatus: 'failed',
+        },
+      });
+
+      await this.prisma.tripPaymentSettlement.updateMany({
+        where: { requestId: input.tripId },
+        data: {
+          driverPayoutState: DriverPayoutState.TRANSFER_FAILED,
+          payoutFailureReason: reason,
+        },
+      });
+
+      throw error;
     }
   }
 
@@ -1220,6 +1748,7 @@ export class PaymentsService {
       case 'payment_intent.canceled': {
         const paymentIntent = event.data.object as StripePaymentIntentRecord;
         await this.syncStripePaymentIntent(paymentIntent, event.type);
+        await this.syncStripeWalletTopUp(paymentIntent, event.type);
         break;
       }
       case 'charge.refunded': {
@@ -1229,6 +1758,15 @@ export class PaymentsService {
         };
         if (typeof charge.payment_intent === 'string') {
           await this.markPaymentRefunded(charge.payment_intent, charge.id);
+        }
+        break;
+      }
+      case 'charge.dispute.created': {
+        const dispute = event.data.object as {
+          payment_intent?: string | null;
+        };
+        if (typeof dispute.payment_intent === 'string') {
+          await this.markPaymentDisputed(dispute.payment_intent);
         }
         break;
       }
@@ -1335,6 +1873,124 @@ export class PaymentsService {
               : undefined,
         },
       });
+
+      if (nextStatus === PaymentStatus.PAYMENT_CAPTURED) {
+        await tx.tripPaymentSettlement.upsert({
+          where: { requestId: hold.requestId },
+          update: {
+            collectedAmount: hold.amount,
+            refundableAmount: hold.amount,
+            status: TripPaymentSettlementStatus.COLLECTED,
+            requiresManualReview: false,
+          },
+          create: {
+            requestId: hold.requestId,
+            paymentHoldId: hold.id,
+            customerId: hold.customerId,
+            driverId: hold.driverId,
+            currency: hold.currency,
+            collectedAmount: hold.amount,
+            refundableAmount: hold.amount,
+            status: TripPaymentSettlementStatus.COLLECTED,
+            driverPayoutState: DriverPayoutState.NOT_EARNED,
+          },
+        });
+      }
+    });
+  }
+
+  private async syncStripeWalletTopUp(
+    paymentIntent: StripePaymentIntentRecord,
+    eventType: string,
+  ): Promise<void> {
+    const nextStatus = this.mapStripeEventToWalletTopUpStatus(
+      paymentIntent,
+      eventType,
+    );
+    if (!nextStatus) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const topUp = await tx.customerWalletTopUp.findUnique({
+        where: { stripePaymentIntentId: paymentIntent.id },
+        select: WALLET_TOP_UP_SELECT,
+      });
+
+      if (!topUp || topUp.status === nextStatus) {
+        return;
+      }
+
+      if (topUp.status !== CustomerWalletTopUpStatus.PENDING) {
+        return;
+      }
+
+      if (nextStatus === CustomerWalletTopUpStatus.SUCCEEDED) {
+        const wallet = await this.findOrCreateWalletForTopUpSuccess(tx, topUp);
+        if (wallet.currency !== topUp.currency) {
+          await tx.customerWalletTopUp.update({
+            where: { id: topUp.id },
+            data: {
+              status: CustomerWalletTopUpStatus.FAILED,
+              failureReason: `Wallet top-ups must use ${wallet.currency}.`,
+              failedAt: new Date(),
+              stripeChargeId: this.getStripeChargeId(paymentIntent),
+            },
+          });
+          return;
+        }
+
+        await tx.customerWallet.update({
+          where: { id: wallet.id },
+          data: {
+            balance: wallet.balance.add(topUp.amount),
+          },
+        });
+
+        await tx.customerWalletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            customerId: topUp.customerId,
+            walletTopUpId: topUp.id,
+            amount: topUp.amount,
+            currency: topUp.currency,
+            type: PaymentTransactionType.TOP_UP,
+            description: 'Added funds to app wallet.',
+            metadata: {
+              stripePaymentIntentId: topUp.stripePaymentIntentId,
+            },
+          },
+        });
+
+        await tx.customerWalletTopUp.update({
+          where: { id: topUp.id },
+          data: {
+            walletId: wallet.id,
+            status: CustomerWalletTopUpStatus.SUCCEEDED,
+            completedAt: new Date(),
+            stripeChargeId: this.getStripeChargeId(paymentIntent),
+            failureReason: null,
+          },
+        });
+        return;
+      }
+
+      await tx.customerWalletTopUp.update({
+        where: { id: topUp.id },
+        data: {
+          status: nextStatus,
+          stripeChargeId: this.getStripeChargeId(paymentIntent),
+          failureReason: this.getWalletTopUpFailureReason(paymentIntent, nextStatus),
+          failedAt:
+            nextStatus === CustomerWalletTopUpStatus.FAILED
+              ? new Date()
+              : undefined,
+          cancelledAt:
+            nextStatus === CustomerWalletTopUpStatus.CANCELLED
+              ? new Date()
+              : undefined,
+        },
+      });
     });
   }
 
@@ -1366,6 +2022,99 @@ export class PaymentsService {
           paymentStatus: PaymentStatus.PAYMENT_REFUNDED,
         },
       });
+
+      await tx.tripPaymentSettlement.updateMany({
+        where: { requestId: hold.requestId },
+        data: {
+          status: TripPaymentSettlementStatus.REFUNDED,
+          refundedAmount: hold.amount,
+          refundableAmount: new Prisma.Decimal(0),
+          retainedAmount: new Prisma.Decimal(0),
+          driverShareAmount: new Prisma.Decimal(0),
+          platformShareAmount: new Prisma.Decimal(0),
+          lastStripeRefundId: chargeId,
+        },
+      });
+    });
+  }
+
+  private async markPaymentDisputed(paymentIntentId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const hold = await tx.paymentHold.findUnique({
+        where: { stripePaymentIntentId: paymentIntentId },
+        select: PAYMENT_HOLD_SELECT,
+      });
+
+      if (!hold) {
+        return;
+      }
+
+      await tx.paymentHold.update({
+        where: { id: hold.id },
+        data: {
+          status: PaymentStatus.PAYMENT_DISPUTED,
+        },
+      });
+
+      await tx.transportRequest.update({
+        where: { id: hold.requestId },
+        data: {
+          paymentStatus: PaymentStatus.PAYMENT_DISPUTED,
+        },
+      });
+
+      await tx.tripPaymentSettlement.updateMany({
+        where: { requestId: hold.requestId },
+        data: {
+          status: TripPaymentSettlementStatus.DISPUTED,
+          disputeReportedAt: new Date(),
+        },
+      });
+    });
+  }
+
+  private async markSettlementManualReview(requestId: string): Promise<void> {
+    await this.prisma.tripPaymentSettlement.updateMany({
+      where: { requestId },
+      data: {
+        status: TripPaymentSettlementStatus.MANUAL_REVIEW,
+        requiresManualReview: true,
+      },
+    });
+  }
+
+  private async createTripPaymentSettlement(
+    tx: Prisma.TransactionClient,
+    hold: PaymentHoldRecord,
+    input: {
+      collectedAmount: Prisma.Decimal;
+      refundableAmount: Prisma.Decimal;
+      refundedAmount: Prisma.Decimal;
+      retainedAmount: Prisma.Decimal;
+      driverShareAmount: Prisma.Decimal;
+      platformShareAmount: Prisma.Decimal;
+      status: TripPaymentSettlementStatus;
+      driverPayoutState: DriverPayoutState;
+      requiresManualReview: boolean;
+    },
+  ): Promise<void> {
+    await tx.tripPaymentSettlement.create({
+      data: {
+        requestId: hold.requestId,
+        paymentHoldId: hold.id,
+        customerId: hold.customerId,
+        driverId: hold.driverId,
+        currency: hold.currency,
+        collectedAmount: input.collectedAmount,
+        refundableAmount: input.refundableAmount,
+        refundedAmount: input.refundedAmount,
+        retainedAmount: input.retainedAmount,
+        driverShareAmount: input.driverShareAmount,
+        platformShareAmount: input.platformShareAmount,
+        status: input.status,
+        driverPayoutState: input.driverPayoutState,
+        requiresManualReview: input.requiresManualReview,
+      },
     });
   }
 
@@ -1373,11 +2122,21 @@ export class PaymentsService {
     tx: Prisma.TransactionClient,
     input: CreateHoldInput & { amount: Prisma.Decimal; currency: string },
   ): Promise<PaymentSummaryDto> {
-    const wallet = await this.ensureWallet(
-      tx,
-      input.customerId,
-      input.currency,
-    );
+    const wallet = await tx.customerWallet.findUnique({
+      where: { customerId: input.customerId },
+      select: WALLET_SELECT,
+    });
+
+    if (!wallet) {
+      throw new BadRequestException('Customer wallet balance is insufficient.');
+    }
+
+    if (wallet.currency !== input.currency) {
+      throw new BadRequestException(
+        `Wallet holds must use ${wallet.currency}.`,
+      );
+    }
+
     const availableBalance = this.getAvailableBalance(wallet);
 
     if (availableBalance.lt(input.amount)) {
@@ -1387,7 +2146,7 @@ export class PaymentsService {
     await tx.customerWallet.update({
       where: { id: wallet.id },
       data: {
-        reservedBalance: wallet.reservedBalance.add(input.amount),
+        balance: wallet.balance.sub(input.amount),
       },
     });
 
@@ -1401,7 +2160,7 @@ export class PaymentsService {
         currency: input.currency,
         paymentMethod: input.paymentMethod,
         provider: PaymentProvider.APP_WALLET,
-        status: PaymentStatus.PAYMENT_HELD,
+        status: PaymentStatus.PAYMENT_CAPTURED,
       },
       select: PAYMENT_HOLD_SELECT,
     });
@@ -1413,8 +2172,8 @@ export class PaymentsService {
         paymentHoldId: hold.id,
         amount: input.amount,
         currency: input.currency,
-        type: PaymentTransactionType.HOLD,
-        description: 'Reserved wallet funds for accepted driver offer.',
+        type: PaymentTransactionType.CAPTURE,
+        description: 'Collected wallet funds for accepted driver offer.',
         metadata: {
           requestId: input.requestId,
           acceptedOfferId: input.acceptedOfferId,
@@ -1425,12 +2184,24 @@ export class PaymentsService {
     await tx.transportRequest.update({
       where: { id: input.requestId },
       data: {
-        paymentStatus: PaymentStatus.PAYMENT_HELD,
+        paymentStatus: PaymentStatus.PAYMENT_CAPTURED,
         paymentMethod: input.paymentMethod,
-        heldAmount: input.amount,
-        capturedAmount: new Prisma.Decimal(0),
+        heldAmount: new Prisma.Decimal(0),
+        capturedAmount: input.amount,
         paymentHoldId: hold.id,
       },
+    });
+
+    await this.createTripPaymentSettlement(tx, hold, {
+      collectedAmount: input.amount,
+      refundableAmount: input.amount,
+      refundedAmount: new Prisma.Decimal(0),
+      retainedAmount: new Prisma.Decimal(0),
+      driverShareAmount: new Prisma.Decimal(0),
+      platformShareAmount: new Prisma.Decimal(0),
+      status: TripPaymentSettlementStatus.COLLECTED,
+      driverPayoutState: DriverPayoutState.NOT_EARNED,
+      requiresManualReview: false,
     });
 
     return this.toPaymentSummaryDto(hold);
@@ -1470,7 +2241,7 @@ export class PaymentsService {
       });
     }
 
-    const paymentIntent = await this.stripeService.createManualCaptureIntent({
+    const paymentIntent = await this.stripeService.createImmediateCaptureIntent({
       customerId: stripeCustomerId,
       amount: this.toStripeMinorUnit(input.amount),
       currency: input.currency.toLowerCase(),
@@ -1509,11 +2280,38 @@ export class PaymentsService {
         data: {
           paymentStatus: status,
           paymentMethod: input.paymentMethod,
-          heldAmount: input.amount,
-          capturedAmount: new Prisma.Decimal(0),
+          heldAmount:
+            status === PaymentStatus.PAYMENT_CAPTURED
+              ? new Prisma.Decimal(0)
+              : input.amount,
+          capturedAmount:
+            status === PaymentStatus.PAYMENT_CAPTURED
+              ? input.amount
+              : new Prisma.Decimal(0),
           paymentHoldId: hold.id,
           stripePaymentIntentId: paymentIntent.id,
         },
+      });
+
+      await this.createTripPaymentSettlement(tx, hold, {
+        collectedAmount:
+          status === PaymentStatus.PAYMENT_CAPTURED
+            ? input.amount
+            : new Prisma.Decimal(0),
+        refundableAmount:
+          status === PaymentStatus.PAYMENT_CAPTURED
+            ? input.amount
+            : new Prisma.Decimal(0),
+        refundedAmount: new Prisma.Decimal(0),
+        retainedAmount: new Prisma.Decimal(0),
+        driverShareAmount: new Prisma.Decimal(0),
+        platformShareAmount: new Prisma.Decimal(0),
+        status:
+          status === PaymentStatus.PAYMENT_CAPTURED
+            ? TripPaymentSettlementStatus.COLLECTED
+            : TripPaymentSettlementStatus.REFUND_PENDING,
+        driverPayoutState: DriverPayoutState.NOT_EARNED,
+        requiresManualReview: false,
       });
 
       return this.toPaymentSummaryDto(hold);
@@ -1619,6 +2417,47 @@ export class PaymentsService {
     return wallet.balance.sub(wallet.reservedBalance);
   }
 
+  private calculateCustomerCancellationRefund(
+    collectedAmount: Prisma.Decimal,
+  ): Prisma.Decimal {
+    return collectedAmount
+      .mul(new Prisma.Decimal(1).sub(TRIP_CANCELLATION_FEE_RATE))
+      .toDecimalPlaces(2);
+  }
+
+  private async findOrCreateWalletForTopUpSuccess(
+    tx: Prisma.TransactionClient,
+    topUp: WalletTopUpRecord,
+  ): Promise<WalletRecord> {
+    if (topUp.walletId) {
+      const wallet = await tx.customerWallet.findUnique({
+        where: { id: topUp.walletId },
+        select: WALLET_SELECT,
+      });
+      if (wallet) {
+        return wallet;
+      }
+    }
+
+    const existing = await tx.customerWallet.findUnique({
+      where: { customerId: topUp.customerId },
+      select: WALLET_SELECT,
+    });
+    if (existing) {
+      return existing;
+    }
+
+    return tx.customerWallet.create({
+      data: {
+        customerId: topUp.customerId,
+        currency: topUp.currency,
+        balance: new Prisma.Decimal(0),
+        reservedBalance: new Prisma.Decimal(0),
+      },
+      select: WALLET_SELECT,
+    });
+  }
+
   private toStripeMinorUnit(amount: Prisma.Decimal): number {
     return Number(
       amount.mul(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP),
@@ -1665,6 +2504,55 @@ export class PaymentsService {
     }
   }
 
+  private mapStripeEventToWalletTopUpStatus(
+    paymentIntent: StripePaymentIntentRecord,
+    eventType: string,
+  ): CustomerWalletTopUpStatus | null {
+    switch (eventType) {
+      case 'payment_intent.succeeded':
+      case 'succeeded':
+        return CustomerWalletTopUpStatus.SUCCEEDED;
+      case 'payment_intent.payment_failed':
+      case 'requires_payment_method':
+        return CustomerWalletTopUpStatus.FAILED;
+      case 'payment_intent.canceled':
+      case 'canceled':
+        return CustomerWalletTopUpStatus.CANCELLED;
+      default:
+        if (paymentIntent.status === 'succeeded') {
+          return CustomerWalletTopUpStatus.SUCCEEDED;
+        }
+        if (paymentIntent.status === 'canceled') {
+          return CustomerWalletTopUpStatus.CANCELLED;
+        }
+        if (paymentIntent.status === 'requires_payment_method') {
+          return CustomerWalletTopUpStatus.FAILED;
+        }
+        return null;
+    }
+  }
+
+  private getWalletTopUpFailureReason(
+    paymentIntent: StripePaymentIntentRecord,
+    status: CustomerWalletTopUpStatus,
+  ): string | null {
+    if (status === CustomerWalletTopUpStatus.FAILED) {
+      return (
+        paymentIntent.last_payment_error?.message?.trim() ||
+        'Wallet top-up failed.'
+      );
+    }
+
+    if (status === CustomerWalletTopUpStatus.CANCELLED) {
+      return (
+        paymentIntent.cancellation_reason?.trim() ||
+        'Wallet top-up was cancelled.'
+      );
+    }
+
+    return null;
+  }
+
   private getStripeChargeId(
     paymentIntent: StripePaymentIntentRecord,
   ): string | null {
@@ -1684,6 +2572,14 @@ export class PaymentsService {
   }
 
   private toPaymentSummaryDto(hold: PaymentHoldRecord): PaymentSummaryDto {
+    const capturedAmount =
+      hold.status === PaymentStatus.PAYMENT_CAPTURED ||
+      hold.status === PaymentStatus.PAYMENT_PARTIALLY_REFUNDED ||
+      hold.status === PaymentStatus.PAYMENT_REFUNDED ||
+      hold.status === PaymentStatus.PAYMENT_DISPUTED
+        ? Number(hold.amount)
+        : 0;
+
     return {
       id: hold.id,
       requestId: hold.requestId,
@@ -1694,10 +2590,7 @@ export class PaymentsService {
       heldAmount: ACTIVE_PAYMENT_STATUSES.has(hold.status)
         ? Number(hold.amount)
         : 0,
-      capturedAmount:
-        hold.status === PaymentStatus.PAYMENT_CAPTURED
-          ? Number(hold.amount)
-          : 0,
+      capturedAmount,
       currency: hold.currency,
       paymentMethod: hold.paymentMethod,
       provider: hold.provider,
@@ -1707,6 +2600,91 @@ export class PaymentsService {
       stripeChargeId: hold.stripeChargeId,
       createdAt: hold.createdAt.toISOString(),
       updatedAt: hold.updatedAt.toISOString(),
+    };
+  }
+
+  private toTripPaymentSettlementDto(
+    settlement: TripPaymentSettlementRecord,
+  ): TripPaymentSettlementDto {
+    return {
+      id: settlement.id,
+      requestId: settlement.requestId,
+      paymentHoldId: settlement.paymentHoldId,
+      customerId: settlement.customerId,
+      driverId: settlement.driverId,
+      currency: settlement.currency,
+      collectedAmount: Number(settlement.collectedAmount),
+      refundableAmount: Number(settlement.refundableAmount),
+      refundedAmount: Number(settlement.refundedAmount),
+      retainedAmount: Number(settlement.retainedAmount),
+      driverShareAmount: Number(settlement.driverShareAmount),
+      platformShareAmount: Number(settlement.platformShareAmount),
+      status: settlement.status,
+      driverPayoutState: settlement.driverPayoutState,
+      requiresManualReview: settlement.requiresManualReview,
+      lastStripeRefundId: settlement.lastStripeRefundId,
+      disputeReportedAt: settlement.disputeReportedAt
+        ? settlement.disputeReportedAt.toISOString()
+        : null,
+      payoutFailureReason: settlement.payoutFailureReason,
+      createdAt: settlement.createdAt.toISOString(),
+      updatedAt: settlement.updatedAt.toISOString(),
+    };
+  }
+
+  private toCustomerWalletSummaryDto(
+    customerId: string,
+    wallet: WalletRecord | null,
+    transactions: WalletTransactionRecord[],
+  ): CustomerWalletSummaryDto {
+    const balance = wallet ? Number(wallet.balance) : 0;
+    const reservedBalance = wallet ? Number(wallet.reservedBalance) : 0;
+    return {
+      id: wallet?.id ?? null,
+      customerId,
+      currency: wallet?.currency ?? null,
+      balance,
+      reservedBalance,
+      availableBalance: balance - reservedBalance,
+      recentTransactions: transactions.map((transaction) =>
+        this.toCustomerWalletTransactionDto(transaction),
+      ),
+    };
+  }
+
+  private toCustomerWalletTransactionDto(
+    transaction: WalletTransactionRecord,
+  ): CustomerWalletTransactionDto {
+    return {
+      id: transaction.id,
+      amount: Number(transaction.amount),
+      currency: transaction.currency,
+      type: transaction.type,
+      description: transaction.description,
+      paymentHoldId: transaction.paymentHoldId,
+      walletTopUpId: transaction.walletTopUpId,
+      additionalChargeId: transaction.additionalChargeId,
+      createdAt: transaction.createdAt.toISOString(),
+    };
+  }
+
+  private toCustomerWalletTopUpDto(topUp: WalletTopUpRecord): CustomerWalletTopUpDto {
+    return {
+      id: topUp.id,
+      walletId: topUp.walletId,
+      customerId: topUp.customerId,
+      amount: Number(topUp.amount),
+      currency: topUp.currency,
+      paymentMethod: topUp.paymentMethod,
+      provider: topUp.provider,
+      status: topUp.status,
+      stripePaymentIntentId: topUp.stripePaymentIntentId,
+      stripeClientSecret: topUp.stripeClientSecret,
+      stripeChargeId: topUp.stripeChargeId,
+      failureReason: topUp.failureReason,
+      completedAt: topUp.completedAt ? topUp.completedAt.toISOString() : null,
+      createdAt: topUp.createdAt.toISOString(),
+      updatedAt: topUp.updatedAt.toISOString(),
     };
   }
 
@@ -1912,3 +2890,58 @@ const WALLET_SELECT = {
   balance: true,
   reservedBalance: true,
 } satisfies Prisma.CustomerWalletSelect;
+
+const WALLET_TRANSACTION_SELECT = {
+  id: true,
+  amount: true,
+  currency: true,
+  type: true,
+  description: true,
+  paymentHoldId: true,
+  walletTopUpId: true,
+  additionalChargeId: true,
+  createdAt: true,
+} satisfies Prisma.CustomerWalletTransactionSelect;
+
+const WALLET_TOP_UP_SELECT = {
+  id: true,
+  walletId: true,
+  customerId: true,
+  amount: true,
+  currency: true,
+  paymentMethod: true,
+  provider: true,
+  status: true,
+  stripePaymentIntentId: true,
+  stripeClientSecret: true,
+  stripeChargeId: true,
+  failureReason: true,
+  completedAt: true,
+  failedAt: true,
+  cancelledAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.CustomerWalletTopUpSelect;
+
+const TRIP_PAYMENT_SETTLEMENT_SELECT = {
+  id: true,
+  requestId: true,
+  paymentHoldId: true,
+  customerId: true,
+  driverId: true,
+  currency: true,
+  collectedAmount: true,
+  refundableAmount: true,
+  refundedAmount: true,
+  retainedAmount: true,
+  driverShareAmount: true,
+  platformShareAmount: true,
+  status: true,
+  driverPayoutState: true,
+  requiresManualReview: true,
+  lastStripeRefundId: true,
+  disputeReportedAt: true,
+  payoutFailureReason: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.TripPaymentSettlementSelect;

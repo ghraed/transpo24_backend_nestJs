@@ -21,6 +21,21 @@ type CreateManualCaptureIntentInput = {
   stripePaymentMethodId?: string;
 };
 
+type CreateCustomerFundingIntentInput = {
+  customerId: string;
+  amount: number;
+  currency: string;
+  metadata: Record<string, string>;
+};
+
+type CreateImmediateCaptureIntentInput = {
+  customerId: string;
+  amount: number;
+  currency: string;
+  metadata: Record<string, string>;
+  stripePaymentMethodId?: string;
+};
+
 export type StripeCardPaymentMethodSummary = {
   id: string;
   brand: string | null;
@@ -118,6 +133,54 @@ export class StripeService {
         currency: input.currency,
         customer: input.customerId,
         capture_method: 'manual',
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
+        metadata: input.metadata,
+      }),
+    );
+  }
+
+  async createCustomerFundingIntent(input: CreateCustomerFundingIntentInput) {
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.create({
+        amount: input.amount,
+        currency: input.currency,
+        customer: input.customerId,
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
+        metadata: input.metadata,
+      }),
+    );
+  }
+
+  async createImmediateCaptureIntent(input: CreateImmediateCaptureIntentInput) {
+    const client = this.getClient();
+    const stripePaymentMethodId = input.stripePaymentMethodId?.trim();
+
+    if (stripePaymentMethodId) {
+      return this.runStripe(() =>
+        client.paymentIntents.create({
+          amount: input.amount,
+          currency: input.currency,
+          customer: input.customerId,
+          payment_method: stripePaymentMethodId,
+          payment_method_types: ['card'],
+          confirm: true,
+          confirmation_method: 'automatic',
+          metadata: input.metadata,
+        }),
+      );
+    }
+
+    return this.runStripe(() =>
+      client.paymentIntents.create({
+        amount: input.amount,
+        currency: input.currency,
+        customer: input.customerId,
         automatic_payment_methods: {
           enabled: true,
           allow_redirects: 'never',
@@ -259,6 +322,26 @@ export class StripeService {
       }
       throw error;
     }
+  }
+
+  async createRefund(input: {
+    paymentIntentId: string;
+    amount?: number;
+    metadata?: Record<string, string>;
+    idempotencyKey: string;
+  }) {
+    return this.runStripe(() =>
+      this.getClient().refunds.create(
+        {
+          payment_intent: input.paymentIntentId,
+          ...(typeof input.amount === 'number' ? { amount: input.amount } : {}),
+          ...(input.metadata ? { metadata: input.metadata } : {}),
+        },
+        {
+          idempotencyKey: input.idempotencyKey,
+        },
+      ),
+    );
   }
 
   async createExpressAccount(input: {
