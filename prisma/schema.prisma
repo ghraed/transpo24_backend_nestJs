@@ -923,6 +923,19 @@ model AdditionalCharge {
   invoiceMimeType   String?
   invoiceSizeBytes  Int?
   status            AdditionalChargeStatus @default(PENDING)
+  approvalInFlightAt DateTime?             @map("approval_in_flight_at")
+  approvedAt        DateTime?              @map("approved_at")
+  approvedByCustomerId String?             @map("approved_by_customer_id")
+  approvalLocale    String?                @map("approval_locale")
+  approvalConfirmationText String?         @map("approval_confirmation_text")
+  stripePaymentIntentId String?            @unique @map("stripe_payment_intent_id")
+  stripeChargeId    String?                @map("stripe_charge_id")
+  savedPaymentMethodId String?             @map("saved_payment_method_id")
+  savedPaymentMethodBrand String?          @map("saved_payment_method_brand")
+  savedPaymentMethodLast4 String?          @map("saved_payment_method_last4")
+  savedPaymentMethodExpMonth Int?          @map("saved_payment_method_exp_month")
+  savedPaymentMethodExpYear Int?           @map("saved_payment_method_exp_year")
+  paymentFailureReason String?             @map("payment_failure_reason")
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -934,6 +947,7 @@ model AdditionalCharge {
   @@index([requestId, status])
   @@index([driverId, status])
   @@index([customerId, status])
+  @@index([stripePaymentIntentId])
   @@map("additional_charges")
 }
 

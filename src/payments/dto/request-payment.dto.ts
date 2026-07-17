@@ -1,5 +1,13 @@
 import { PaymentMethod, PaymentProvider, PaymentStatus } from '@prisma/client';
 
+export interface SavedPaymentMethodSummaryDto {
+  id: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+}
+
 export interface PaymentSummaryDto {
   id: string;
   requestId: string;
@@ -26,6 +34,8 @@ export interface AdditionalChargeResponseDto {
   driverId: string;
   customerId: string;
   amount: number;
+  appFeeAmount: number;
+  totalChargeAmount: number;
   currency: string;
   reason: string;
   equipmentType: string | null;
@@ -35,10 +45,17 @@ export interface AdditionalChargeResponseDto {
     mimeType: string | null;
     sizeBytes: number | null;
   };
-  walletDeduction: {
-    amount: number;
-    currency: string;
-    transactionType: 'ADDITIONAL_CHARGE';
+  approval: {
+    approvedAt: string | null;
+    approvedByCustomerId: string | null;
+    confirmationLocale: string | null;
+    confirmationText: string | null;
+  };
+  payment: {
+    stripePaymentIntentId: string | null;
+    stripeChargeId: string | null;
+    savedPaymentMethod: SavedPaymentMethodSummaryDto | null;
+    failureReason: string | null;
   };
   status: string;
   createdAt: string;

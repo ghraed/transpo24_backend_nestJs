@@ -45,6 +45,90 @@ describe('StripeService', () => {
     );
   });
 
+  it('returns the customer default card summary when a default card exists', async () => {
+    const retrieve = jest.fn().mockResolvedValue({
+      id: 'cus_test',
+      invoice_settings: {
+        default_payment_method: {
+          id: 'pm_saved',
+          type: 'card',
+          card: {
+            brand: 'visa',
+            last4: '4242',
+            exp_month: 12,
+            exp_year: 2030,
+          },
+        },
+      },
+    });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          customers: {
+            retrieve: typeof retrieve;
+          };
+        };
+      }
+    ).getClient = () => ({
+      customers: {
+        retrieve,
+      },
+    });
+
+    await expect(
+      service.getCustomerDefaultPaymentMethod('cus_test'),
+    ).resolves.toEqual({
+      id: 'pm_saved',
+      brand: 'visa',
+      last4: '4242',
+      expMonth: 12,
+      expYear: 2030,
+    });
+  });
+
+  it('creates an off-session charge with the saved card', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'pi_saved' });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          paymentIntents: {
+            create: typeof create;
+          };
+        };
+      }
+    ).getClient = () => ({
+      paymentIntents: {
+        create,
+      },
+    });
+
+    await service.createOffSessionCharge({
+      customerId: 'cus_test',
+      paymentMethodId: 'pm_saved',
+      amount: 1250,
+      currency: 'usd',
+      metadata: { additionalChargeId: 'charge_1' },
+      idempotencyKey: 'charge_1_1',
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: 'cus_test',
+        payment_method: 'pm_saved',
+        payment_method_types: ['card'],
+        confirm: true,
+        off_session: true,
+      }),
+      expect.objectContaining({
+        idempotencyKey: 'charge_1_1',
+      }),
+    );
+  });
+
   it('maps Stripe invalid request failures to BadRequestException', async () => {
     const create = jest.fn().mockRejectedValue({
       type: 'StripeInvalidRequestError',

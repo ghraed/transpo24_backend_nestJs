@@ -511,6 +511,7 @@ export class DriverController {
       driverUserId: request.user.id,
       requestId,
       amount: dto.amount,
+      currency: dto.currency,
       reason: dto.reason,
       equipmentType: dto.equipmentType,
       invoiceFile,

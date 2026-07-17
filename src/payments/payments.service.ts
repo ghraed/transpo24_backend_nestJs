@@ -24,8 +24,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   AdditionalChargeResponseDto,
   PaymentSummaryDto,
+  SavedPaymentMethodSummaryDto,
 } from './dto/request-payment.dto';
-import { StripeService } from './stripe.service';
+import {
+  StripeCardPaymentMethodSummary,
+  StripeService,
+} from './stripe.service';
 
 type CreateHoldInput = {
   customerId: string;
@@ -52,9 +56,23 @@ type CreateAdditionalChargeInput = {
   driverUserId: string;
   requestId: string;
   amount: number;
+  currency: string;
   reason: string;
   equipmentType?: string;
   invoiceFile: MulterFile;
+};
+
+type ApproveAdditionalChargeInput = {
+  customerId: string;
+  requestId: string;
+  chargeId: string;
+  confirmationLocale: string;
+  confirmationText: string;
+};
+
+type SaveDefaultPaymentMethodInput = {
+  customerId: string;
+  stripePaymentMethodId: string;
 };
 
 type WalletRecord = {
@@ -94,6 +112,15 @@ const ACTIVE_PAYMENT_STATUSES = new Set<PaymentStatus>([
   PaymentStatus.PAYMENT_HOLD_PENDING,
   PaymentStatus.PAYMENT_HELD,
   PaymentStatus.PAYMENT_CAPTURE_PENDING,
+]);
+const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
+const SUPPORTED_ADDITIONAL_CHARGE_CURRENCIES = new Set([
+  'CHF',
+  'EUR',
+  'AED',
+  'SAR',
+  'QAR',
+  'USD',
 ]);
 
 @Injectable()
@@ -398,7 +425,7 @@ export class PaymentsService {
   ): Promise<AdditionalChargeResponseDto> {
     const profile = await this.prisma.driverProfile.findUnique({
       where: { userId: input.driverUserId },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
 
     if (!profile) {
@@ -444,20 +471,14 @@ export class PaymentsService {
       );
     }
 
-    const currency = this.normalizeCurrency(request.currency);
-    const amount = this.toMoneyDecimal(input.amount);
-    const wallet = await this.ensureWallet(
-      this.prisma,
-      request.customerId,
-      currency,
-    );
-
-    if (this.getAvailableBalance(wallet).lt(amount)) {
+    const currency = this.normalizeCurrency(input.currency);
+    if (!SUPPORTED_ADDITIONAL_CHARGE_CURRENCIES.has(currency)) {
       await this.cleanupFile(input.invoiceFile);
       throw new BadRequestException(
-        'Customer wallet balance is insufficient for this additional charge.',
+        `currency must be one of: ${Array.from(SUPPORTED_ADDITIONAL_CHARGE_CURRENCIES).join(', ')}.`,
       );
     }
+    const amount = this.toMoneyDecimal(input.amount);
 
     const storageKey = relative(process.cwd(), input.invoiceFile.path).replace(
       /\\/g,
@@ -466,14 +487,7 @@ export class PaymentsService {
     const invoiceUrl = `/${storageKey}`;
 
     const created = await this.prisma.$transaction(async (tx) => {
-      await tx.customerWallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: wallet.balance.sub(amount),
-        },
-      });
-
-      const charge = await tx.additionalCharge.create({
+      return tx.additionalCharge.create({
         data: {
           requestId: request.id,
           driverId: profile.id,
@@ -487,31 +501,328 @@ export class PaymentsService {
           invoiceOriginalFilename: input.invoiceFile.originalname || null,
           invoiceMimeType: input.invoiceFile.mimetype || null,
           invoiceSizeBytes: input.invoiceFile.size ?? null,
+          status: AdditionalChargeStatus.PENDING,
+        },
+        select: ADDITIONAL_CHARGE_SELECT,
+      });
+    });
+
+    const response = this.toAdditionalChargeResponseDto(created);
+
+    await this.notificationsService.notifyCustomerAdditionalChargeAdded({
+      customerId: response.customerId,
+      requestId: response.requestId,
+      amount: response.totalChargeAmount.toFixed(2),
+      currency: response.currency,
+      reason: response.reason,
+    });
+
+    return response;
+  }
+
+  async getRequestAdditionalCharges(input: {
+    customerId: string;
+    requestId: string;
+  }): Promise<AdditionalChargeResponseDto[]> {
+    if (!input.requestId.trim()) {
+      throw new BadRequestException('requestId is required.');
+    }
+
+    await this.assertCustomerOwnsRequest(input.customerId, input.requestId);
+
+    const charges = await this.prisma.additionalCharge.findMany({
+      where: {
+        customerId: input.customerId,
+        requestId: input.requestId,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: ADDITIONAL_CHARGE_SELECT,
+    });
+
+    return charges.map((charge) => this.toAdditionalChargeResponseDto(charge));
+  }
+
+  async getCustomerDefaultPaymentMethodSummary(input: {
+    customerId: string;
+  }): Promise<SavedPaymentMethodSummaryDto | null> {
+    const customer = await this.prisma.user.findUnique({
+      where: { id: input.customerId },
+      select: {
+        stripeCustomerId: true,
+      },
+    });
+
+    if (!customer?.stripeCustomerId) {
+      return null;
+    }
+
+    const paymentMethod = await this.stripeService.getCustomerDefaultPaymentMethod(
+      customer.stripeCustomerId,
+    );
+
+    return paymentMethod ? this.toSavedPaymentMethodSummary(paymentMethod) : null;
+  }
+
+  async saveCustomerDefaultPaymentMethod(
+    input: SaveDefaultPaymentMethodInput,
+  ): Promise<SavedPaymentMethodSummaryDto> {
+    const customer = await this.prisma.user.findUnique({
+      where: { id: input.customerId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        stripeCustomerId: true,
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer account not found.');
+    }
+
+    const stripeCustomerId = await this.stripeService.ensureCustomer({
+      customerId: customer.id,
+      email: customer.email,
+      name: customer.name,
+      stripeCustomerId: customer.stripeCustomerId,
+    });
+
+    if (stripeCustomerId !== customer.stripeCustomerId) {
+      await this.prisma.user.update({
+        where: { id: customer.id },
+        data: {
+          stripeCustomerId,
+        },
+      });
+    }
+
+    const paymentMethod = await this.stripeService.attachCustomerDefaultPaymentMethod({
+      customerId: stripeCustomerId,
+      paymentMethodId: input.stripePaymentMethodId,
+    });
+
+    return this.toSavedPaymentMethodSummary(paymentMethod);
+  }
+
+  async approveAdditionalCharge(
+    input: ApproveAdditionalChargeInput,
+  ): Promise<AdditionalChargeResponseDto> {
+    if (!input.requestId.trim()) {
+      throw new BadRequestException('requestId is required.');
+    }
+
+    if (!input.chargeId.trim()) {
+      throw new BadRequestException('chargeId is required.');
+    }
+
+    const confirmationLocale = input.confirmationLocale.trim();
+    const confirmationText = input.confirmationText.trim();
+
+    if (!confirmationLocale) {
+      throw new BadRequestException('confirmationLocale is required.');
+    }
+
+    if (!confirmationText) {
+      throw new BadRequestException('confirmationText is required.');
+    }
+
+    const charge = await this.prisma.additionalCharge.findFirst({
+      where: {
+        id: input.chargeId,
+        requestId: input.requestId,
+        customerId: input.customerId,
+      },
+      select: {
+        ...ADDITIONAL_CHARGE_SELECT,
+        approvalInFlightAt: true,
+      },
+    });
+
+    if (!charge) {
+      throw new NotFoundException('Additional charge not found.');
+    }
+
+    if (charge.status === AdditionalChargeStatus.CAPTURED) {
+      throw new ConflictException('This additional charge has already been approved.');
+    }
+
+    if (charge.status === AdditionalChargeStatus.CANCELLED) {
+      throw new BadRequestException('This additional charge is no longer available.');
+    }
+
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: input.requestId },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+      },
+    });
+
+    if (!request || request.customerId !== input.customerId) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    if (
+      request.status === TransportRequestStatus.CANCELLED ||
+      request.status === TransportRequestStatus.COMPLETED
+    ) {
+      throw new BadRequestException('This additional charge request has expired.');
+    }
+
+    const customer = await this.prisma.user.findUnique({
+      where: { id: input.customerId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        stripeCustomerId: true,
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer account not found.');
+    }
+
+    const lockResult = await this.prisma.additionalCharge.updateMany({
+      where: {
+        id: charge.id,
+        status: {
+          in: [AdditionalChargeStatus.PENDING, AdditionalChargeStatus.FAILED],
+        },
+        approvalInFlightAt: null,
+      },
+      data: {
+        approvalInFlightAt: new Date(),
+      },
+    });
+
+    if (lockResult.count === 0) {
+      throw new ConflictException(
+        'This additional charge is already being processed. Please refresh and try again.',
+      );
+    }
+
+    const stripeCustomerId = await this.stripeService.ensureCustomer({
+      customerId: customer.id,
+      email: customer.email,
+      name: customer.name,
+      stripeCustomerId: customer.stripeCustomerId,
+    });
+
+    if (stripeCustomerId !== customer.stripeCustomerId) {
+      await this.prisma.user.update({
+        where: { id: customer.id },
+        data: {
+          stripeCustomerId,
+        },
+      });
+    }
+
+    const savedPaymentMethod =
+      await this.stripeService.getCustomerDefaultPaymentMethod(stripeCustomerId);
+
+    if (!savedPaymentMethod) {
+      await this.prisma.additionalCharge.update({
+        where: { id: charge.id },
+        data: {
+          approvalInFlightAt: null,
+          status: AdditionalChargeStatus.FAILED,
+          approvedAt: new Date(),
+          approvedByCustomerId: input.customerId,
+          approvalLocale: confirmationLocale,
+          approvalConfirmationText: confirmationText,
+          paymentFailureReason:
+            'No saved default payment method is available for this customer.',
+        },
+      });
+
+      throw new BadRequestException(
+        'No saved default payment method is available for this customer.',
+      );
+    }
+
+    const totalChargeAmount = this.calculateAdditionalChargeTotal(charge.amount);
+
+    try {
+      const paymentIntent = await this.stripeService.createOffSessionCharge({
+        customerId: stripeCustomerId,
+        paymentMethodId: savedPaymentMethod.id,
+        amount: this.toStripeMinorUnit(totalChargeAmount),
+        currency: charge.currency.toLowerCase(),
+        metadata: {
+          requestId: charge.requestId,
+          additionalChargeId: charge.id,
+          customerId: charge.customerId,
+          driverId: charge.driverId,
+        },
+        idempotencyKey: `additional_charge_${charge.id}_${charge.updatedAt.getTime()}`,
+      });
+
+      const updatedCharge = await this.prisma.additionalCharge.update({
+        where: { id: charge.id },
+        data: {
+          approvalInFlightAt: null,
           status: AdditionalChargeStatus.CAPTURED,
+          approvedAt: new Date(),
+          approvedByCustomerId: input.customerId,
+          approvalLocale: confirmationLocale,
+          approvalConfirmationText: confirmationText,
+          stripePaymentIntentId: paymentIntent.id,
+          stripeChargeId: this.getStripeChargeId(paymentIntent),
+          savedPaymentMethodId: savedPaymentMethod.id,
+          savedPaymentMethodBrand: savedPaymentMethod.brand,
+          savedPaymentMethodLast4: savedPaymentMethod.last4,
+          savedPaymentMethodExpMonth: savedPaymentMethod.expMonth,
+          savedPaymentMethodExpYear: savedPaymentMethod.expYear,
+          paymentFailureReason: null,
         },
         select: ADDITIONAL_CHARGE_SELECT,
       });
 
-      await tx.customerWalletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          customerId: request.customerId,
-          additionalChargeId: charge.id,
-          amount,
-          currency,
-          type: PaymentTransactionType.ADDITIONAL_CHARGE,
-          description: input.reason.trim(),
-          metadata: {
-            requestId: request.id,
-            driverId: profile.id,
-          },
-        },
+      const driverProfile = await this.prisma.driverProfile.findUnique({
+        where: { id: updatedCharge.driverId },
+        select: { userId: true },
       });
 
-      return charge;
-    });
+      const response = this.toAdditionalChargeResponseDto(updatedCharge);
 
-    return this.toAdditionalChargeResponseDto(created);
+      if (driverProfile?.userId) {
+        await this.notificationsService.notifyDriverAdditionalChargeApproved({
+          driverUserId: driverProfile.userId,
+          requestId: response.requestId,
+          amount: response.totalChargeAmount.toFixed(2),
+          currency: response.currency,
+        });
+      }
+
+      return response;
+    } catch (error) {
+      const failureReason =
+        error instanceof Error ? error.message : 'Failed to capture additional charge payment.';
+
+      const updatedCharge = await this.prisma.additionalCharge.update({
+        where: { id: charge.id },
+        data: {
+          approvalInFlightAt: null,
+          status: AdditionalChargeStatus.FAILED,
+          approvedAt: new Date(),
+          approvedByCustomerId: input.customerId,
+          approvalLocale: confirmationLocale,
+          approvalConfirmationText: confirmationText,
+          savedPaymentMethodId: savedPaymentMethod.id,
+          savedPaymentMethodBrand: savedPaymentMethod.brand,
+          savedPaymentMethodLast4: savedPaymentMethod.last4,
+          savedPaymentMethodExpMonth: savedPaymentMethod.expMonth,
+          savedPaymentMethodExpYear: savedPaymentMethod.expYear,
+          paymentFailureReason: failureReason,
+        },
+        select: ADDITIONAL_CHARGE_SELECT,
+      });
+
+      this.toAdditionalChargeResponseDto(updatedCharge);
+      throw error;
+    }
   }
 
   async createDriverConnectAccount(input: { driverUserId: string }): Promise<{
@@ -1412,6 +1723,18 @@ export class PaymentsService {
     invoiceOriginalFilename: string | null;
     invoiceMimeType: string | null;
     invoiceSizeBytes: number | null;
+    approvedAt: Date | null;
+    approvedByCustomerId: string | null;
+    approvalLocale: string | null;
+    approvalConfirmationText: string | null;
+    stripePaymentIntentId: string | null;
+    stripeChargeId: string | null;
+    savedPaymentMethodId: string | null;
+    savedPaymentMethodBrand: string | null;
+    savedPaymentMethodLast4: string | null;
+    savedPaymentMethodExpMonth: number | null;
+    savedPaymentMethodExpYear: number | null;
+    paymentFailureReason: string | null;
     status: AdditionalChargeStatus;
     createdAt: Date;
     updatedAt: Date;
@@ -1422,6 +1745,8 @@ export class PaymentsService {
       driverId: charge.driverId,
       customerId: charge.customerId,
       amount: Number(charge.amount),
+      appFeeAmount: Number(this.calculateAdditionalChargeAppFee(charge.amount)),
+      totalChargeAmount: Number(this.calculateAdditionalChargeTotal(charge.amount)),
       currency: charge.currency,
       reason: charge.reason,
       equipmentType: charge.equipmentType,
@@ -1431,15 +1756,64 @@ export class PaymentsService {
         mimeType: charge.invoiceMimeType,
         sizeBytes: charge.invoiceSizeBytes,
       },
-      walletDeduction: {
-        amount: Number(charge.amount),
-        currency: charge.currency,
-        transactionType: 'ADDITIONAL_CHARGE',
+      approval: {
+        approvedAt: charge.approvedAt ? charge.approvedAt.toISOString() : null,
+        approvedByCustomerId: charge.approvedByCustomerId,
+        confirmationLocale: charge.approvalLocale,
+        confirmationText: charge.approvalConfirmationText,
+      },
+      payment: {
+        stripePaymentIntentId: charge.stripePaymentIntentId,
+        stripeChargeId: charge.stripeChargeId,
+        savedPaymentMethod: charge.savedPaymentMethodId
+          ? {
+              id: charge.savedPaymentMethodId,
+              brand: charge.savedPaymentMethodBrand,
+              last4: charge.savedPaymentMethodLast4,
+              expMonth: charge.savedPaymentMethodExpMonth,
+              expYear: charge.savedPaymentMethodExpYear,
+            }
+          : null,
+        failureReason: charge.paymentFailureReason,
       },
       status: charge.status,
       createdAt: charge.createdAt.toISOString(),
       updatedAt: charge.updatedAt.toISOString(),
     };
+  }
+
+  private toSavedPaymentMethodSummary(
+    paymentMethod: StripeCardPaymentMethodSummary,
+  ): SavedPaymentMethodSummaryDto {
+    return {
+      id: paymentMethod.id,
+      brand: paymentMethod.brand,
+      last4: paymentMethod.last4,
+      expMonth: paymentMethod.expMonth,
+      expYear: paymentMethod.expYear,
+    };
+  }
+
+  private async assertCustomerOwnsRequest(
+    customerId: string,
+    requestId: string,
+  ): Promise<void> {
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: requestId },
+      select: {
+        customerId: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    if (request.customerId !== customerId) {
+      throw new ForbiddenException(
+        'You are not allowed to view this transport request.',
+      );
+    }
   }
 
   private normalizeCurrency(currency?: string | null): string {
@@ -1452,6 +1826,22 @@ export class PaymentsService {
 
   private toMoneyDecimal(value: Prisma.Decimal | number): Prisma.Decimal {
     return new Prisma.Decimal(value).toDecimalPlaces(2);
+  }
+
+  private calculateAdditionalChargeAppFee(
+    baseAmount: Prisma.Decimal,
+  ): Prisma.Decimal {
+    return baseAmount
+      .mul(ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE)
+      .toDecimalPlaces(2);
+  }
+
+  private calculateAdditionalChargeTotal(
+    baseAmount: Prisma.Decimal,
+  ): Prisma.Decimal {
+    return baseAmount
+      .add(this.calculateAdditionalChargeAppFee(baseAmount))
+      .toDecimalPlaces(2);
   }
 
   private maxDecimalZero(value: Prisma.Decimal): Prisma.Decimal {
@@ -1498,6 +1888,18 @@ const ADDITIONAL_CHARGE_SELECT = {
   invoiceOriginalFilename: true,
   invoiceMimeType: true,
   invoiceSizeBytes: true,
+  approvedAt: true,
+  approvedByCustomerId: true,
+  approvalLocale: true,
+  approvalConfirmationText: true,
+  stripePaymentIntentId: true,
+  stripeChargeId: true,
+  savedPaymentMethodId: true,
+  savedPaymentMethodBrand: true,
+  savedPaymentMethodLast4: true,
+  savedPaymentMethodExpMonth: true,
+  savedPaymentMethodExpYear: true,
+  paymentFailureReason: true,
   status: true,
   createdAt: true,
   updatedAt: true,

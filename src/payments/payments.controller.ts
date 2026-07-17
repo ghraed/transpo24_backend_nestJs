@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   Headers,
@@ -17,8 +18,14 @@ import { Request } from 'express';
 import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
 import { CustomerRequestsService } from '../customer-requests/customer-requests.service';
 import { TripsGateway } from '../trips/trips.gateway';
+import { ApproveAdditionalChargeDto } from './dto/approve-additional-charge.dto';
+import {
+  AdditionalChargeResponseDto,
+  PaymentSummaryDto,
+  SavedPaymentMethodSummaryDto,
+} from './dto/request-payment.dto';
+import { SaveDefaultPaymentMethodDto } from './dto/save-default-payment-method.dto';
 import { PaymentsService } from './payments.service';
-import { PaymentSummaryDto } from './dto/request-payment.dto';
 
 type AuthenticatedRequest = Request & {
   user: {
@@ -100,6 +107,60 @@ export class PaymentsController {
 
     this.tripsGateway.emitPaymentCaptured(payment.customerId, payment);
     return payment;
+  }
+
+  @Get('customer/payment-method/default')
+  @UseGuards(CustomerAuthGuard)
+  async getDefaultPaymentMethod(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SavedPaymentMethodSummaryDto | null> {
+    return this.paymentsService.getCustomerDefaultPaymentMethodSummary({
+      customerId: request.user.id,
+    });
+  }
+
+  @Post('customer/payment-method/default')
+  @UseGuards(CustomerAuthGuard)
+  async saveDefaultPaymentMethod(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: SaveDefaultPaymentMethodDto,
+  ): Promise<SavedPaymentMethodSummaryDto> {
+    return this.paymentsService.saveCustomerDefaultPaymentMethod({
+      customerId: request.user.id,
+      stripePaymentMethodId: dto.stripePaymentMethodId,
+    });
+  }
+
+  @Get('customer/requests/:requestId/additional-charges')
+  @UseGuards(CustomerAuthGuard)
+  async getRequestAdditionalCharges(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ): Promise<AdditionalChargeResponseDto[]> {
+    return this.paymentsService.getRequestAdditionalCharges({
+      customerId: request.user.id,
+      requestId,
+    });
+  }
+
+  @Post('customer/requests/:requestId/additional-charges/:chargeId/approve')
+  @UseGuards(CustomerAuthGuard)
+  async approveAdditionalCharge(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+    @Param('chargeId') chargeId: string,
+    @Body() dto: ApproveAdditionalChargeDto,
+  ): Promise<AdditionalChargeResponseDto> {
+    const charge = await this.paymentsService.approveAdditionalCharge({
+      customerId: request.user.id,
+      requestId,
+      chargeId,
+      confirmationLocale: dto.confirmationLocale,
+      confirmationText: dto.confirmationText,
+    });
+
+    this.tripsGateway.emitAdditionalChargeAdded(charge.customerId, charge);
+    return charge;
   }
 
   @Post('webhooks/stripe')

@@ -8,6 +8,9 @@ export class CreateAdditionalChargeDto {
   amount!: number;
 
   @IsString()
+  currency!: string;
+
+  @IsString()
   reason!: string;
 
   @IsOptional()

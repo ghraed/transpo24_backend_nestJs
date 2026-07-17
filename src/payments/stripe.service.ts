@@ -21,6 +21,14 @@ type CreateManualCaptureIntentInput = {
   stripePaymentMethodId?: string;
 };
 
+export type StripeCardPaymentMethodSummary = {
+  id: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+};
+
 @Injectable()
 export class StripeService {
   private stripeClient: InstanceType<typeof Stripe> | null = null;
@@ -116,6 +124,100 @@ export class StripeService {
         },
         metadata: input.metadata,
       }),
+    );
+  }
+
+  async getCustomerDefaultPaymentMethod(
+    customerId: string,
+  ): Promise<StripeCardPaymentMethodSummary | null> {
+    const customer = await this.runStripe(() =>
+      this.getClient().customers.retrieve(customerId, {
+        expand: ['invoice_settings.default_payment_method'],
+      }),
+    );
+
+    if ('deleted' in customer && customer.deleted) {
+      return null;
+    }
+
+    const defaultPaymentMethod = customer.invoice_settings.default_payment_method;
+    if (!defaultPaymentMethod) {
+      return null;
+    }
+
+    if (typeof defaultPaymentMethod === 'string') {
+      const paymentMethod = await this.runStripe(() =>
+        this.getClient().paymentMethods.retrieve(defaultPaymentMethod),
+      );
+      return this.toCardPaymentMethodSummary(paymentMethod);
+    }
+
+    return this.toCardPaymentMethodSummary(defaultPaymentMethod);
+  }
+
+  async attachCustomerDefaultPaymentMethod(input: {
+    customerId: string;
+    paymentMethodId: string;
+  }): Promise<StripeCardPaymentMethodSummary> {
+    const client = this.getClient();
+    const paymentMethodId = input.paymentMethodId.trim();
+
+    const existing = await this.runStripe(() =>
+      client.paymentMethods.retrieve(paymentMethodId),
+    );
+
+    if (existing.type !== 'card') {
+      throw new BadRequestException('Only card payment methods can be saved.');
+    }
+
+    let attached = existing;
+    if (!existing.customer) {
+      attached = await this.runStripe(() =>
+        client.paymentMethods.attach(paymentMethodId, {
+          customer: input.customerId,
+        }),
+      );
+    } else if (existing.customer !== input.customerId) {
+      throw new BadRequestException(
+        'This payment method belongs to another customer profile.',
+      );
+    }
+
+    await this.runStripe(() =>
+      client.customers.update(input.customerId, {
+        invoice_settings: {
+          default_payment_method: paymentMethodId,
+        },
+      }),
+    );
+
+    return this.toCardPaymentMethodSummary(attached);
+  }
+
+  async createOffSessionCharge(input: {
+    customerId: string;
+    paymentMethodId: string;
+    amount: number;
+    currency: string;
+    metadata: Record<string, string>;
+    idempotencyKey: string;
+  }) {
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.create(
+        {
+          amount: input.amount,
+          currency: input.currency,
+          customer: input.customerId,
+          payment_method: input.paymentMethodId,
+          payment_method_types: ['card'],
+          confirm: true,
+          off_session: true,
+          metadata: input.metadata,
+        },
+        {
+          idempotencyKey: input.idempotencyKey,
+        },
+      ),
     );
   }
 
@@ -345,5 +447,28 @@ export class StripeService {
       typeof error.message === 'string' &&
       /no such payment_intent/i.test(error.message)
     );
+  }
+
+  private toCardPaymentMethodSummary(paymentMethod: {
+    id: string;
+    type: string;
+    card?: {
+      brand?: string | null;
+      last4?: string | null;
+      exp_month?: number | null;
+      exp_year?: number | null;
+    } | null;
+  }): StripeCardPaymentMethodSummary {
+    if (paymentMethod.type !== 'card') {
+      throw new BadRequestException('Only card payment methods are supported.');
+    }
+
+    return {
+      id: paymentMethod.id,
+      brand: paymentMethod.card?.brand ?? null,
+      last4: paymentMethod.card?.last4 ?? null,
+      expMonth: paymentMethod.card?.exp_month ?? null,
+      expYear: paymentMethod.card?.exp_year ?? null,
+    };
   }
 }

@@ -342,6 +342,55 @@ export class NotificationsService {
     });
   }
 
+  async notifyCustomerAdditionalChargeAdded(input: {
+    customerId: string;
+    requestId: string;
+    amount: string;
+    currency: string;
+    reason: string;
+  }): Promise<void> {
+    const normalizedCurrency = input.currency.trim().toUpperCase();
+    const amountLabel = `${input.amount} ${normalizedCurrency}`;
+
+    await this.sendToUsers({
+      userIds: [input.customerId],
+      app: PushApp.CUSTOMER,
+      title: 'Additional expense added',
+      body: `${amountLabel} was added for ${input.reason.trim() || 'your trip'}. Review and approve it in the app.`,
+      type: 'ADDITIONAL_CHARGE_ADDED',
+      data: {
+        requestId: input.requestId,
+        tripId: input.requestId,
+        amount: input.amount,
+        currency: normalizedCurrency,
+      },
+    });
+  }
+
+  async notifyDriverAdditionalChargeApproved(input: {
+    driverUserId: string;
+    requestId: string;
+    amount: string;
+    currency: string;
+  }): Promise<void> {
+    const normalizedCurrency = input.currency.trim().toUpperCase();
+    const amountLabel = `${input.amount} ${normalizedCurrency}`;
+
+    await this.sendToUsers({
+      userIds: [input.driverUserId],
+      app: PushApp.DRIVER,
+      title: 'Additional expense approved',
+      body: `The client approved your additional expense of ${amountLabel}.`,
+      type: 'ADDITIONAL_CHARGE_APPROVED',
+      data: {
+        requestId: input.requestId,
+        tripId: input.requestId,
+        amount: input.amount,
+        currency: normalizedCurrency,
+      },
+    });
+  }
+
   async notifyAdminsAboutDriverReviewSubmission(input: {
     driverProfileId: string;
     driverName?: string | null;

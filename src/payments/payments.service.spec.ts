@@ -65,15 +65,28 @@ describe('PaymentsService', () => {
           createdAt: Date;
           updatedAt: Date;
         }): {
-          invoice: {
-            originalFilename: string | null;
-            mimeType: string | null;
-            sizeBytes: number | null;
+      invoice: {
+        originalFilename: string | null;
+        mimeType: string | null;
+        sizeBytes: number | null;
+      };
+          approval: {
+            approvedAt: string | null;
+            approvedByCustomerId: string | null;
+            confirmationLocale: string | null;
+            confirmationText: string | null;
           };
-          walletDeduction: {
-            amount: number;
-            currency: string;
-            transactionType: 'ADDITIONAL_CHARGE';
+          payment: {
+            stripePaymentIntentId: string | null;
+            stripeChargeId: string | null;
+            savedPaymentMethod: {
+              id: string;
+              brand: string | null;
+              last4: string | null;
+              expMonth: number | null;
+              expYear: number | null;
+            } | null;
+            failureReason: string | null;
           };
         };
       }
@@ -90,6 +103,18 @@ describe('PaymentsService', () => {
       invoiceOriginalFilename: 'invoice.jpg',
       invoiceMimeType: 'image/jpeg',
       invoiceSizeBytes: 2048,
+      approvedAt: new Date('2026-07-03T08:03:00.000Z'),
+      approvedByCustomerId: 'customer-1',
+      approvalLocale: 'en',
+      approvalConfirmationText: 'Agree',
+      stripePaymentIntentId: 'pi_123',
+      stripeChargeId: 'ch_123',
+      savedPaymentMethodId: 'pm_123',
+      savedPaymentMethodBrand: 'visa',
+      savedPaymentMethodLast4: '4242',
+      savedPaymentMethodExpMonth: 12,
+      savedPaymentMethodExpYear: 2030,
+      paymentFailureReason: null,
       status: AdditionalChargeStatus.CAPTURED,
       createdAt: new Date('2026-07-03T08:00:00.000Z'),
       updatedAt: new Date('2026-07-03T08:05:00.000Z'),
@@ -100,10 +125,25 @@ describe('PaymentsService', () => {
       mimeType: 'image/jpeg',
       sizeBytes: 2048,
     });
-    expect(response.walletDeduction).toEqual({
-      amount: 19.95,
-      currency: 'CHF',
-      transactionType: 'ADDITIONAL_CHARGE',
+    expect(response.appFeeAmount).toBe(2);
+    expect(response.totalChargeAmount).toBe(21.95);
+    expect(response.approval).toEqual({
+      approvedAt: '2026-07-03T08:03:00.000Z',
+      approvedByCustomerId: 'customer-1',
+      confirmationLocale: 'en',
+      confirmationText: 'Agree',
+    });
+    expect(response.payment).toEqual({
+      stripePaymentIntentId: 'pi_123',
+      stripeChargeId: 'ch_123',
+      savedPaymentMethod: {
+        id: 'pm_123',
+        brand: 'visa',
+        last4: '4242',
+        expMonth: 12,
+        expYear: 2030,
+      },
+      failureReason: null,
     });
   });
 });
