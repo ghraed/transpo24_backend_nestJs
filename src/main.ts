@@ -5,6 +5,7 @@ import express from 'express';
 import { join } from 'node:path';
 
 import { AppModule } from './app.module';
+import { JsonExceptionFilter } from './common/filters/json-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -23,6 +24,7 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  app.useGlobalFilters(new JsonExceptionFilter());
 
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 

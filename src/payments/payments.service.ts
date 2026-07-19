@@ -2415,6 +2415,9 @@ export class PaymentsService {
   private mapStripeIntentStatus(
     paymentIntent: StripePaymentIntentRecord,
   ): PaymentStatus {
+    // Legacy/manual-capture intents can still surface from older data, but the
+    // active trip flow now relies on immediate capture and does not treat them
+    // as collected payments.
     if (paymentIntent.status === 'requires_capture') {
       return PaymentStatus.PAYMENT_HELD;
     }

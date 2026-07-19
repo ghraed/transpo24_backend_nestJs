@@ -238,8 +238,6 @@ const RETRYABLE_PAYMENT_HOLD_STATUSES = new Set<PaymentStatus>([
 ]);
 
 const SUCCESSFUL_PAYMENT_HOLD_STATUSES = new Set<PaymentStatus>([
-  PaymentStatus.PAYMENT_HELD,
-  PaymentStatus.PAYMENT_CAPTURE_PENDING,
   PaymentStatus.PAYMENT_CAPTURED,
 ]);
 
@@ -788,8 +786,6 @@ const POST_PICKUP_REQUEST_STATUSES = new Set<TransportRequestStatus>([
 ]);
 
 const CANCELLABLE_COLLECTED_PAYMENT_STATUSES = new Set<PaymentStatus>([
-  PaymentStatus.PAYMENT_HELD,
-  PaymentStatus.PAYMENT_CAPTURE_PENDING,
   PaymentStatus.PAYMENT_CAPTURED,
 ]);
 
@@ -2313,7 +2309,7 @@ export class CustomerRequestsService {
 
         if (!SUCCESSFUL_PAYMENT_HOLD_STATUSES.has(paymentHold.status)) {
           throw new ConflictException(
-            'The accepted offer payment is not authorized successfully yet.',
+            'The accepted offer payment has not been collected successfully yet.',
           );
         }
 
@@ -2570,7 +2566,7 @@ export class CustomerRequestsService {
 
         if (!SUCCESSFUL_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)) {
           throw new BadRequestException(
-            'Payment has not been authorized successfully.',
+            'Payment has not been collected successfully.',
           );
         }
 

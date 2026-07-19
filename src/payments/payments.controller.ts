@@ -62,11 +62,7 @@ export class PaymentsController {
       requestId,
     });
 
-    if (
-      payment.status === 'PAYMENT_HELD' ||
-      payment.status === 'PAYMENT_CAPTURE_PENDING' ||
-      payment.status === 'PAYMENT_CAPTURED'
-    ) {
+    if (payment.status === 'PAYMENT_CAPTURED') {
       try {
         await this.customerRequestsService.finalizeAcceptedOfferPayment({
           customerId: request.user.id,
@@ -74,7 +70,7 @@ export class PaymentsController {
         });
       } catch (error) {
         this.logger.error(
-          `Failed to auto-finalize successful payment hold for request ${requestId}.`,
+          `Failed to auto-finalize captured payment for request ${requestId}.`,
           error instanceof Error ? error.stack : undefined,
         );
       }
