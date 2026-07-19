@@ -2,8 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
+  forwardRef,
 } from '@nestjs/common';
 import type { File as MulterFile } from 'multer';
 import { unlink } from 'node:fs/promises';
@@ -24,6 +28,7 @@ import {
 
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DriverPayoutQueueService } from './driver-payout-queue.service';
 import {
   AdditionalChargeResponseDto,
   CancelTripPaymentResponseDto,
@@ -173,8 +178,37 @@ type TripPaymentSettlementRecord = {
   lastStripeRefundId: string | null;
   disputeReportedAt: Date | null;
   payoutFailureReason: string | null;
+  payoutAttemptCount: number;
+  lastPayoutAttemptAt: Date | null;
+  nextPayoutRetryAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type DriverPayoutAttemptResult = {
+  transferred: boolean;
+  stripeTransferId: string | null;
+  reason: string | null;
+};
+
+type DriverPayoutContext = {
+  settlementId: string;
+  tripId: string;
+  customerId: string;
+  driverUserId: string;
+  driverId: string;
+  currency: string;
+  earningId: string;
+  earningStatus: DriverEarningStatus;
+  availableAt: Date | null;
+  paidOutAt: Date | null;
+  netAmount: Prisma.Decimal;
+  stripeTransferId: string | null;
+  stripeTransferStatus: string | null;
+  destinationAccountId: string | null;
+  stripePayoutsEnabled: boolean;
+  stripeDetailsSubmitted: boolean;
+  payoutAttemptCount: number;
 };
 
 type StripePaymentIntentRecord = {
@@ -201,6 +235,8 @@ const SUCCESSFUL_COLLECTION_STATUSES = new Set<PaymentStatus>([
 const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
 const TRIP_CANCELLATION_FEE_RATE = new Prisma.Decimal(0.15);
 const DRIVER_CANCELLATION_SHARE_RATE = new Prisma.Decimal(0.5);
+const STALE_PAYOUT_TRANSFER_MINUTES = 15;
+const DRIVER_PAYOUT_RETRY_DELAYS_MINUTES = [5, 30, 120, 360, 720, 1440];
 const SUPPORTED_ADDITIONAL_CHARGE_CURRENCIES = new Set([
   'CHF',
   'EUR',
@@ -216,6 +252,9 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
     private readonly notificationsService: NotificationsService,
+    @Optional()
+    @Inject(forwardRef(() => DriverPayoutQueueService))
+    private readonly driverPayoutQueueService?: DriverPayoutQueueService,
   ) {}
 
   async createHoldForAcceptedOffer(
@@ -452,14 +491,29 @@ export class PaymentsService {
 
     return this.prisma.$transaction((tx) =>
       this.cancelCollectedTripTx(tx, input.requestId, input.customerId),
-    );
+    ).then(async (result) => {
+      if (result.driverShareAmount > 0) {
+        await this.queueDriverPayoutForTrip(input.requestId);
+      }
+
+      return {
+        requestStatus: result.requestStatus,
+        currency: result.currency,
+        refundedAmount: result.refundedAmount,
+        retainedAmount: result.retainedAmount,
+      };
+    });
   }
 
   private async cancelCollectedTripTx(
     tx: Prisma.TransactionClient,
     requestId: string,
     customerId: string,
-  ): Promise<CancelTripPaymentResponseDto> {
+  ): Promise<
+    CancelTripPaymentResponseDto & {
+      driverShareAmount: number;
+    }
+  > {
     const request = await tx.transportRequest.findUnique({
       where: { id: requestId },
       select: {
@@ -492,6 +546,9 @@ export class PaymentsService {
         currency: request.paymentSettlement.currency,
         refundedAmount: Number(request.paymentSettlement.refundedAmount.toString()),
         retainedAmount: Number(request.paymentSettlement.retainedAmount.toString()),
+        driverShareAmount: Number(
+          request.paymentSettlement.driverShareAmount.toString(),
+        ),
       };
     }
 
@@ -616,6 +673,9 @@ export class PaymentsService {
         requiresManualReview: false,
         lastStripeRefundId: refundId,
         payoutFailureReason: null,
+        payoutAttemptCount: 0,
+        lastPayoutAttemptAt: null,
+        nextPayoutRetryAt: driverShareAmount.gt(0) ? new Date() : null,
       },
       select: TRIP_PAYMENT_SETTLEMENT_SELECT,
     });
@@ -642,6 +702,7 @@ export class PaymentsService {
       currency: settlement.currency,
       refundedAmount: Number(settlement.refundedAmount.toString()),
       retainedAmount: Number(settlement.retainedAmount.toString()),
+      driverShareAmount: Number(driverShareAmount.toString()),
     };
   }
 
@@ -1435,180 +1496,273 @@ export class PaymentsService {
       throw new ForbiddenException('This earning does not belong to you.');
     }
 
-    if (
-      earning.status === DriverEarningStatus.PAID_OUT ||
-      earning.stripeTransferId
-    ) {
-      return {
-        transferred: true,
-        stripeTransferId: earning.stripeTransferId,
-        reason: 'Transfer already completed.',
-      };
-    }
-
-    if (!profile.stripeAccountId || !profile.stripePayoutsEnabled) {
-      return {
-        transferred: false,
-        stripeTransferId: null,
-        reason:
-          'Stripe Connect onboarding is not complete. Payouts are not enabled.',
-      };
-    }
-
-    const transferAmount = this.toStripeMinorUnit(earning.netAmount);
-    if (transferAmount <= 0) {
-      return {
-        transferred: false,
-        stripeTransferId: null,
-        reason: 'Transfer amount is zero or negative.',
-      };
-    }
-
-    return this.executeDriverTransfer({
-      tripId: input.tripId,
-      driverUserId: input.driverUserId,
-      earningId: earning.id,
-      driverId: earning.driverId,
-      currency: earning.currency,
-      netAmount: earning.netAmount,
-      destinationAccountId: profile.stripeAccountId,
-      metadata: {
-        tripId: input.tripId,
-        driverEarningId: earning.id,
-        driverId: earning.driverId,
-        retry: 'true',
-      },
+    return this.attemptDriverPayoutForTrip(input.tripId, {
+      requestedBy: 'driver_manual_retry',
     });
   }
 
-  async transferDriverEarningForTrip(tripId: string): Promise<void> {
+  async queueDriverPayoutForTrip(tripId: string): Promise<boolean> {
     const earning = await this.prisma.driverEarning.findUnique({
       where: { tripId },
       select: {
-        id: true,
-        driverId: true,
-        netAmount: true,
-        currency: true,
+        tripId: true,
+        availableAt: true,
         status: true,
         stripeTransferId: true,
       },
     });
 
     if (!earning) {
-      return;
+      return false;
     }
 
-    if (earning.status === DriverEarningStatus.PAID_OUT) {
-      return;
+    if (
+      earning.status === DriverEarningStatus.PAID_OUT ||
+      earning.stripeTransferId
+    ) {
+      return false;
     }
 
-    if (earning.stripeTransferId) {
-      return;
-    }
-
-    const driver = await this.prisma.driverProfile.findUnique({
-      where: { id: earning.driverId },
-      select: {
-        userId: true,
-        stripeAccountId: true,
-        stripePayoutsEnabled: true,
-        stripeDetailsSubmitted: true,
-      },
+    const enqueued = await this.enqueueDriverPayout({
+      tripId,
+      reason: 'delivery',
+      runAt: earning.availableAt ?? new Date(),
+      replaceDelayed: true,
     });
 
-    if (!driver) {
-      return;
+    if (!enqueued) {
+      throw new ServiceUnavailableException(
+        'Driver payout queue is unavailable.',
+      );
     }
 
-    if (!driver.stripeAccountId || !driver.stripePayoutsEnabled) {
-      return;
-    }
+    return true;
+  }
 
-    const transferAmount = this.toStripeMinorUnit(earning.netAmount);
-    if (transferAmount <= 0) {
-      return;
-    }
-
-    await this.executeDriverTransfer({
+  async queueAdminDriverPayoutRetry(tripId: string): Promise<boolean> {
+    const enqueued = await this.enqueueDriverPayout({
       tripId,
-      driverUserId: driver.userId,
-      earningId: earning.id,
-      driverId: earning.driverId,
-      currency: earning.currency,
-      netAmount: earning.netAmount,
-      destinationAccountId: driver.stripeAccountId,
-      metadata: {
-        tripId,
-        driverEarningId: earning.id,
-        driverId: earning.driverId,
-      },
+      reason: 'admin_manual_retry',
+      runAt: new Date(),
+      replaceDelayed: true,
+    });
+
+    if (!enqueued) {
+      throw new ServiceUnavailableException(
+        'Driver payout queue is unavailable.',
+      );
+    }
+
+    return true;
+  }
+
+  async transferDriverEarningForTrip(tripId: string): Promise<void> {
+    await this.attemptDriverPayoutForTrip(tripId, {
+      requestedBy: 'automatic_retry',
     });
   }
 
-  private async executeDriverTransfer(input: {
-    tripId: string;
-    driverUserId: string;
-    earningId: string;
-    driverId: string;
-    currency: string;
-    netAmount: Prisma.Decimal;
-    destinationAccountId: string;
-    metadata: Record<string, string>;
-  }): Promise<{
-    transferred: boolean;
-    stripeTransferId: string | null;
-    reason: string | null;
-  }> {
-    await this.prisma.tripPaymentSettlement.updateMany({
-      where: { requestId: input.tripId },
+  async processQueuedDriverPayoutJob(tripId: string): Promise<void> {
+    await this.attemptDriverPayoutForTrip(tripId, {
+      requestedBy: 'automatic_retry',
+    });
+  }
+
+  async sweepQueuedDriverPayouts(): Promise<void> {
+    const now = new Date();
+    const staleCutoff = new Date(
+      now.getTime() - STALE_PAYOUT_TRANSFER_MINUTES * 60 * 1000,
+    );
+    const candidates = await this.prisma.tripPaymentSettlement.findMany({
+      where: {
+        OR: [
+          {
+            driverPayoutState: DriverPayoutState.EARNING_CREATED,
+            request: {
+              driverEarning: {
+                availableAt: { lte: now },
+                stripeTransferId: null,
+                status: {
+                  in: [
+                    DriverEarningStatus.PENDING,
+                    DriverEarningStatus.AVAILABLE,
+                  ],
+                },
+              },
+            },
+          },
+          {
+            driverPayoutState: DriverPayoutState.TRANSFER_FAILED,
+            nextPayoutRetryAt: { lte: now },
+          },
+          {
+            driverPayoutState: DriverPayoutState.PENDING_TRANSFER,
+            lastPayoutAttemptAt: { lte: staleCutoff },
+          },
+        ],
+      },
+      select: {
+        requestId: true,
+        driverPayoutState: true,
+        request: {
+          select: {
+            driverEarning: {
+              select: {
+                availableAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    for (const candidate of candidates) {
+      await this.enqueueDriverPayout({
+        tripId: candidate.requestId,
+        reason: 'sweep',
+        runAt:
+          candidate.driverPayoutState === DriverPayoutState.EARNING_CREATED
+            ? candidate.request.driverEarning?.availableAt ?? now
+            : now,
+        replaceDelayed: true,
+      });
+    }
+  }
+
+  private async attemptDriverPayoutForTrip(
+    tripId: string,
+    input: {
+      requestedBy:
+        | 'automatic_retry'
+        | 'driver_manual_retry'
+        | 'admin_manual_retry';
+    },
+  ): Promise<DriverPayoutAttemptResult> {
+    const context = await this.getDriverPayoutContext(tripId);
+
+    if (!context) {
+      return {
+        transferred: false,
+        stripeTransferId: null,
+        reason: 'Earning record not found for this trip.',
+      };
+    }
+
+    if (
+      context.earningStatus === DriverEarningStatus.PAID_OUT ||
+      context.stripeTransferId
+    ) {
+      await this.markSettlementPaidOut(context.tripId);
+      return {
+        transferred: true,
+        stripeTransferId: context.stripeTransferId,
+        reason: 'Transfer already completed.',
+      };
+    }
+
+    const now = new Date();
+
+    if (context.availableAt && context.availableAt.getTime() > now.getTime()) {
+      await this.prisma.tripPaymentSettlement.update({
+        where: { id: context.settlementId },
+        data: {
+          driverPayoutState: DriverPayoutState.EARNING_CREATED,
+          payoutFailureReason: null,
+          nextPayoutRetryAt: context.availableAt,
+        },
+      });
+
+      if (input.requestedBy === 'automatic_retry') {
+        await this.enqueueDriverPayout({
+          tripId: context.tripId,
+          reason: 'automatic_retry',
+          runAt: context.availableAt,
+          replaceDelayed: true,
+        });
+      }
+
+      return {
+        transferred: false,
+        stripeTransferId: null,
+        reason: `Payout is not available before ${context.availableAt.toISOString()}.`,
+      };
+    }
+
+    if (context.earningStatus === DriverEarningStatus.PENDING) {
+      await this.prisma.driverEarning.update({
+        where: { id: context.earningId },
+        data: {
+          status: DriverEarningStatus.AVAILABLE,
+        },
+      });
+    }
+
+    if (!context.destinationAccountId || !context.stripePayoutsEnabled) {
+      return this.failDriverPayoutAttempt(context, now, {
+        reason:
+          'Stripe Connect onboarding is not complete. Payouts are not enabled.',
+      });
+    }
+
+    const transferAmount = this.toStripeMinorUnit(context.netAmount);
+    if (transferAmount <= 0) {
+      return this.failDriverPayoutAttempt(context, now, {
+        reason: 'Transfer amount is zero or negative.',
+      });
+    }
+
+    await this.prisma.tripPaymentSettlement.update({
+      where: { id: context.settlementId },
       data: {
         driverPayoutState: DriverPayoutState.PENDING_TRANSFER,
         payoutFailureReason: null,
+        lastPayoutAttemptAt: now,
+        nextPayoutRetryAt: null,
       },
     });
 
     try {
       const transfer = await this.stripeService.createTransfer({
-        amount: this.toStripeMinorUnit(input.netAmount),
-        currency: input.currency.toLowerCase(),
-        destination: input.destinationAccountId,
-        transferGroup: `trip_${input.tripId}`,
-        metadata: input.metadata,
+        amount: transferAmount,
+        currency: context.currency.toLowerCase(),
+        destination: context.destinationAccountId,
+        transferGroup: `trip_${context.tripId}`,
+        metadata: {
+          tripId: context.tripId,
+          driverEarningId: context.earningId,
+          driverId: context.driverId,
+          source: input.requestedBy,
+        },
       });
 
       await this.prisma.driverEarning.update({
-        where: { id: input.earningId },
+        where: { id: context.earningId },
         data: {
           status: DriverEarningStatus.PAID_OUT,
-          paidOutAt: new Date(),
+          paidOutAt: now,
           stripeTransferId: transfer.id,
           stripeTransferStatus: 'paid',
         },
       });
 
-      await this.prisma.tripPaymentSettlement.updateMany({
-        where: { requestId: input.tripId },
+      await this.prisma.tripPaymentSettlement.update({
+        where: { id: context.settlementId },
         data: {
           driverPayoutState: DriverPayoutState.PAID_OUT,
           payoutFailureReason: null,
+          nextPayoutRetryAt: null,
+          lastPayoutAttemptAt: now,
         },
       });
 
-      const trip = await this.prisma.transportRequest.findUnique({
-        where: { id: input.tripId },
-        select: { customerId: true },
+      await this.notificationsService.notifyTripFundsTransferred({
+        customerId: context.customerId,
+        driverUserId: context.driverUserId,
+        tripId: context.tripId,
+        amount: context.netAmount.toFixed(2),
+        currency: context.currency,
+        stripeTransferId: transfer.id,
       });
-
-      if (trip) {
-        await this.notificationsService.notifyTripFundsTransferred({
-          customerId: trip.customerId,
-          driverUserId: input.driverUserId,
-          tripId: input.tripId,
-          amount: input.netAmount.toFixed(2),
-          currency: input.currency,
-          stripeTransferId: transfer.id,
-        });
-      }
 
       return {
         transferred: true,
@@ -1620,22 +1774,161 @@ export class PaymentsService {
         error instanceof Error ? error.message : 'Driver payout transfer failed.';
 
       await this.prisma.driverEarning.update({
-        where: { id: input.earningId },
+        where: { id: context.earningId },
         data: {
           stripeTransferStatus: 'failed',
         },
       });
 
-      await this.prisma.tripPaymentSettlement.updateMany({
-        where: { requestId: input.tripId },
-        data: {
-          driverPayoutState: DriverPayoutState.TRANSFER_FAILED,
-          payoutFailureReason: reason,
-        },
-      });
-
-      throw error;
+      return this.failDriverPayoutAttempt(context, now, { reason });
     }
+  }
+
+  private async getDriverPayoutContext(
+    tripId: string,
+  ): Promise<DriverPayoutContext | null> {
+    const earning = await this.prisma.driverEarning.findUnique({
+      where: { tripId },
+      select: {
+        id: true,
+        tripId: true,
+        driverId: true,
+        netAmount: true,
+        currency: true,
+        status: true,
+        availableAt: true,
+        paidOutAt: true,
+        stripeTransferId: true,
+        stripeTransferStatus: true,
+        driver: {
+          select: {
+            userId: true,
+            stripeAccountId: true,
+            stripePayoutsEnabled: true,
+            stripeDetailsSubmitted: true,
+          },
+        },
+        trip: {
+          select: {
+            customerId: true,
+            paymentSettlement: {
+              select: {
+                id: true,
+                payoutAttemptCount: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!earning?.trip.paymentSettlement) {
+      return null;
+    }
+
+    return {
+      settlementId: earning.trip.paymentSettlement.id,
+      tripId: earning.tripId,
+      customerId: earning.trip.customerId,
+      driverUserId: earning.driver.userId,
+      driverId: earning.driverId,
+      currency: earning.currency,
+      earningId: earning.id,
+      earningStatus: earning.status,
+      availableAt: earning.availableAt,
+      paidOutAt: earning.paidOutAt,
+      netAmount: earning.netAmount,
+      stripeTransferId: earning.stripeTransferId,
+      stripeTransferStatus: earning.stripeTransferStatus,
+      destinationAccountId: earning.driver.stripeAccountId,
+      stripePayoutsEnabled: earning.driver.stripePayoutsEnabled,
+      stripeDetailsSubmitted: earning.driver.stripeDetailsSubmitted,
+      payoutAttemptCount: earning.trip.paymentSettlement.payoutAttemptCount,
+    };
+  }
+
+  private async failDriverPayoutAttempt(
+    context: DriverPayoutContext,
+    attemptedAt: Date,
+    input: {
+      reason: string;
+    },
+  ): Promise<DriverPayoutAttemptResult> {
+    const nextAttemptCount = context.payoutAttemptCount + 1;
+    const nextRetryAt = this.calculateNextDriverPayoutRetryAt(
+      nextAttemptCount,
+      attemptedAt,
+    );
+
+    await this.prisma.tripPaymentSettlement.update({
+      where: { id: context.settlementId },
+      data: {
+        driverPayoutState: DriverPayoutState.TRANSFER_FAILED,
+        payoutFailureReason: input.reason,
+        payoutAttemptCount: nextAttemptCount,
+        lastPayoutAttemptAt: attemptedAt,
+        nextPayoutRetryAt: nextRetryAt,
+      },
+    });
+
+    if (nextRetryAt) {
+      await this.enqueueDriverPayout({
+        tripId: context.tripId,
+        reason: 'automatic_retry',
+        runAt: nextRetryAt,
+        replaceDelayed: true,
+      });
+    }
+
+    return {
+      transferred: false,
+      stripeTransferId: null,
+      reason: input.reason,
+    };
+  }
+
+  private calculateNextDriverPayoutRetryAt(
+    attemptCount: number,
+    attemptedAt: Date,
+  ): Date | null {
+    const retryDelayMinutes =
+      DRIVER_PAYOUT_RETRY_DELAYS_MINUTES[attemptCount - 1] ?? null;
+
+    if (retryDelayMinutes === null) {
+      return null;
+    }
+
+    return new Date(attemptedAt.getTime() + retryDelayMinutes * 60 * 1000);
+  }
+
+  private async markSettlementPaidOut(tripId: string): Promise<void> {
+    await this.prisma.tripPaymentSettlement.updateMany({
+      where: { requestId: tripId },
+      data: {
+        driverPayoutState: DriverPayoutState.PAID_OUT,
+        payoutFailureReason: null,
+        nextPayoutRetryAt: null,
+        lastPayoutAttemptAt: null,
+      },
+    });
+  }
+
+  private async enqueueDriverPayout(input: {
+    tripId: string;
+    reason:
+      | 'delivery'
+      | 'admin_manual_retry'
+      | 'driver_manual_retry'
+      | 'sweep'
+      | 'automatic_retry';
+    runAt?: Date | null;
+    replaceDelayed?: boolean;
+  }): Promise<boolean> {
+    if (!this.driverPayoutQueueService) {
+      return false;
+    }
+
+    return this.driverPayoutQueueService.enqueueDriverPayout(input);
   }
 
   async handleStripeWebhook(
@@ -1781,9 +2074,9 @@ export class PaymentsService {
       });
 
       if (nextStatus === PaymentStatus.PAYMENT_CAPTURED) {
-        await tx.tripPaymentSettlement.upsert({
-          where: { requestId: hold.requestId },
-          update: {
+      await tx.tripPaymentSettlement.upsert({
+        where: { requestId: hold.requestId },
+        update: {
             paymentHoldId: hold.id,
             customerId: hold.customerId,
             driverId: hold.driverId,
@@ -1796,12 +2089,15 @@ export class PaymentsService {
             platformShareAmount: new Prisma.Decimal(0),
             status: TripPaymentSettlementStatus.COLLECTED,
             driverPayoutState: DriverPayoutState.NOT_EARNED,
-            requiresManualReview: false,
-            lastStripeRefundId: null,
-            disputeReportedAt: null,
-            payoutFailureReason: null,
-          },
-          create: {
+          requiresManualReview: false,
+          lastStripeRefundId: null,
+          disputeReportedAt: null,
+          payoutFailureReason: null,
+          payoutAttemptCount: 0,
+          lastPayoutAttemptAt: null,
+          nextPayoutRetryAt: null,
+        },
+        create: {
             requestId: hold.requestId,
             paymentHoldId: hold.id,
             customerId: hold.customerId,
@@ -1815,12 +2111,15 @@ export class PaymentsService {
             platformShareAmount: new Prisma.Decimal(0),
             status: TripPaymentSettlementStatus.COLLECTED,
             driverPayoutState: DriverPayoutState.NOT_EARNED,
-            requiresManualReview: false,
-            lastStripeRefundId: null,
-            disputeReportedAt: null,
-            payoutFailureReason: null,
-          },
-        });
+          requiresManualReview: false,
+          lastStripeRefundId: null,
+          disputeReportedAt: null,
+          payoutFailureReason: null,
+          payoutAttemptCount: 0,
+          lastPayoutAttemptAt: null,
+          nextPayoutRetryAt: null,
+        },
+      });
       }
     });
   }
@@ -1959,6 +2258,8 @@ export class PaymentsService {
           driverShareAmount: new Prisma.Decimal(0),
           platformShareAmount: new Prisma.Decimal(0),
           lastStripeRefundId: chargeId,
+          nextPayoutRetryAt: null,
+          payoutFailureReason: null,
         },
       });
     });
@@ -1994,6 +2295,7 @@ export class PaymentsService {
         data: {
           status: TripPaymentSettlementStatus.DISPUTED,
           disputeReportedAt: new Date(),
+          nextPayoutRetryAt: null,
         },
       });
     });
@@ -2005,6 +2307,7 @@ export class PaymentsService {
       data: {
         status: TripPaymentSettlementStatus.MANUAL_REVIEW,
         requiresManualReview: true,
+        nextPayoutRetryAt: null,
       },
     });
   }
@@ -2043,6 +2346,9 @@ export class PaymentsService {
         lastStripeRefundId: null,
         disputeReportedAt: null,
         payoutFailureReason: null,
+        payoutAttemptCount: 0,
+        lastPayoutAttemptAt: null,
+        nextPayoutRetryAt: null,
       },
       create: {
         requestId: hold.requestId,
@@ -2062,6 +2368,9 @@ export class PaymentsService {
         lastStripeRefundId: null,
         disputeReportedAt: null,
         payoutFailureReason: null,
+        payoutAttemptCount: 0,
+        lastPayoutAttemptAt: null,
+        nextPayoutRetryAt: null,
       },
     });
   }
@@ -2893,6 +3202,9 @@ const TRIP_PAYMENT_SETTLEMENT_SELECT = {
   lastStripeRefundId: true,
   disputeReportedAt: true,
   payoutFailureReason: true,
+  payoutAttemptCount: true,
+  lastPayoutAttemptAt: true,
+  nextPayoutRetryAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.TripPaymentSettlementSelect;

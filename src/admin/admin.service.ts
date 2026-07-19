@@ -9,15 +9,26 @@ import {
 import {
   DocumentStatus,
   DriverDocumentType,
+  DriverEarningStatus,
+  DriverPayoutState,
   DriverStatus,
   DriverVehicleReviewStatus,
+  Prisma,
   UserRole,
   VehicleType,
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PaymentsService } from '../payments/payments.service';
 import { hashPassword } from '../common/security/password.util';
+import { AdminDriverEarningsQueryDto } from './dto/admin-driver-earnings-query.dto';
+import {
+  type AdminDriverEarningsView,
+  AdminDriverEarningItemDto,
+  AdminDriverEarningsListResponseDto,
+  AdminDriverEarningSummaryDto,
+} from './dto/admin-driver-earnings-response.dto';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 import { AdminUserResponseDto } from './dto/admin-user-response.dto';
@@ -100,6 +111,44 @@ type ReviewProfileSource = {
   vehicles: ReviewVehicleSource[];
 };
 
+type DriverEarningAdminSource = {
+  id: string;
+  tripId: string;
+  netAmount: Prisma.Decimal;
+  currency: string;
+  status: DriverEarningStatus;
+  availableAt: Date | null;
+  paidOutAt: Date | null;
+  stripeTransferId: string | null;
+  stripeTransferStatus: string | null;
+  driver: {
+    id: string;
+    userId: string;
+    stripeAccountId: string | null;
+    stripeDetailsSubmitted: boolean;
+    stripePayoutsEnabled: boolean;
+    user: {
+      name: string;
+      email: string;
+    };
+  };
+  trip: {
+    customer: {
+      id: string;
+      name: string;
+      email: string;
+    };
+    paymentSettlement: {
+      id: string;
+      driverPayoutState: DriverPayoutState;
+      payoutAttemptCount: number;
+      lastPayoutAttemptAt: Date | null;
+      nextPayoutRetryAt: Date | null;
+      payoutFailureReason: string | null;
+    } | null;
+  };
+};
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -107,6 +156,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   async findAll(): Promise<AdminUserResponseDto[]> {
@@ -282,6 +332,69 @@ export class AdminService {
     }
 
     return this.mapDriverReview(profile);
+  }
+
+  async findDriverEarnings(
+    query: AdminDriverEarningsQueryDto,
+  ): Promise<AdminDriverEarningsListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const view = query.view ?? 'all';
+    const where = this.buildDriverEarningsWhere(view);
+
+    const [items, total, summary] = await Promise.all([
+      this.prisma.driverEarning.findMany({
+        where,
+        orderBy: [
+          { availableAt: 'asc' },
+          { createdAt: 'desc' },
+        ],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: this.driverEarningAdminSelect(),
+      }),
+      this.prisma.driverEarning.count({ where }),
+      this.getDriverEarningsSummary(),
+    ]);
+
+    return {
+      items: items.map((item) => this.mapDriverEarning(item)),
+      total,
+      summary,
+    };
+  }
+
+  async retryDriverPayout(tripId: string): Promise<AdminDriverEarningItemDto> {
+    const earning = await this.getDriverEarningByTripId(tripId);
+
+    if (!earning || !earning.trip.paymentSettlement) {
+      throw new NotFoundException('Driver earning not found.');
+    }
+
+    const retryState = this.getDriverEarningRetryState(earning);
+    if (!retryState.canRetry) {
+      throw new BadRequestException(
+        retryState.retryBlockedReason ?? 'Driver payout cannot be retried yet.',
+      );
+    }
+
+    await this.prisma.tripPaymentSettlement.update({
+      where: { id: earning.trip.paymentSettlement.id },
+      data: {
+        driverPayoutState: DriverPayoutState.EARNING_CREATED,
+        payoutFailureReason: null,
+        nextPayoutRetryAt: null,
+      },
+    });
+
+    await this.paymentsService.queueAdminDriverPayoutRetry(tripId);
+
+    const refreshed = await this.getDriverEarningByTripId(tripId);
+    if (!refreshed) {
+      throw new NotFoundException('Driver earning not found.');
+    }
+
+    return this.mapDriverEarning(refreshed);
   }
 
   async approveDriverReview(id: string): Promise<AdminDriverReviewResponseDto> {
@@ -472,6 +585,248 @@ export class AdminService {
       where: { id: user.id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  private buildDriverEarningsWhere(
+    view: AdminDriverEarningsView,
+  ): Prisma.DriverEarningWhereInput {
+    const pendingWhere: Prisma.DriverEarningWhereInput = {
+      status: DriverEarningStatus.PENDING,
+      trip: {
+        paymentSettlement: {
+          isNot: null,
+        },
+      },
+    };
+    const activeWhere: Prisma.DriverEarningWhereInput = {
+      trip: {
+        paymentSettlement: {
+          is: {
+            driverPayoutState: {
+              in: [
+                DriverPayoutState.EARNING_CREATED,
+                DriverPayoutState.PENDING_TRANSFER,
+              ],
+            },
+          },
+        },
+      },
+    };
+    const failedWhere: Prisma.DriverEarningWhereInput = {
+      trip: {
+        paymentSettlement: {
+          is: {
+            driverPayoutState: DriverPayoutState.TRANSFER_FAILED,
+          },
+        },
+      },
+    };
+
+    if (view === 'pending') {
+      return pendingWhere;
+    }
+
+    if (view === 'active') {
+      return activeWhere;
+    }
+
+    if (view === 'failed') {
+      return failedWhere;
+    }
+
+    return {
+      OR: [pendingWhere, activeWhere, failedWhere],
+    };
+  }
+
+  private driverEarningAdminSelect() {
+    return {
+      id: true,
+      tripId: true,
+      netAmount: true,
+      currency: true,
+      status: true,
+      availableAt: true,
+      paidOutAt: true,
+      stripeTransferId: true,
+      stripeTransferStatus: true,
+      driver: {
+        select: {
+          id: true,
+          userId: true,
+          stripeAccountId: true,
+          stripeDetailsSubmitted: true,
+          stripePayoutsEnabled: true,
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+      trip: {
+        select: {
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          paymentSettlement: {
+            select: {
+              id: true,
+              driverPayoutState: true,
+              payoutAttemptCount: true,
+              lastPayoutAttemptAt: true,
+              nextPayoutRetryAt: true,
+              payoutFailureReason: true,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private async getDriverEarningsSummary(): Promise<AdminDriverEarningSummaryDto> {
+    const [pendingCount, activeCount, failedCount] = await Promise.all([
+      this.prisma.driverEarning.count({
+        where: this.buildDriverEarningsWhere('pending'),
+      }),
+      this.prisma.driverEarning.count({
+        where: this.buildDriverEarningsWhere('active'),
+      }),
+      this.prisma.driverEarning.count({
+        where: this.buildDriverEarningsWhere('failed'),
+      }),
+    ]);
+
+    return {
+      pendingCount,
+      activeCount,
+      failedCount,
+    };
+  }
+
+  private async getDriverEarningByTripId(
+    tripId: string,
+  ): Promise<DriverEarningAdminSource | null> {
+    return this.prisma.driverEarning.findUnique({
+      where: { tripId },
+      select: this.driverEarningAdminSelect(),
+    });
+  }
+
+  private mapDriverEarning(
+    earning: DriverEarningAdminSource,
+  ): AdminDriverEarningItemDto {
+    if (!earning.trip.paymentSettlement) {
+      throw new NotFoundException('Driver payout settlement not found.');
+    }
+
+    const retryState = this.getDriverEarningRetryState(earning);
+
+    return {
+      tripId: earning.tripId,
+      earningId: earning.id,
+      settlementId: earning.trip.paymentSettlement.id,
+      driver: {
+        id: earning.driver.id,
+        userId: earning.driver.userId,
+        name: earning.driver.user.name,
+        email: earning.driver.user.email,
+      },
+      customer: {
+        id: earning.trip.customer.id,
+        name: earning.trip.customer.name,
+        email: earning.trip.customer.email,
+      },
+      stripe: {
+        accountId: earning.driver.stripeAccountId,
+        detailsSubmitted: earning.driver.stripeDetailsSubmitted,
+        payoutsEnabled: earning.driver.stripePayoutsEnabled,
+      },
+      netAmount: Number(earning.netAmount),
+      currency: earning.currency,
+      earningStatus: earning.status,
+      availableAt: earning.availableAt?.toISOString() ?? null,
+      paidOutAt: earning.paidOutAt?.toISOString() ?? null,
+      driverPayoutState: earning.trip.paymentSettlement.driverPayoutState,
+      payoutAttemptCount: earning.trip.paymentSettlement.payoutAttemptCount,
+      lastPayoutAttemptAt:
+        earning.trip.paymentSettlement.lastPayoutAttemptAt?.toISOString() ??
+        null,
+      nextPayoutRetryAt:
+        earning.trip.paymentSettlement.nextPayoutRetryAt?.toISOString() ?? null,
+      payoutFailureReason: earning.trip.paymentSettlement.payoutFailureReason,
+      stripeTransferId: earning.stripeTransferId,
+      stripeTransferStatus: earning.stripeTransferStatus,
+      canRetry: retryState.canRetry,
+      retryBlockedReason: retryState.retryBlockedReason,
+    };
+  }
+
+  private getDriverEarningRetryState(earning: DriverEarningAdminSource): {
+    canRetry: boolean;
+    retryBlockedReason: string | null;
+  } {
+    const settlement = earning.trip.paymentSettlement;
+    if (!settlement) {
+      return {
+        canRetry: false,
+        retryBlockedReason: 'Driver payout settlement is missing.',
+      };
+    }
+
+    if (earning.status === DriverEarningStatus.PAID_OUT || earning.stripeTransferId) {
+      return {
+        canRetry: false,
+        retryBlockedReason: 'Driver payout was already transferred.',
+      };
+    }
+
+    const now = Date.now();
+
+    if (settlement.driverPayoutState === DriverPayoutState.TRANSFER_FAILED) {
+      return {
+        canRetry: true,
+        retryBlockedReason: null,
+      };
+    }
+
+    if (settlement.driverPayoutState === DriverPayoutState.PENDING_TRANSFER) {
+      const isStale =
+        settlement.lastPayoutAttemptAt !== null &&
+        settlement.lastPayoutAttemptAt.getTime() <=
+          now - 15 * 60 * 1000;
+
+      return {
+        canRetry: isStale,
+        retryBlockedReason: isStale
+          ? null
+          : 'Payout transfer is still being processed.',
+      };
+    }
+
+    if (settlement.driverPayoutState === DriverPayoutState.EARNING_CREATED) {
+      if (earning.availableAt && earning.availableAt.getTime() > now) {
+        return {
+          canRetry: false,
+          retryBlockedReason: 'Driver earning is still in the 24-hour pending hold.',
+        };
+      }
+
+      return {
+        canRetry: true,
+        retryBlockedReason: null,
+      };
+    }
+
+    return {
+      canRetry: false,
+      retryBlockedReason: 'Driver payout is not eligible for retry.',
+    };
   }
 
   private async getDriverReviewProfile(

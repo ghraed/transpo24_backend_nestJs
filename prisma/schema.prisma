@@ -936,6 +936,9 @@ model TripPaymentSettlement {
   lastStripeRefundId    String?
   disputeReportedAt     DateTime?
   payoutFailureReason   String?
+  payoutAttemptCount    Int                         @default(0)
+  lastPayoutAttemptAt   DateTime?
+  nextPayoutRetryAt     DateTime?
   createdAt             DateTime                    @default(now())
   updatedAt             DateTime                    @updatedAt
 

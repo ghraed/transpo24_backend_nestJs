@@ -972,10 +972,10 @@ export class DriverController {
     // Trip payment is collected when the customer accepts the offer. Delivery
     // confirmation only needs to trigger downstream payout settlement.
     try {
-      await this.paymentsService.transferDriverEarningForTrip(params.tripId);
+      await this.paymentsService.queueDriverPayoutForTrip(params.tripId);
     } catch (transferError) {
       this.logger?.warn?.(
-        `Delivery confirmed for trip ${params.tripId} but driver payout transfer failed: ${
+        `Delivery confirmed for trip ${params.tripId} but driver payout scheduling failed: ${
           transferError instanceof Error
             ? transferError.message
             : 'unknown error'

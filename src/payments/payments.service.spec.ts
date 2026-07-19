@@ -61,15 +61,29 @@ describe('PaymentsService', () => {
           invoiceOriginalFilename: string | null;
           invoiceMimeType: string | null;
           invoiceSizeBytes: number | null;
+          approvedAt: Date | null;
+          approvedByCustomerId: string | null;
+          approvalLocale: string | null;
+          approvalConfirmationText: string | null;
+          stripePaymentIntentId: string | null;
+          stripeChargeId: string | null;
+          savedPaymentMethodId: string | null;
+          savedPaymentMethodBrand: string | null;
+          savedPaymentMethodLast4: string | null;
+          savedPaymentMethodExpMonth: number | null;
+          savedPaymentMethodExpYear: number | null;
+          paymentFailureReason: string | null;
           status: AdditionalChargeStatus;
           createdAt: Date;
           updatedAt: Date;
         }): {
-      invoice: {
-        originalFilename: string | null;
-        mimeType: string | null;
-        sizeBytes: number | null;
-      };
+          appFeeAmount: number;
+          totalChargeAmount: number;
+          invoice: {
+            originalFilename: string | null;
+            mimeType: string | null;
+            sizeBytes: number | null;
+          };
           approval: {
             approvedAt: string | null;
             approvedByCustomerId: string | null;
@@ -145,5 +159,63 @@ describe('PaymentsService', () => {
       },
       failureReason: null,
     });
+  });
+
+  it('schedules the first payout job for the earning availability time', async () => {
+    const availableAt = new Date('2026-07-19T10:15:00.000Z');
+    const driverEarningFindUnique = jest.fn().mockResolvedValue({
+      tripId: 'trip-1',
+      availableAt,
+      status: 'PENDING',
+      stripeTransferId: null,
+    });
+    const enqueueDriverPayout = jest.fn().mockResolvedValue(true);
+    const serviceWithQueue = new PaymentsService(
+      { driverEarning: { findUnique: driverEarningFindUnique } } as never,
+      {} as never,
+      {} as never,
+      { enqueueDriverPayout } as never,
+    );
+
+    await serviceWithQueue.queueDriverPayoutForTrip('trip-1');
+
+    expect(driverEarningFindUnique).toHaveBeenCalledWith({
+      where: { tripId: 'trip-1' },
+      select: {
+        tripId: true,
+        availableAt: true,
+        status: true,
+        stripeTransferId: true,
+      },
+    });
+    expect(enqueueDriverPayout).toHaveBeenCalledWith({
+      tripId: 'trip-1',
+      reason: 'delivery',
+      runAt: availableAt,
+      replaceDelayed: true,
+    });
+  });
+
+  it('computes the payout retry backoff schedule and stops after the configured attempts', () => {
+    const attemptSchedule = (
+      service as unknown as {
+        calculateNextDriverPayoutRetryAt(
+          attemptCount: number,
+          attemptedAt: Date,
+        ): Date | null;
+      }
+    ).calculateNextDriverPayoutRetryAt;
+    const attemptedAt = new Date('2026-07-19T08:00:00.000Z');
+
+    expect(attemptSchedule(1, attemptedAt)?.toISOString()).toBe(
+      '2026-07-19T08:05:00.000Z',
+    );
+    expect(attemptSchedule(2, attemptedAt)?.toISOString()).toBe(
+      '2026-07-19T08:30:00.000Z',
+    );
+    expect(attemptSchedule(6, attemptedAt)?.toISOString()).toBe(
+      '2026-07-20T08:00:00.000Z',
+    );
+    expect(attemptSchedule(7, attemptedAt)).toBeNull();
   });
 });

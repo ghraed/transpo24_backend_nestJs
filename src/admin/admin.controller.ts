@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Put,
   UseGuards,
 } from '@nestjs/common';
@@ -17,6 +18,11 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 import { AdminUserResponseDto } from './dto/admin-user-response.dto';
+import {
+  AdminDriverEarningItemDto,
+  AdminDriverEarningsListResponseDto,
+} from './dto/admin-driver-earnings-response.dto';
+import { AdminDriverEarningsQueryDto } from './dto/admin-driver-earnings-query.dto';
 import { AdminDriverReviewResponseDto } from './dto/admin-driver-review-response.dto';
 import { ReviewDriverRequestDto } from './dto/review-driver-request.dto';
 
@@ -63,6 +69,20 @@ export class AdminController {
     @Param('id') id: string,
   ): Promise<AdminDriverReviewResponseDto> {
     return this.adminService.findDriverReviewById(id);
+  }
+
+  @Get('driver-earnings')
+  findDriverEarnings(
+    @Query() query: AdminDriverEarningsQueryDto,
+  ): Promise<AdminDriverEarningsListResponseDto> {
+    return this.adminService.findDriverEarnings(query);
+  }
+
+  @Post('driver-earnings/:tripId/retry-payout')
+  retryDriverPayout(
+    @Param('tripId') tripId: string,
+  ): Promise<AdminDriverEarningItemDto> {
+    return this.adminService.retryDriverPayout(tripId);
   }
 
   @Post('driver-reviews/:id/approve')

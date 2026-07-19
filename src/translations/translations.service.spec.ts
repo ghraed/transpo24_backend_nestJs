@@ -121,7 +121,7 @@ describe('TranslationService', () => {
         text: 'Driver is on the way',
         sourceLanguage: 'en',
         targetLanguage: 'it',
-      } as unknown),
+      } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 

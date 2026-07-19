@@ -10,6 +10,7 @@ import { relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 import {
   DriverEarningStatus,
+  DriverPayoutState,
   DriverStatus,
   Prisma,
   TransportProofPhotoType,
@@ -923,6 +924,17 @@ export class TripsService {
         currency,
         status: DriverEarningStatus.PENDING,
         availableAt,
+      },
+    });
+
+    await tx.tripPaymentSettlement.updateMany({
+      where: { requestId: trip.id },
+      data: {
+        driverPayoutState: DriverPayoutState.EARNING_CREATED,
+        payoutFailureReason: null,
+        payoutAttemptCount: 0,
+        lastPayoutAttemptAt: null,
+        nextPayoutRetryAt: availableAt,
       },
     });
   }
