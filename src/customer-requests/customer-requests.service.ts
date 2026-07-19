@@ -382,6 +382,8 @@ type TransportRequestResponseSource = {
 
 type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
   assignedDriverId: string | null;
+  itemPickedUpAt: Date | null;
+  paymentStatus: PaymentStatus | null;
   createdAt: Date;
   updatedAt: Date;
   service: {
@@ -406,6 +408,18 @@ type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
     longitude: number;
     recordedAt: Date;
   }>;
+  paymentHold: {
+    status: PaymentStatus;
+    currency: string;
+    amount: Prisma.Decimal;
+  } | null;
+  paymentSettlement: {
+    currency: string;
+    collectedAmount: Prisma.Decimal;
+    refundedAmount: Prisma.Decimal;
+    retainedAmount: Prisma.Decimal;
+    requiresManualReview: boolean;
+  } | null;
 };
 
 type CustomerHomeRequestSource = {
@@ -630,6 +644,8 @@ const REQUEST_STATUS_SELECT = {
   ...REQUEST_SELECT,
   customerId: true,
   assignedDriverId: true,
+  itemPickedUpAt: true,
+  paymentStatus: true,
   createdAt: true,
   updatedAt: true,
   service: {
@@ -669,6 +685,22 @@ const REQUEST_STATUS_SELECT = {
       recordedAt: true,
     },
     take: 1,
+  },
+  paymentHold: {
+    select: {
+      status: true,
+      currency: true,
+      amount: true,
+    },
+  },
+  paymentSettlement: {
+    select: {
+      currency: true,
+      collectedAmount: true,
+      refundedAmount: true,
+      retainedAmount: true,
+      requiresManualReview: true,
+    },
   },
 } satisfies Prisma.TransportRequestSelect;
 
@@ -738,6 +770,28 @@ const ACTIVE_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.IN_TRANSIT,
   TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
 ];
+
+const PRE_PICKUP_CANCELABLE_REQUEST_STATUSES = new Set<TransportRequestStatus>([
+  TransportRequestStatus.ACCEPTED,
+  TransportRequestStatus.DRIVER_ASSIGNED,
+  TransportRequestStatus.DRIVER_GOING_TO_PICKUP,
+  TransportRequestStatus.DRIVER_ARRIVED_PICKUP,
+  TransportRequestStatus.PICKUP_IN_PROGRESS,
+]);
+
+const POST_PICKUP_REQUEST_STATUSES = new Set<TransportRequestStatus>([
+  TransportRequestStatus.ITEM_PICKED_UP,
+  TransportRequestStatus.IN_TRANSIT,
+  TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
+  TransportRequestStatus.DELIVERED,
+  TransportRequestStatus.COMPLETED,
+]);
+
+const CANCELLABLE_COLLECTED_PAYMENT_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.PAYMENT_HELD,
+  PaymentStatus.PAYMENT_CAPTURE_PENDING,
+  PaymentStatus.PAYMENT_CAPTURED,
+]);
 
 const HOLD_DELETABLE_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.DRAFT,
@@ -3280,6 +3334,7 @@ export class CustomerRequestsService {
 
     return {
       ...baseResponse,
+      cancellation: this.toCancellationStatus(request),
       service: {
         id: request.service.id,
         key: request.service.key,
@@ -3310,6 +3365,79 @@ export class CustomerRequestsService {
           ? latestLocation.recordedAt.toISOString()
           : null,
       },
+    };
+  }
+
+  private toCancellationStatus(
+    request: TransportRequestStatusResponseSource,
+  ): CustomerRequestStatusResponseDto['cancellation'] {
+    if (request.status === TransportRequestStatus.CANCELLED) {
+      return {
+        canCancelCollectedTrip: false,
+        reason: 'Trip already cancelled.',
+        refundPreview: null,
+        action: 'NONE',
+      };
+    }
+
+    if (
+      request.itemPickedUpAt ||
+      POST_PICKUP_REQUEST_STATUSES.has(request.status) ||
+      request.paymentSettlement?.requiresManualReview
+    ) {
+      return {
+        canCancelCollectedTrip: false,
+        reason:
+          'Automatic cancellation after pickup is unavailable. This trip requires manual review.',
+        refundPreview: null,
+        action: 'NONE',
+      };
+    }
+
+    if (!PRE_PICKUP_CANCELABLE_REQUEST_STATUSES.has(request.status)) {
+      return {
+        canCancelCollectedTrip: false,
+        reason: 'Trip cancellation is not available for the current request state.',
+        refundPreview: null,
+        action: 'NONE',
+      };
+    }
+
+    if (
+      request.paymentSettlement &&
+      request.paymentHold &&
+      CANCELLABLE_COLLECTED_PAYMENT_STATUSES.has(request.paymentHold.status)
+    ) {
+      const collectedAmount = Number(
+        request.paymentSettlement.collectedAmount.toString(),
+      );
+      const refundedAmount = Number((collectedAmount * 0.85).toFixed(2));
+      const retainedAmount = Number((collectedAmount - refundedAmount).toFixed(2));
+
+      return {
+        canCancelCollectedTrip: true,
+        reason: null,
+        refundPreview: {
+          currency: request.paymentSettlement.currency,
+          refundedAmount,
+          retainedAmount,
+        },
+        action: 'CANCEL_COLLECTED_TRIP',
+      };
+    }
+
+    const canCancelPaymentHold = Boolean(
+      request.paymentHold &&
+        !request.paymentSettlement &&
+        CANCELLABLE_COLLECTED_PAYMENT_STATUSES.has(request.paymentHold.status),
+    );
+
+    return {
+      canCancelCollectedTrip: false,
+      reason:
+        'Trip cancellation is unavailable because payment has not been collected yet.',
+      refundPreview: null,
+      action: canCancelPaymentHold ? 'CANCEL_PAYMENT_HOLD' : 'NONE',
     };
   }
 

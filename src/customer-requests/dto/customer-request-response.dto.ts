@@ -100,6 +100,16 @@ export class CustomerRequestResponseDto {
 }
 
 export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto {
+  cancellation!: {
+    canCancelCollectedTrip: boolean;
+    reason: string | null;
+    refundPreview: {
+      currency: string;
+      refundedAmount: number;
+      retainedAmount: number;
+    } | null;
+    action: 'CANCEL_COLLECTED_TRIP' | 'CANCEL_PAYMENT_HOLD' | 'NONE';
+  };
   service?: {
     id: string;
     key: string;
