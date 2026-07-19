@@ -109,23 +109,7 @@ export class PaymentsController {
       requestId,
     });
 
-    this.tripsGateway.emitPaymentCancelled(result.payment.customerId, result.payment);
     return result;
-  }
-
-  @Post('customer/requests/:requestId/payment/capture')
-  @UseGuards(CustomerAuthGuard)
-  async captureRequestPayment(
-    @Req() request: AuthenticatedRequest,
-    @Param('requestId') requestId: string,
-  ): Promise<PaymentSummaryDto> {
-    const payment = await this.paymentsService.captureRequestPayment({
-      customerId: request.user.id,
-      requestId,
-    });
-
-    this.tripsGateway.emitPaymentCaptured(payment.customerId, payment);
-    return payment;
   }
 
   @Get('customer/payment-method/default')

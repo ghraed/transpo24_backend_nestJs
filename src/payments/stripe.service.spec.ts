@@ -6,7 +6,7 @@ import {
 import { StripeService } from './stripe.service';
 
 describe('StripeService', () => {
-  it('forces card-only confirmation when a Stripe payment method id is supplied', async () => {
+  it('creates an immediate-capture card intent when a Stripe payment method id is supplied', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'pi_test' });
     const service = new StripeService();
 
@@ -24,7 +24,7 @@ describe('StripeService', () => {
       },
     });
 
-    await service.createManualCaptureIntent({
+    await service.createImmediateCaptureIntent({
       customerId: 'cus_test',
       amount: 15000,
       currency: 'usd',
@@ -40,6 +40,10 @@ describe('StripeService', () => {
         payment_method: 'pm_card_mastercard',
         payment_method_types: ['card'],
         confirm: true,
+      }),
+    );
+    expect(create).not.toHaveBeenCalledWith(
+      expect.objectContaining({
         capture_method: 'manual',
       }),
     );
@@ -151,7 +155,7 @@ describe('StripeService', () => {
     });
 
     await expect(
-      service.createManualCaptureIntent({
+      service.createImmediateCaptureIntent({
         customerId: 'cus_test',
         amount: 15000,
         currency: 'usd',

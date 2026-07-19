@@ -56,11 +56,6 @@ type CancelPaymentInput = {
   requestId: string;
 };
 
-type CapturePaymentInput = {
-  requestId: string;
-  customerId?: string;
-};
-
 type CancelTripInput = {
   customerId: string;
   requestId: string;
@@ -421,97 +416,6 @@ export class PaymentsService {
     return this.toPaymentSummaryDto(updated);
   }
 
-  async captureRequestPayment(
-    input: CapturePaymentInput,
-  ): Promise<PaymentSummaryDto> {
-    return this.prisma.$transaction((tx) =>
-      this.captureRequestPaymentTx(tx, input),
-    );
-  }
-
-  async captureRequestPaymentTx(
-    tx: Prisma.TransactionClient,
-    input: CapturePaymentInput,
-  ): Promise<PaymentSummaryDto> {
-    const hold = await tx.paymentHold.findUnique({
-      where: { requestId: input.requestId },
-      select: PAYMENT_HOLD_SELECT,
-    });
-
-    if (!hold) {
-      throw new NotFoundException('Payment hold not found.');
-    }
-
-    if (input.customerId && hold.customerId !== input.customerId) {
-      throw new ForbiddenException(
-        'You are not allowed to capture this payment.',
-      );
-    }
-
-    if (hold.status === PaymentStatus.PAYMENT_CAPTURED) {
-      return this.toPaymentSummaryDto(hold);
-    }
-
-    if (
-      hold.status === PaymentStatus.PAYMENT_RELEASED ||
-      hold.status === PaymentStatus.PAYMENT_CANCELLED ||
-      hold.status === PaymentStatus.PAYMENT_FAILED
-    ) {
-      throw new ConflictException('This payment can no longer be captured.');
-    }
-
-    if (hold.provider === PaymentProvider.APP_WALLET) {
-      await this.captureWalletReservation(tx, hold);
-
-      const updated = await tx.paymentHold.update({
-        where: { id: hold.id },
-        data: {
-          status: PaymentStatus.PAYMENT_CAPTURED,
-          capturedAt: new Date(),
-        },
-        select: PAYMENT_HOLD_SELECT,
-      });
-
-      await tx.transportRequest.update({
-        where: { id: input.requestId },
-        data: {
-          paymentStatus: PaymentStatus.PAYMENT_CAPTURED,
-          capturedAmount: hold.amount,
-        },
-      });
-
-      return this.toPaymentSummaryDto(updated);
-    }
-
-    if (!hold.stripePaymentIntentId) {
-      throw new BadRequestException('Stripe payment intent is missing.');
-    }
-
-    const capturedIntent = await this.stripeService.capturePaymentIntent(
-      hold.stripePaymentIntentId,
-    );
-
-    const updated = await tx.paymentHold.update({
-      where: { id: hold.id },
-      data: {
-        status: PaymentStatus.PAYMENT_CAPTURED,
-        capturedAt: new Date(),
-        stripeChargeId: this.getStripeChargeId(capturedIntent),
-      },
-      select: PAYMENT_HOLD_SELECT,
-    });
-
-    await tx.transportRequest.update({
-      where: { id: input.requestId },
-      data: {
-        paymentStatus: PaymentStatus.PAYMENT_CAPTURED,
-        capturedAmount: hold.amount,
-      },
-    });
-
-    return this.toPaymentSummaryDto(updated);
-  }
-
   async cancelCollectedTrip(
     input: CancelTripInput,
   ): Promise<CancelTripPaymentResponseDto> {
@@ -584,9 +488,10 @@ export class PaymentsService {
 
     if (request.status === TransportRequestStatus.CANCELLED) {
       return {
-        payment: this.toPaymentSummaryDto(request.paymentHold),
-        settlement: this.toTripPaymentSettlementDto(request.paymentSettlement),
         requestStatus: request.status,
+        currency: request.paymentSettlement.currency,
+        refundedAmount: Number(request.paymentSettlement.refundedAmount.toString()),
+        retainedAmount: Number(request.paymentSettlement.retainedAmount.toString()),
       };
     }
 
@@ -733,9 +638,10 @@ export class PaymentsService {
     });
 
     return {
-      payment: this.toPaymentSummaryDto(payment),
-      settlement: this.toTripPaymentSettlementDto(settlement),
       requestStatus: TransportRequestStatus.CANCELLED,
+      currency: settlement.currency,
+      refundedAmount: Number(settlement.refundedAmount.toString()),
+      retainedAmount: Number(settlement.retainedAmount.toString()),
     };
   }
 
@@ -1878,10 +1784,22 @@ export class PaymentsService {
         await tx.tripPaymentSettlement.upsert({
           where: { requestId: hold.requestId },
           update: {
+            paymentHoldId: hold.id,
+            customerId: hold.customerId,
+            driverId: hold.driverId,
+            currency: hold.currency,
             collectedAmount: hold.amount,
             refundableAmount: hold.amount,
+            refundedAmount: new Prisma.Decimal(0),
+            retainedAmount: new Prisma.Decimal(0),
+            driverShareAmount: new Prisma.Decimal(0),
+            platformShareAmount: new Prisma.Decimal(0),
             status: TripPaymentSettlementStatus.COLLECTED,
+            driverPayoutState: DriverPayoutState.NOT_EARNED,
             requiresManualReview: false,
+            lastStripeRefundId: null,
+            disputeReportedAt: null,
+            payoutFailureReason: null,
           },
           create: {
             requestId: hold.requestId,
@@ -1891,8 +1809,16 @@ export class PaymentsService {
             currency: hold.currency,
             collectedAmount: hold.amount,
             refundableAmount: hold.amount,
+            refundedAmount: new Prisma.Decimal(0),
+            retainedAmount: new Prisma.Decimal(0),
+            driverShareAmount: new Prisma.Decimal(0),
+            platformShareAmount: new Prisma.Decimal(0),
             status: TripPaymentSettlementStatus.COLLECTED,
             driverPayoutState: DriverPayoutState.NOT_EARNED,
+            requiresManualReview: false,
+            lastStripeRefundId: null,
+            disputeReportedAt: null,
+            payoutFailureReason: null,
           },
         });
       }
@@ -2098,8 +2024,27 @@ export class PaymentsService {
       requiresManualReview: boolean;
     },
   ): Promise<void> {
-    await tx.tripPaymentSettlement.create({
-      data: {
+    await tx.tripPaymentSettlement.upsert({
+      where: { requestId: hold.requestId },
+      update: {
+        paymentHoldId: hold.id,
+        customerId: hold.customerId,
+        driverId: hold.driverId,
+        currency: hold.currency,
+        collectedAmount: input.collectedAmount,
+        refundableAmount: input.refundableAmount,
+        refundedAmount: input.refundedAmount,
+        retainedAmount: input.retainedAmount,
+        driverShareAmount: input.driverShareAmount,
+        platformShareAmount: input.platformShareAmount,
+        status: input.status,
+        driverPayoutState: input.driverPayoutState,
+        requiresManualReview: input.requiresManualReview,
+        lastStripeRefundId: null,
+        disputeReportedAt: null,
+        payoutFailureReason: null,
+      },
+      create: {
         requestId: hold.requestId,
         paymentHoldId: hold.id,
         customerId: hold.customerId,
@@ -2114,6 +2059,9 @@ export class PaymentsService {
         status: input.status,
         driverPayoutState: input.driverPayoutState,
         requiresManualReview: input.requiresManualReview,
+        lastStripeRefundId: null,
+        disputeReportedAt: null,
+        payoutFailureReason: null,
       },
     });
   }

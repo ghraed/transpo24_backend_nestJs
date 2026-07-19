@@ -969,35 +969,16 @@ export class DriverController {
       proofPhotoCount: result.delivered.deliveryProofPhotos.length,
     });
 
-    // Capture the held payment now that delivery is confirmed.
-    // This charges the customer's card and moves funds to the platform account.
-    // Best-effort: delivery is physically complete, so capture failure should
-    // not roll back the delivery. The payment can be captured/retried later.
+    // Trip payment is collected when the customer accepts the offer. Delivery
+    // confirmation only needs to trigger downstream payout settlement.
     try {
-      const payment = await this.paymentsService.captureRequestPayment({
-        requestId: params.tripId,
-      });
-
-      this.tripsGateway.emitPaymentCaptured(payment.customerId, payment);
-
-      // Attempt to transfer the driver's net earnings to their Stripe Connect
-      // account. If the driver has not onboarded with Stripe Connect yet, the
-      // earning stays PENDING and can be paid out later.
-      try {
-        await this.paymentsService.transferDriverEarningForTrip(params.tripId);
-      } catch (transferError) {
-        this.logger?.warn?.(
-          `Delivery confirmed for trip ${params.tripId} but driver payout transfer failed: ${
-            transferError instanceof Error
-              ? transferError.message
-              : 'unknown error'
-          }`,
-        );
-      }
-    } catch (captureError) {
+      await this.paymentsService.transferDriverEarningForTrip(params.tripId);
+    } catch (transferError) {
       this.logger?.warn?.(
-        `Delivery confirmed for trip ${params.tripId} but payment capture failed: ${
-          captureError instanceof Error ? captureError.message : 'unknown error'
+        `Delivery confirmed for trip ${params.tripId} but driver payout transfer failed: ${
+          transferError instanceof Error
+            ? transferError.message
+            : 'unknown error'
         }`,
       );
     }

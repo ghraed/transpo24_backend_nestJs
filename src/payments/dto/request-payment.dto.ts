@@ -139,7 +139,8 @@ export interface TripPaymentSettlementDto {
 }
 
 export interface CancelTripPaymentResponseDto {
-  payment: PaymentSummaryDto;
-  settlement: TripPaymentSettlementDto;
   requestStatus: string;
+  currency: string;
+  refundedAmount: number;
+  retainedAmount: number;
 }

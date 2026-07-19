@@ -13,14 +13,6 @@ type EnsureStripeCustomerInput = {
   name?: string | null;
 };
 
-type CreateManualCaptureIntentInput = {
-  customerId: string;
-  amount: number;
-  currency: string;
-  metadata: Record<string, string>;
-  stripePaymentMethodId?: string;
-};
-
 type CreateCustomerFundingIntentInput = {
   customerId: string;
   amount: number;
@@ -105,41 +97,6 @@ export class StripeService {
       }
       throw error;
     }
-  }
-
-  async createManualCaptureIntent(input: CreateManualCaptureIntentInput) {
-    const client = this.getClient();
-    const stripePaymentMethodId = input.stripePaymentMethodId?.trim();
-
-    if (stripePaymentMethodId) {
-      return this.runStripe(() =>
-        client.paymentIntents.create({
-          amount: input.amount,
-          currency: input.currency,
-          customer: input.customerId,
-          payment_method: stripePaymentMethodId,
-          payment_method_types: ['card'],
-          confirm: true,
-          capture_method: 'manual',
-          confirmation_method: 'automatic',
-          metadata: input.metadata,
-        }),
-      );
-    }
-
-    return this.runStripe(() =>
-      client.paymentIntents.create({
-        amount: input.amount,
-        currency: input.currency,
-        customer: input.customerId,
-        capture_method: 'manual',
-        automatic_payment_methods: {
-          enabled: true,
-          allow_redirects: 'never',
-        },
-        metadata: input.metadata,
-      }),
-    );
   }
 
   async createCustomerFundingIntent(input: CreateCustomerFundingIntentInput) {
@@ -281,12 +238,6 @@ export class StripeService {
           idempotencyKey: input.idempotencyKey,
         },
       ),
-    );
-  }
-
-  async capturePaymentIntent(paymentIntentId: string) {
-    return this.runStripe(() =>
-      this.getClient().paymentIntents.capture(paymentIntentId),
     );
   }
 

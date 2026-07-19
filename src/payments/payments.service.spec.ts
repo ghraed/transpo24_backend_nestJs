@@ -31,7 +31,7 @@ describe('PaymentsService', () => {
     expect(available.toString()).toBe('64.75');
   });
 
-  it('maps a Stripe capturable intent to a held payment status', () => {
+  it('maps a succeeded Stripe intent to a captured payment status', () => {
     expect(
       (
         service as unknown as {
@@ -40,9 +40,9 @@ describe('PaymentsService', () => {
           }): PaymentStatus;
         }
       ).mapStripeIntentStatus({
-        status: 'requires_capture',
+        status: 'succeeded',
       }),
-    ).toBe(PaymentStatus.PAYMENT_HELD);
+    ).toBe(PaymentStatus.PAYMENT_CAPTURED);
   });
 
   it('maps additional charge invoice metadata into the typed response', () => {
