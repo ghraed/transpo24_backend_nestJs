@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CustomerWalletTopUpStatus,
   DocumentStatus,
   DriverDocumentType,
   DriverEarningStatus,
@@ -14,6 +15,7 @@ import {
   DriverStatus,
   DriverVehicleReviewStatus,
   Prisma,
+  TripPaymentSettlementStatus,
   UserRole,
   VehicleType,
 } from '@prisma/client';
@@ -29,6 +31,13 @@ import {
   AdminDriverEarningsListResponseDto,
   AdminDriverEarningSummaryDto,
 } from './dto/admin-driver-earnings-response.dto';
+import { AdminPaymentDisputesQueryDto } from './dto/admin-payment-disputes-query.dto';
+import {
+  type AdminPaymentDisputeRecordType,
+  AdminPaymentDisputeItemDto,
+  AdminPaymentDisputesListResponseDto,
+  AdminPaymentDisputeSummaryDto,
+} from './dto/admin-payment-disputes-response.dto';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 import { AdminUserResponseDto } from './dto/admin-user-response.dto';
@@ -146,6 +155,70 @@ type DriverEarningAdminSource = {
       nextPayoutRetryAt: Date | null;
       payoutFailureReason: string | null;
     } | null;
+  };
+};
+
+type TripPaymentDisputeAdminSource = {
+  id: string;
+  requestId: string;
+  status: TripPaymentSettlementStatus;
+  currency: string;
+  collectedAmount: Prisma.Decimal;
+  requiresManualReview: boolean;
+  stripeDisputeId: string | null;
+  disputeStatus: string | null;
+  disputeReason: string | null;
+  disputeAmount: Prisma.Decimal | null;
+  disputeCurrency: string | null;
+  disputeCreatedAt: Date | null;
+  disputeUpdatedAt: Date | null;
+  disputeClosedAt: Date | null;
+  disputeEvidenceDueBy: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  driverPayoutState: DriverPayoutState;
+  paymentHold: {
+    stripeChargeId: string | null;
+    stripePaymentIntentId: string | null;
+  };
+  customer: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  driver: {
+    id: string;
+    userId: string;
+    user: {
+      name: string;
+      email: string;
+    };
+  } | null;
+};
+
+type WalletTopUpDisputeAdminSource = {
+  id: string;
+  status: CustomerWalletTopUpStatus;
+  amount: Prisma.Decimal;
+  currency: string;
+  requiresManualReview: boolean;
+  stripeDisputeId: string | null;
+  stripePaymentIntentId: string | null;
+  stripeChargeId: string | null;
+  disputeStatus: string | null;
+  disputeReason: string | null;
+  disputeAmount: Prisma.Decimal | null;
+  disputeCurrency: string | null;
+  disputeCreatedAt: Date | null;
+  disputeUpdatedAt: Date | null;
+  disputeClosedAt: Date | null;
+  disputeEvidenceDueBy: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  customer: {
+    id: string;
+    name: string;
+    email: string;
   };
 };
 
@@ -361,6 +434,57 @@ export class AdminService {
       items: items.map((item) => this.mapDriverEarning(item)),
       total,
       summary,
+    };
+  }
+
+  async findPaymentDisputes(
+    query: AdminPaymentDisputesQueryDto,
+  ): Promise<AdminPaymentDisputesListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [tripDisputes, walletTopUps] = await Promise.all([
+      this.prisma.tripPaymentSettlement.findMany({
+        where: this.buildTripPaymentDisputesWhere(query),
+        orderBy: [
+          { disputeUpdatedAt: 'desc' },
+          { disputeCreatedAt: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        select: this.tripPaymentDisputeSelect(),
+      }),
+      this.prisma.customerWalletTopUp.findMany({
+        where: this.buildWalletTopUpDisputesWhere(query),
+        orderBy: [
+          { disputeUpdatedAt: 'desc' },
+          { disputeCreatedAt: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        select: this.walletTopUpDisputeSelect(),
+      }),
+    ]);
+
+    const items = [
+      ...tripDisputes.map((item) => this.mapTripPaymentDispute(item)),
+      ...walletTopUps.map((item) => this.mapWalletTopUpDispute(item)),
+    ].sort((left, right) => {
+      const leftTime = Date.parse(
+        left.disputeUpdatedAt ?? left.disputeCreatedAt ?? left.updatedAt,
+      );
+      const rightTime = Date.parse(
+        right.disputeUpdatedAt ?? right.disputeCreatedAt ?? right.updatedAt,
+      );
+
+      return rightTime - leftTime;
+    });
+
+    const pagedItems = items.slice(skip, skip + limit);
+
+    return {
+      items: pagedItems,
+      total: items.length,
+      summary: this.getPaymentDisputeSummary(items),
     };
   }
 
@@ -826,6 +950,250 @@ export class AdminService {
     return {
       canRetry: false,
       retryBlockedReason: 'Driver payout is not eligible for retry.',
+    };
+  }
+
+  private buildTripPaymentDisputesWhere(
+    query: AdminPaymentDisputesQueryDto,
+  ): Prisma.TripPaymentSettlementWhereInput {
+    if (query.recordType === 'WALLET_TOP_UP') {
+      return { id: '__none__' };
+    }
+
+    const baseWhere: Prisma.TripPaymentSettlementWhereInput = {
+      stripeDisputeId: { not: null },
+    };
+
+    if (query.view === 'manual_review') {
+      return {
+        ...baseWhere,
+        requiresManualReview: true,
+      };
+    }
+
+    if (query.view === 'closed') {
+      return {
+        ...baseWhere,
+        disputeClosedAt: { not: null },
+      };
+    }
+
+    return {
+      ...baseWhere,
+      OR: [{ disputeClosedAt: null }, { requiresManualReview: true }],
+    };
+  }
+
+  private buildWalletTopUpDisputesWhere(
+    query: AdminPaymentDisputesQueryDto,
+  ): Prisma.CustomerWalletTopUpWhereInput {
+    if (query.recordType === 'TRIP_CHARGE') {
+      return { id: '__none__' };
+    }
+
+    const baseWhere: Prisma.CustomerWalletTopUpWhereInput = {
+      stripeDisputeId: { not: null },
+    };
+
+    if (query.view === 'manual_review') {
+      return {
+        ...baseWhere,
+        requiresManualReview: true,
+      };
+    }
+
+    if (query.view === 'closed') {
+      return {
+        ...baseWhere,
+        disputeClosedAt: { not: null },
+      };
+    }
+
+    return {
+      ...baseWhere,
+      OR: [{ disputeClosedAt: null }, { requiresManualReview: true }],
+    };
+  }
+
+  private tripPaymentDisputeSelect() {
+    return {
+      id: true,
+      requestId: true,
+      status: true,
+      currency: true,
+      collectedAmount: true,
+      requiresManualReview: true,
+      stripeDisputeId: true,
+      disputeStatus: true,
+      disputeReason: true,
+      disputeAmount: true,
+      disputeCurrency: true,
+      disputeCreatedAt: true,
+      disputeUpdatedAt: true,
+      disputeClosedAt: true,
+      disputeEvidenceDueBy: true,
+      createdAt: true,
+      updatedAt: true,
+      driverPayoutState: true,
+      paymentHold: {
+        select: {
+          stripeChargeId: true,
+          stripePaymentIntentId: true,
+        },
+      },
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      driver: {
+        select: {
+          id: true,
+          userId: true,
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private walletTopUpDisputeSelect() {
+    return {
+      id: true,
+      status: true,
+      amount: true,
+      currency: true,
+      requiresManualReview: true,
+      stripeDisputeId: true,
+      stripePaymentIntentId: true,
+      stripeChargeId: true,
+      disputeStatus: true,
+      disputeReason: true,
+      disputeAmount: true,
+      disputeCurrency: true,
+      disputeCreatedAt: true,
+      disputeUpdatedAt: true,
+      disputeClosedAt: true,
+      disputeEvidenceDueBy: true,
+      createdAt: true,
+      updatedAt: true,
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    };
+  }
+
+  private getPaymentDisputeSummary(
+    items: AdminPaymentDisputeItemDto[],
+  ): AdminPaymentDisputeSummaryDto {
+    return items.reduce<AdminPaymentDisputeSummaryDto>(
+      (summary, item) => {
+        if (item.requiresManualReview) {
+          summary.manualReviewCount += 1;
+        }
+
+        if (item.disputeClosedAt) {
+          summary.closedCount += 1;
+        } else {
+          summary.openCount += 1;
+        }
+
+        return summary;
+      },
+      {
+        openCount: 0,
+        closedCount: 0,
+        manualReviewCount: 0,
+      },
+    );
+  }
+
+  private mapTripPaymentDispute(
+    settlement: TripPaymentDisputeAdminSource,
+  ): AdminPaymentDisputeItemDto {
+    return {
+      id: settlement.id,
+      recordType: 'TRIP_CHARGE',
+      paymentStatus: settlement.status,
+      disputeStatus: settlement.disputeStatus,
+      stripeDisputeId: settlement.stripeDisputeId,
+      stripeChargeId: settlement.paymentHold.stripeChargeId,
+      stripePaymentIntentId: settlement.paymentHold.stripePaymentIntentId,
+      amount: Number(settlement.collectedAmount),
+      currency: settlement.currency,
+      disputeAmount:
+        settlement.disputeAmount !== null ? Number(settlement.disputeAmount) : null,
+      disputeCurrency: settlement.disputeCurrency,
+      disputeReason: settlement.disputeReason,
+      disputeCreatedAt: settlement.disputeCreatedAt?.toISOString() ?? null,
+      disputeUpdatedAt: settlement.disputeUpdatedAt?.toISOString() ?? null,
+      disputeClosedAt: settlement.disputeClosedAt?.toISOString() ?? null,
+      disputeEvidenceDueBy:
+        settlement.disputeEvidenceDueBy?.toISOString() ?? null,
+      requiresManualReview: settlement.requiresManualReview,
+      customer: {
+        id: settlement.customer.id,
+        name: settlement.customer.name,
+        email: settlement.customer.email,
+      },
+      trip: {
+        requestId: settlement.requestId,
+        driver: settlement.driver
+          ? {
+              id: settlement.driver.id,
+              userId: settlement.driver.userId,
+              name: settlement.driver.user.name,
+              email: settlement.driver.user.email,
+            }
+          : null,
+        driverPayoutState: settlement.driverPayoutState,
+      },
+      walletTopUpId: null,
+      createdAt: settlement.createdAt.toISOString(),
+      updatedAt: settlement.updatedAt.toISOString(),
+    };
+  }
+
+  private mapWalletTopUpDispute(
+    topUp: WalletTopUpDisputeAdminSource,
+  ): AdminPaymentDisputeItemDto {
+    return {
+      id: topUp.id,
+      recordType: 'WALLET_TOP_UP',
+      paymentStatus: topUp.status,
+      disputeStatus: topUp.disputeStatus,
+      stripeDisputeId: topUp.stripeDisputeId,
+      stripeChargeId: topUp.stripeChargeId,
+      stripePaymentIntentId: topUp.stripePaymentIntentId,
+      amount: Number(topUp.amount),
+      currency: topUp.currency,
+      disputeAmount: topUp.disputeAmount !== null ? Number(topUp.disputeAmount) : null,
+      disputeCurrency: topUp.disputeCurrency,
+      disputeReason: topUp.disputeReason,
+      disputeCreatedAt: topUp.disputeCreatedAt?.toISOString() ?? null,
+      disputeUpdatedAt: topUp.disputeUpdatedAt?.toISOString() ?? null,
+      disputeClosedAt: topUp.disputeClosedAt?.toISOString() ?? null,
+      disputeEvidenceDueBy: topUp.disputeEvidenceDueBy?.toISOString() ?? null,
+      requiresManualReview: topUp.requiresManualReview,
+      customer: {
+        id: topUp.customer.id,
+        name: topUp.customer.name,
+        email: topUp.customer.email,
+      },
+      trip: null,
+      walletTopUpId: topUp.id,
+      createdAt: topUp.createdAt.toISOString(),
+      updatedAt: topUp.updatedAt.toISOString(),
     };
   }
 

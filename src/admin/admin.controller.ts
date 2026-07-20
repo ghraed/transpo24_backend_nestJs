@@ -23,6 +23,8 @@ import {
   AdminDriverEarningsListResponseDto,
 } from './dto/admin-driver-earnings-response.dto';
 import { AdminDriverEarningsQueryDto } from './dto/admin-driver-earnings-query.dto';
+import { AdminPaymentDisputesQueryDto } from './dto/admin-payment-disputes-query.dto';
+import { AdminPaymentDisputesListResponseDto } from './dto/admin-payment-disputes-response.dto';
 import { AdminDriverReviewResponseDto } from './dto/admin-driver-review-response.dto';
 import { ReviewDriverRequestDto } from './dto/review-driver-request.dto';
 
@@ -76,6 +78,13 @@ export class AdminController {
     @Query() query: AdminDriverEarningsQueryDto,
   ): Promise<AdminDriverEarningsListResponseDto> {
     return this.adminService.findDriverEarnings(query);
+  }
+
+  @Get('payments/disputes')
+  findPaymentDisputes(
+    @Query() query: AdminPaymentDisputesQueryDto,
+  ): Promise<AdminPaymentDisputesListResponseDto> {
+    return this.adminService.findPaymentDisputes(query);
   }
 
   @Post('driver-earnings/:tripId/retry-payout')

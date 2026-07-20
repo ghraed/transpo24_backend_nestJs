@@ -151,6 +151,16 @@ type WalletTopUpRecord = {
   stripePaymentIntentId: string | null;
   stripeClientSecret: string | null;
   stripeChargeId: string | null;
+  requiresManualReview: boolean;
+  stripeDisputeId: string | null;
+  disputeStatus: string | null;
+  disputeReason: string | null;
+  disputeAmount: Prisma.Decimal | null;
+  disputeCurrency: string | null;
+  disputeCreatedAt: Date | null;
+  disputeUpdatedAt: Date | null;
+  disputeClosedAt: Date | null;
+  disputeEvidenceDueBy: Date | null;
   failureReason: string | null;
   completedAt: Date | null;
   failedAt: Date | null;
@@ -177,6 +187,15 @@ type TripPaymentSettlementRecord = {
   requiresManualReview: boolean;
   lastStripeRefundId: string | null;
   disputeReportedAt: Date | null;
+  stripeDisputeId: string | null;
+  disputeStatus: string | null;
+  disputeReason: string | null;
+  disputeAmount: Prisma.Decimal | null;
+  disputeCurrency: string | null;
+  disputeCreatedAt: Date | null;
+  disputeUpdatedAt: Date | null;
+  disputeClosedAt: Date | null;
+  disputeEvidenceDueBy: Date | null;
   payoutFailureReason: string | null;
   payoutAttemptCount: number;
   lastPayoutAttemptAt: Date | null;
@@ -209,6 +228,8 @@ type DriverPayoutContext = {
   stripePayoutsEnabled: boolean;
   stripeDetailsSubmitted: boolean;
   payoutAttemptCount: number;
+  settlementStatus: TripPaymentSettlementStatus;
+  requiresManualReview: boolean;
 };
 
 type StripePaymentIntentRecord = {
@@ -219,6 +240,20 @@ type StripePaymentIntentRecord = {
   cancellation_reason?: string | null;
   last_payment_error?: {
     message?: string | null;
+  } | null;
+};
+
+type StripeDisputeRecord = {
+  id: string;
+  amount: number;
+  currency: string;
+  reason: string | null;
+  status: string | null;
+  charge?: string | null;
+  payment_intent?: string | null;
+  created?: number | null;
+  evidence_details?: {
+    due_by?: number | null;
   } | null;
 };
 
@@ -1662,6 +1697,33 @@ export class PaymentsService {
 
     const now = new Date();
 
+    if (
+      context.settlementStatus !== TripPaymentSettlementStatus.COLLECTED ||
+      context.requiresManualReview
+    ) {
+      await this.prisma.tripPaymentSettlement.update({
+        where: { id: context.settlementId },
+        data: {
+          nextPayoutRetryAt: null,
+          payoutFailureReason:
+            context.settlementStatus === TripPaymentSettlementStatus.DISPUTED ||
+            context.requiresManualReview
+              ? 'Stripe dispute requires manual review before payout.'
+              : 'Trip settlement is not eligible for payout.',
+        },
+      });
+
+      return {
+        transferred: false,
+        stripeTransferId: null,
+        reason:
+          context.settlementStatus === TripPaymentSettlementStatus.DISPUTED ||
+          context.requiresManualReview
+            ? 'Stripe dispute requires manual review before payout.'
+            : `Trip settlement is in ${context.settlementStatus} state.`,
+      };
+    }
+
     if (context.availableAt && context.availableAt.getTime() > now.getTime()) {
       await this.prisma.tripPaymentSettlement.update({
         where: { id: context.settlementId },
@@ -1815,6 +1877,8 @@ export class PaymentsService {
               select: {
                 id: true,
                 payoutAttemptCount: true,
+                status: true,
+                requiresManualReview: true,
               },
             },
           },
@@ -1844,6 +1908,8 @@ export class PaymentsService {
       stripePayoutsEnabled: earning.driver.stripePayoutsEnabled,
       stripeDetailsSubmitted: earning.driver.stripeDetailsSubmitted,
       payoutAttemptCount: earning.trip.paymentSettlement.payoutAttemptCount,
+      settlementStatus: earning.trip.paymentSettlement.status,
+      requiresManualReview: earning.trip.paymentSettlement.requiresManualReview,
     };
   }
 
@@ -1960,13 +2026,11 @@ export class PaymentsService {
         }
         break;
       }
-      case 'charge.dispute.created': {
-        const dispute = event.data.object as {
-          payment_intent?: string | null;
-        };
-        if (typeof dispute.payment_intent === 'string') {
-          await this.markPaymentDisputed(dispute.payment_intent);
-        }
+      case 'charge.dispute.created':
+      case 'charge.dispute.updated':
+      case 'charge.dispute.closed': {
+        const dispute = event.data.object as StripeDisputeRecord;
+        await this.syncStripeDispute(dispute, event.type);
         break;
       }
       case 'account.updated': {
@@ -2092,6 +2156,15 @@ export class PaymentsService {
           requiresManualReview: false,
           lastStripeRefundId: null,
           disputeReportedAt: null,
+          stripeDisputeId: null,
+          disputeStatus: null,
+          disputeReason: null,
+          disputeAmount: null,
+          disputeCurrency: null,
+          disputeCreatedAt: null,
+          disputeUpdatedAt: null,
+          disputeClosedAt: null,
+          disputeEvidenceDueBy: null,
           payoutFailureReason: null,
           payoutAttemptCount: 0,
           lastPayoutAttemptAt: null,
@@ -2114,6 +2187,15 @@ export class PaymentsService {
           requiresManualReview: false,
           lastStripeRefundId: null,
           disputeReportedAt: null,
+          stripeDisputeId: null,
+          disputeStatus: null,
+          disputeReason: null,
+          disputeAmount: null,
+          disputeCurrency: null,
+          disputeCreatedAt: null,
+          disputeUpdatedAt: null,
+          disputeClosedAt: null,
+          disputeEvidenceDueBy: null,
           payoutFailureReason: null,
           payoutAttemptCount: 0,
           lastPayoutAttemptAt: null,
@@ -2194,6 +2276,16 @@ export class PaymentsService {
             status: CustomerWalletTopUpStatus.SUCCEEDED,
             completedAt: new Date(),
             stripeChargeId: this.getStripeChargeId(paymentIntent),
+            requiresManualReview: false,
+            stripeDisputeId: null,
+            disputeStatus: null,
+            disputeReason: null,
+            disputeAmount: null,
+            disputeCurrency: null,
+            disputeCreatedAt: null,
+            disputeUpdatedAt: null,
+            disputeClosedAt: null,
+            disputeEvidenceDueBy: null,
             failureReason: null,
           },
         });
@@ -2258,6 +2350,17 @@ export class PaymentsService {
           driverShareAmount: new Prisma.Decimal(0),
           platformShareAmount: new Prisma.Decimal(0),
           lastStripeRefundId: chargeId,
+          requiresManualReview: false,
+          disputeReportedAt: null,
+          stripeDisputeId: null,
+          disputeStatus: null,
+          disputeReason: null,
+          disputeAmount: null,
+          disputeCurrency: null,
+          disputeCreatedAt: null,
+          disputeUpdatedAt: null,
+          disputeClosedAt: null,
+          disputeEvidenceDueBy: null,
           nextPayoutRetryAt: null,
           payoutFailureReason: null,
         },
@@ -2265,10 +2368,42 @@ export class PaymentsService {
     });
   }
 
-  private async markPaymentDisputed(paymentIntentId: string): Promise<void> {
+  private async syncStripeDispute(
+    dispute: StripeDisputeRecord,
+    eventType: string,
+  ): Promise<void> {
+    const paymentIntentId = this.normalizeStripeDisputeReference(
+      dispute.payment_intent,
+    );
+    const chargeId = this.normalizeStripeDisputeReference(dispute.charge);
+
+    if (!paymentIntentId && !chargeId) {
+      return;
+    }
+
+    await this.syncTripChargeDispute(dispute, eventType, {
+      paymentIntentId,
+      chargeId,
+    });
+    await this.syncWalletTopUpDispute(dispute, eventType, {
+      paymentIntentId,
+      chargeId,
+    });
+  }
+
+  private async syncTripChargeDispute(
+    dispute: StripeDisputeRecord,
+    eventType: string,
+    input: {
+      paymentIntentId: string | null;
+      chargeId: string | null;
+    },
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const hold = await tx.paymentHold.findUnique({
-        where: { stripePaymentIntentId: paymentIntentId },
+      const hold = await tx.paymentHold.findFirst({
+        where: {
+          OR: this.buildPaymentHoldDisputeLookup(input),
+        },
         select: PAYMENT_HOLD_SELECT,
       });
 
@@ -2276,26 +2411,107 @@ export class PaymentsService {
         return;
       }
 
+      const nextPaymentStatus = this.getTripDisputePaymentStatus(
+        dispute.status,
+        eventType,
+      );
+      const nextSettlementStatus = this.getTripDisputeSettlementStatus(
+        dispute.status,
+        eventType,
+      );
+      const disputeData = this.toDisputePersistence(dispute, eventType);
+      const requiresManualReview = this.requiresManualReviewForDispute(
+        dispute.status,
+        eventType,
+      );
+
       await tx.paymentHold.update({
         where: { id: hold.id },
         data: {
-          status: PaymentStatus.PAYMENT_DISPUTED,
+          status: nextPaymentStatus,
+          stripeChargeId: input.chargeId ?? hold.stripeChargeId,
         },
       });
 
       await tx.transportRequest.update({
         where: { id: hold.requestId },
         data: {
-          paymentStatus: PaymentStatus.PAYMENT_DISPUTED,
+          paymentStatus: nextPaymentStatus,
         },
       });
 
       await tx.tripPaymentSettlement.updateMany({
         where: { requestId: hold.requestId },
         data: {
-          status: TripPaymentSettlementStatus.DISPUTED,
-          disputeReportedAt: new Date(),
+          status: nextSettlementStatus,
+          requiresManualReview,
+          disputeReportedAt: disputeData.disputeCreatedAt ?? new Date(),
+          stripeDisputeId: disputeData.stripeDisputeId,
+          disputeStatus: disputeData.disputeStatus,
+          disputeReason: disputeData.disputeReason,
+          disputeAmount: disputeData.disputeAmount,
+          disputeCurrency: disputeData.disputeCurrency,
+          disputeCreatedAt: disputeData.disputeCreatedAt,
+          disputeUpdatedAt: disputeData.disputeUpdatedAt,
+          disputeClosedAt: disputeData.disputeClosedAt,
+          disputeEvidenceDueBy: disputeData.disputeEvidenceDueBy,
+          payoutFailureReason:
+            nextSettlementStatus === TripPaymentSettlementStatus.COLLECTED
+              ? null
+              : 'Stripe dispute requires payout review.',
           nextPayoutRetryAt: null,
+        },
+      });
+    });
+  }
+
+  private async syncWalletTopUpDispute(
+    dispute: StripeDisputeRecord,
+    eventType: string,
+    input: {
+      paymentIntentId: string | null;
+      chargeId: string | null;
+    },
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const topUp = await tx.customerWalletTopUp.findFirst({
+        where: {
+          OR: this.buildWalletTopUpDisputeLookup(input),
+        },
+        select: WALLET_TOP_UP_SELECT,
+      });
+
+      if (!topUp) {
+        return;
+      }
+
+      const nextStatus = this.getWalletTopUpDisputeStatus(
+        dispute.status,
+        eventType,
+      );
+      const disputeData = this.toDisputePersistence(dispute, eventType);
+
+      await tx.customerWalletTopUp.update({
+        where: { id: topUp.id },
+        data: {
+          status: nextStatus,
+          stripeChargeId: input.chargeId ?? topUp.stripeChargeId,
+          requiresManualReview:
+            nextStatus === CustomerWalletTopUpStatus.DISPUTED ||
+            nextStatus === CustomerWalletTopUpStatus.MANUAL_REVIEW,
+          stripeDisputeId: disputeData.stripeDisputeId,
+          disputeStatus: disputeData.disputeStatus,
+          disputeReason: disputeData.disputeReason,
+          disputeAmount: disputeData.disputeAmount,
+          disputeCurrency: disputeData.disputeCurrency,
+          disputeCreatedAt: disputeData.disputeCreatedAt,
+          disputeUpdatedAt: disputeData.disputeUpdatedAt,
+          disputeClosedAt: disputeData.disputeClosedAt,
+          disputeEvidenceDueBy: disputeData.disputeEvidenceDueBy,
+          failureReason:
+            nextStatus === CustomerWalletTopUpStatus.SUCCEEDED
+              ? null
+              : topUp.failureReason,
         },
       });
     });
@@ -2345,6 +2561,15 @@ export class PaymentsService {
         requiresManualReview: input.requiresManualReview,
         lastStripeRefundId: null,
         disputeReportedAt: null,
+        stripeDisputeId: null,
+        disputeStatus: null,
+        disputeReason: null,
+        disputeAmount: null,
+        disputeCurrency: null,
+        disputeCreatedAt: null,
+        disputeUpdatedAt: null,
+        disputeClosedAt: null,
+        disputeEvidenceDueBy: null,
         payoutFailureReason: null,
         payoutAttemptCount: 0,
         lastPayoutAttemptAt: null,
@@ -2367,6 +2592,15 @@ export class PaymentsService {
         requiresManualReview: input.requiresManualReview,
         lastStripeRefundId: null,
         disputeReportedAt: null,
+        stripeDisputeId: null,
+        disputeStatus: null,
+        disputeReason: null,
+        disputeAmount: null,
+        disputeCurrency: null,
+        disputeCreatedAt: null,
+        disputeUpdatedAt: null,
+        disputeClosedAt: null,
+        disputeEvidenceDueBy: null,
         payoutFailureReason: null,
         payoutAttemptCount: 0,
         lastPayoutAttemptAt: null,
@@ -2886,6 +3120,24 @@ export class PaymentsService {
       disputeReportedAt: settlement.disputeReportedAt
         ? settlement.disputeReportedAt.toISOString()
         : null,
+      stripeDisputeId: settlement.stripeDisputeId,
+      disputeStatus: settlement.disputeStatus,
+      disputeReason: settlement.disputeReason,
+      disputeAmount:
+        settlement.disputeAmount !== null ? Number(settlement.disputeAmount) : null,
+      disputeCurrency: settlement.disputeCurrency,
+      disputeCreatedAt: settlement.disputeCreatedAt
+        ? settlement.disputeCreatedAt.toISOString()
+        : null,
+      disputeUpdatedAt: settlement.disputeUpdatedAt
+        ? settlement.disputeUpdatedAt.toISOString()
+        : null,
+      disputeClosedAt: settlement.disputeClosedAt
+        ? settlement.disputeClosedAt.toISOString()
+        : null,
+      disputeEvidenceDueBy: settlement.disputeEvidenceDueBy
+        ? settlement.disputeEvidenceDueBy.toISOString()
+        : null,
       payoutFailureReason: settlement.payoutFailureReason,
       createdAt: settlement.createdAt.toISOString(),
       updatedAt: settlement.updatedAt.toISOString(),
@@ -2941,6 +3193,24 @@ export class PaymentsService {
       stripePaymentIntentId: topUp.stripePaymentIntentId,
       stripeClientSecret: topUp.stripeClientSecret,
       stripeChargeId: topUp.stripeChargeId,
+      requiresManualReview: topUp.requiresManualReview,
+      stripeDisputeId: topUp.stripeDisputeId,
+      disputeStatus: topUp.disputeStatus,
+      disputeReason: topUp.disputeReason,
+      disputeAmount: topUp.disputeAmount !== null ? Number(topUp.disputeAmount) : null,
+      disputeCurrency: topUp.disputeCurrency,
+      disputeCreatedAt: topUp.disputeCreatedAt
+        ? topUp.disputeCreatedAt.toISOString()
+        : null,
+      disputeUpdatedAt: topUp.disputeUpdatedAt
+        ? topUp.disputeUpdatedAt.toISOString()
+        : null,
+      disputeClosedAt: topUp.disputeClosedAt
+        ? topUp.disputeClosedAt.toISOString()
+        : null,
+      disputeEvidenceDueBy: topUp.disputeEvidenceDueBy
+        ? topUp.disputeEvidenceDueBy.toISOString()
+        : null,
       failureReason: topUp.failureReason,
       completedAt: topUp.completedAt ? topUp.completedAt.toISOString() : null,
       createdAt: topUp.createdAt.toISOString(),
@@ -3086,6 +3356,127 @@ export class PaymentsService {
     return value.lt(0) ? new Prisma.Decimal(0) : value;
   }
 
+  private normalizeStripeDisputeReference(value?: string | null): string | null {
+    const normalized = value?.trim();
+    return normalized ? normalized : null;
+  }
+
+  private buildPaymentHoldDisputeLookup(input: {
+    paymentIntentId: string | null;
+    chargeId: string | null;
+  }): Prisma.PaymentHoldWhereInput[] {
+    const filters: Prisma.PaymentHoldWhereInput[] = [];
+
+    if (input.paymentIntentId) {
+      filters.push({ stripePaymentIntentId: input.paymentIntentId });
+    }
+
+    if (input.chargeId) {
+      filters.push({ stripeChargeId: input.chargeId });
+    }
+
+    return filters;
+  }
+
+  private buildWalletTopUpDisputeLookup(input: {
+    paymentIntentId: string | null;
+    chargeId: string | null;
+  }): Prisma.CustomerWalletTopUpWhereInput[] {
+    const filters: Prisma.CustomerWalletTopUpWhereInput[] = [];
+
+    if (input.paymentIntentId) {
+      filters.push({ stripePaymentIntentId: input.paymentIntentId });
+    }
+
+    if (input.chargeId) {
+      filters.push({ stripeChargeId: input.chargeId });
+    }
+
+    return filters;
+  }
+
+  private toDisputePersistence(
+    dispute: StripeDisputeRecord,
+    eventType: string,
+  ): {
+    stripeDisputeId: string;
+    disputeStatus: string | null;
+    disputeReason: string | null;
+    disputeAmount: Prisma.Decimal;
+    disputeCurrency: string | null;
+    disputeCreatedAt: Date | null;
+    disputeUpdatedAt: Date;
+    disputeClosedAt: Date | null;
+    disputeEvidenceDueBy: Date | null;
+  } {
+    return {
+      stripeDisputeId: dispute.id,
+      disputeStatus: dispute.status?.trim() ?? null,
+      disputeReason: dispute.reason?.trim() ?? null,
+      disputeAmount: this.toMoneyDecimal(dispute.amount / 100),
+      disputeCurrency: dispute.currency?.toUpperCase() ?? null,
+      disputeCreatedAt:
+        typeof dispute.created === 'number'
+          ? new Date(dispute.created * 1000)
+          : null,
+      disputeUpdatedAt: new Date(),
+      disputeClosedAt:
+        eventType === 'charge.dispute.closed' ? new Date() : null,
+      disputeEvidenceDueBy:
+        typeof dispute.evidence_details?.due_by === 'number'
+          ? new Date(dispute.evidence_details.due_by * 1000)
+          : null,
+    };
+  }
+
+  private getTripDisputePaymentStatus(
+    disputeStatus: string | null,
+    eventType: string,
+  ): PaymentStatus {
+    if (eventType === 'charge.dispute.closed' && disputeStatus === 'won') {
+      return PaymentStatus.PAYMENT_CAPTURED;
+    }
+
+    return PaymentStatus.PAYMENT_DISPUTED;
+  }
+
+  private getTripDisputeSettlementStatus(
+    disputeStatus: string | null,
+    eventType: string,
+  ): TripPaymentSettlementStatus {
+    if (eventType === 'charge.dispute.closed' && disputeStatus === 'won') {
+      return TripPaymentSettlementStatus.COLLECTED;
+    }
+
+    if (eventType === 'charge.dispute.closed') {
+      return TripPaymentSettlementStatus.MANUAL_REVIEW;
+    }
+
+    return TripPaymentSettlementStatus.DISPUTED;
+  }
+
+  private getWalletTopUpDisputeStatus(
+    disputeStatus: string | null,
+    eventType: string,
+  ): CustomerWalletTopUpStatus {
+    if (eventType === 'charge.dispute.closed' && disputeStatus === 'won') {
+      return CustomerWalletTopUpStatus.SUCCEEDED;
+    }
+
+    if (eventType === 'charge.dispute.closed') {
+      return CustomerWalletTopUpStatus.MANUAL_REVIEW;
+    }
+
+    return CustomerWalletTopUpStatus.DISPUTED;
+  }
+
+  private requiresManualReviewForDispute(
+    disputeStatus: string | null,
+    eventType: string,
+  ): boolean {
+    return !(eventType === 'charge.dispute.closed' && disputeStatus === 'won');
+  }
+
   private async cleanupFile(file: MulterFile): Promise<void> {
     try {
       await unlink(file.path);
@@ -3175,6 +3566,16 @@ const WALLET_TOP_UP_SELECT = {
   stripePaymentIntentId: true,
   stripeClientSecret: true,
   stripeChargeId: true,
+  requiresManualReview: true,
+  stripeDisputeId: true,
+  disputeStatus: true,
+  disputeReason: true,
+  disputeAmount: true,
+  disputeCurrency: true,
+  disputeCreatedAt: true,
+  disputeUpdatedAt: true,
+  disputeClosedAt: true,
+  disputeEvidenceDueBy: true,
   failureReason: true,
   completedAt: true,
   failedAt: true,
@@ -3201,6 +3602,15 @@ const TRIP_PAYMENT_SETTLEMENT_SELECT = {
   requiresManualReview: true,
   lastStripeRefundId: true,
   disputeReportedAt: true,
+  stripeDisputeId: true,
+  disputeStatus: true,
+  disputeReason: true,
+  disputeAmount: true,
+  disputeCurrency: true,
+  disputeCreatedAt: true,
+  disputeUpdatedAt: true,
+  disputeClosedAt: true,
+  disputeEvidenceDueBy: true,
   payoutFailureReason: true,
   payoutAttemptCount: true,
   lastPayoutAttemptAt: true,
