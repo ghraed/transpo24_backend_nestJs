@@ -25,8 +25,14 @@ import {
 import { AdminDriverEarningsQueryDto } from './dto/admin-driver-earnings-query.dto';
 import { AdminPaymentDisputesQueryDto } from './dto/admin-payment-disputes-query.dto';
 import { AdminPaymentDisputesListResponseDto } from './dto/admin-payment-disputes-response.dto';
+import { AdminPaymentReconciliationQueryDto } from './dto/admin-payment-reconciliation-query.dto';
+import {
+  AdminPaymentReconciliationListResponseDto,
+  AdminPaymentReconciliationRunResponseDto,
+} from './dto/admin-payment-reconciliation-response.dto';
 import { AdminDriverReviewResponseDto } from './dto/admin-driver-review-response.dto';
 import { ReviewDriverRequestDto } from './dto/review-driver-request.dto';
+import { RunPaymentReconciliationDto } from './dto/run-payment-reconciliation.dto';
 
 @Controller('admin')
 @UseGuards(AuthenticatedUserGuard, AdminRoleGuard)
@@ -85,6 +91,20 @@ export class AdminController {
     @Query() query: AdminPaymentDisputesQueryDto,
   ): Promise<AdminPaymentDisputesListResponseDto> {
     return this.adminService.findPaymentDisputes(query);
+  }
+
+  @Get('payments/reconciliation')
+  findPaymentReconciliation(
+    @Query() query: AdminPaymentReconciliationQueryDto,
+  ): Promise<AdminPaymentReconciliationListResponseDto> {
+    return this.adminService.findPaymentReconciliation(query);
+  }
+
+  @Post('payments/reconciliation/run')
+  runPaymentReconciliation(
+    @Body() dto: RunPaymentReconciliationDto,
+  ): Promise<AdminPaymentReconciliationRunResponseDto> {
+    return this.adminService.runPaymentReconciliation(dto);
   }
 
   @Post('driver-earnings/:tripId/retry-payout')

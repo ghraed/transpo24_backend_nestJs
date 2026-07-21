@@ -296,6 +296,27 @@ enum DriverPayoutState {
   NOT_APPLICABLE
 }
 
+enum PaymentReconciliationStream {
+  WALLET
+  CAPTURE
+  REFUND
+  TRANSFER
+}
+
+enum PaymentReconciliationStatus {
+  MATCHED
+  MISMATCH
+  MISSING
+  FAILED
+}
+
+enum PaymentReconciliationRunStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
+  RUNNING
+}
+
 enum AdditionalChargeStatus {
   PENDING
   CAPTURED
@@ -346,6 +367,7 @@ model User {
   additionalCharges AdditionalCharge[]
   pushTokens    PushToken[]
   webPushSubscriptions WebPushSubscription[]
+  paymentReconciliationRecords PaymentReconciliationRecord[]
   chatRooms     ChatRoom[]           @relation("ChatRoomClient")
 
   @@index([deletedAt])
@@ -386,6 +408,64 @@ model WebPushSubscription {
   @@index([userId, createdAt])
   @@index([userId, updatedAt])
   @@map("web_push_subscriptions")
+}
+
+model PaymentReconciliationRun {
+  id            String                         @id @default(cuid())
+  stream        PaymentReconciliationStream
+  status        PaymentReconciliationRunStatus @default(RUNNING)
+  scannedCount  Int                            @default(0)
+  matchedCount  Int                            @default(0)
+  mismatchCount Int                            @default(0)
+  missingCount  Int                            @default(0)
+  errorMessage  String?
+  startedAt     DateTime
+  finishedAt    DateTime?
+  createdAt     DateTime                       @default(now())
+  updatedAt     DateTime                       @updatedAt
+
+  records       PaymentReconciliationRecord[]
+
+  @@index([stream, createdAt])
+  @@index([status, createdAt])
+  @@map("payment_reconciliation_runs")
+}
+
+model PaymentReconciliationRecord {
+  id                String                      @id @default(cuid())
+  runId             String
+  stream            PaymentReconciliationStream
+  status            PaymentReconciliationStatus
+  currency          String
+  expectedAmount    Decimal?                    @db.Decimal(12, 2)
+  actualAmount      Decimal?                    @db.Decimal(12, 2)
+  deltaAmount       Decimal?                    @db.Decimal(12, 2)
+  reference         String?
+  externalReference String?
+  tripId            String?
+  walletTopUpId     String?
+  transferId        String?
+  refundId          String?
+  captureId         String?
+  customerId        String?
+  driverId          String?
+  customerName      String?
+  customerEmail     String?
+  driverName        String?
+  driverEmail       String?
+  reason            String?
+  resolvedAt        DateTime?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  run               PaymentReconciliationRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  customer          User?                       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([runId, stream, status])
+  @@index([stream, status, createdAt])
+  @@index([tripId])
+  @@index([walletTopUpId])
+  @@map("payment_reconciliation_records")
 }
 
 model Service {

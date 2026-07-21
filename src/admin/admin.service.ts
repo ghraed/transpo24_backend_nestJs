@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   CustomerWalletTopUpStatus,
   DocumentStatus,
@@ -14,6 +15,9 @@ import {
   DriverPayoutState,
   DriverStatus,
   DriverVehicleReviewStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentTransactionType,
   Prisma,
   TripPaymentSettlementStatus,
   UserRole,
@@ -38,6 +42,16 @@ import {
   AdminPaymentDisputesListResponseDto,
   AdminPaymentDisputeSummaryDto,
 } from './dto/admin-payment-disputes-response.dto';
+import { AdminPaymentReconciliationQueryDto } from './dto/admin-payment-reconciliation-query.dto';
+import {
+  type AdminPaymentReconciliationStatus as AdminPaymentReconciliationStatusFilter,
+  type AdminPaymentReconciliationStream as AdminPaymentReconciliationStreamFilter,
+  AdminPaymentReconciliationItemDto,
+  AdminPaymentReconciliationJobRunDto,
+  AdminPaymentReconciliationListResponseDto,
+  AdminPaymentReconciliationRunResponseDto,
+  AdminPaymentReconciliationSummaryDto,
+} from './dto/admin-payment-reconciliation-response.dto';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 import { AdminUserResponseDto } from './dto/admin-user-response.dto';
@@ -46,6 +60,7 @@ import {
   AdminDriverReviewResponseDto,
   AdminDriverReviewVehicleDto,
 } from './dto/admin-driver-review-response.dto';
+import { RunPaymentReconciliationDto } from './dto/run-payment-reconciliation.dto';
 
 const DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES: DriverDocumentType[] = [
   DriverDocumentType.PERSONAL_SELFIE,
@@ -63,6 +78,110 @@ const DRIVER_CANONICAL_VEHICLE_DOCUMENT_TYPES: DriverDocumentType[] = [
   DriverDocumentType.VEHICLE_REGISTRATION_BACK,
   DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
 ];
+
+const PaymentReconciliationStream = {
+  WALLET: 'WALLET',
+  CAPTURE: 'CAPTURE',
+  REFUND: 'REFUND',
+  TRANSFER: 'TRANSFER',
+} as const;
+
+type PaymentReconciliationStream =
+  (typeof PaymentReconciliationStream)[keyof typeof PaymentReconciliationStream];
+
+const PaymentReconciliationStatus = {
+  MATCHED: 'MATCHED',
+  MISMATCH: 'MISMATCH',
+  MISSING: 'MISSING',
+  FAILED: 'FAILED',
+} as const;
+
+type PaymentReconciliationStatus =
+  (typeof PaymentReconciliationStatus)[keyof typeof PaymentReconciliationStatus];
+
+const PaymentReconciliationRunStatus = {
+  SUCCESS: 'SUCCESS',
+  PARTIAL: 'PARTIAL',
+  FAILED: 'FAILED',
+  RUNNING: 'RUNNING',
+} as const;
+
+type PaymentReconciliationRunStatus =
+  (typeof PaymentReconciliationRunStatus)[keyof typeof PaymentReconciliationRunStatus];
+
+const PAYMENT_RECONCILIATION_STREAMS: PaymentReconciliationStream[] = [
+  PaymentReconciliationStream.WALLET,
+  PaymentReconciliationStream.CAPTURE,
+  PaymentReconciliationStream.REFUND,
+  PaymentReconciliationStream.TRANSFER,
+];
+
+type PaymentReconciliationRecordDraft = {
+  stream: PaymentReconciliationStream;
+  status: PaymentReconciliationStatus;
+  currency: string;
+  expectedAmount: Prisma.Decimal | null;
+  actualAmount: Prisma.Decimal | null;
+  deltaAmount: Prisma.Decimal | null;
+  reference: string | null;
+  externalReference: string | null;
+  tripId: string | null;
+  walletTopUpId: string | null;
+  transferId: string | null;
+  refundId: string | null;
+  captureId: string | null;
+  customerId: string | null;
+  driverId: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  driverName: string | null;
+  driverEmail: string | null;
+  reason: string | null;
+  resolvedAt: Date | null;
+};
+
+type PaymentReconciliationRunRow = {
+  id: string;
+  stream: PaymentReconciliationStream;
+  status: PaymentReconciliationRunStatus;
+  scannedCount: number;
+  matchedCount: number;
+  mismatchCount: number;
+  missingCount: number;
+  errorMessage: string | null;
+  startedAt: Date;
+  finishedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type PaymentReconciliationRecordRow = {
+  id: string;
+  runId: string;
+  stream: PaymentReconciliationStream;
+  status: PaymentReconciliationStatus;
+  currency: string;
+  expectedAmount: Prisma.Decimal | number | string | null;
+  actualAmount: Prisma.Decimal | number | string | null;
+  deltaAmount: Prisma.Decimal | number | string | null;
+  reference: string | null;
+  externalReference: string | null;
+  tripId: string | null;
+  walletTopUpId: string | null;
+  transferId: string | null;
+  refundId: string | null;
+  captureId: string | null;
+  customerId: string | null;
+  driverId: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  driverName: string | null;
+  driverEmail: string | null;
+  reason: string | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 type ReviewDocumentSource = {
   id: string;
@@ -485,6 +604,49 @@ export class AdminService {
       items: pagedItems,
       total: items.length,
       summary: this.getPaymentDisputeSummary(items),
+    };
+  }
+
+  async findPaymentReconciliation(
+    query: AdminPaymentReconciliationQueryDto,
+  ): Promise<AdminPaymentReconciliationListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const streamFilter = query.stream ?? 'all';
+    const statusFilter = query.status ?? 'all';
+
+    const latestRuns = await this.ensureLatestPaymentReconciliationRuns();
+    const latestRunIds = latestRuns.map((run) => run.id);
+    const internalStream = this.mapPaymentReconciliationStreamFilter(streamFilter);
+    const internalStatus = this.mapPaymentReconciliationStatusFilter(statusFilter);
+    const items = await this.loadPaymentReconciliationRecords({
+      runIds: latestRunIds,
+      stream: internalStream,
+      status: internalStatus,
+      page,
+      limit,
+    });
+    const total = await this.countPaymentReconciliationRecords({
+      runIds: latestRunIds,
+      stream: internalStream,
+      status: internalStatus,
+    });
+
+    return {
+      items: items.map((item) => this.mapPaymentReconciliationRecord(item)),
+      total,
+      summary: this.getPaymentReconciliationSummary(latestRuns),
+      latestRuns: latestRuns.map((run) => this.mapPaymentReconciliationRun(run)),
+    };
+  }
+
+  async runPaymentReconciliation(
+    dto: RunPaymentReconciliationDto,
+  ): Promise<AdminPaymentReconciliationRunResponseDto> {
+    const runs = await this.runPaymentReconciliationStreams(dto.stream ?? 'all');
+
+    return {
+      runs: runs.map((run) => this.mapPaymentReconciliationRun(run)),
     };
   }
 
@@ -1195,6 +1357,1178 @@ export class AdminService {
       createdAt: topUp.createdAt.toISOString(),
       updatedAt: topUp.updatedAt.toISOString(),
     };
+  }
+
+  private async ensureLatestPaymentReconciliationRuns() {
+    let latestRuns = await this.getLatestPaymentReconciliationRuns();
+
+    if (latestRuns.length === PAYMENT_RECONCILIATION_STREAMS.length) {
+      return latestRuns;
+    }
+
+    const coveredStreams = new Set(latestRuns.map((run) => run.stream));
+    const missingStreams = PAYMENT_RECONCILIATION_STREAMS.filter(
+      (stream) => !coveredStreams.has(stream),
+    );
+
+    if (missingStreams.length > 0) {
+      for (const stream of missingStreams) {
+        await this.executePaymentReconciliationStream(stream);
+      }
+      latestRuns = await this.getLatestPaymentReconciliationRuns();
+    }
+
+    return latestRuns;
+  }
+
+  private async getLatestPaymentReconciliationRuns() {
+    const runs = await this.prisma.$queryRaw<PaymentReconciliationRunRow[]>(
+      Prisma.sql`
+        SELECT
+          id,
+          stream,
+          status,
+          "scannedCount",
+          "matchedCount",
+          "mismatchCount",
+          "missingCount",
+          "errorMessage",
+          "startedAt",
+          "finishedAt",
+          "createdAt",
+          "updatedAt"
+        FROM "payment_reconciliation_runs"
+        ORDER BY "createdAt" DESC
+        LIMIT 32
+      `,
+    );
+    const latestByStream = new Map<PaymentReconciliationStream, PaymentReconciliationRunRow>();
+
+    for (const run of runs) {
+      if (!latestByStream.has(run.stream)) {
+        latestByStream.set(run.stream, run);
+      }
+    }
+
+    return PAYMENT_RECONCILIATION_STREAMS.map((stream) => latestByStream.get(stream)).filter(
+      (run): run is PaymentReconciliationRunRow => Boolean(run),
+    );
+  }
+
+  private async runPaymentReconciliationStreams(
+    streamFilter: AdminPaymentReconciliationStreamFilter,
+  ) {
+    const streams =
+      streamFilter === 'all'
+        ? PAYMENT_RECONCILIATION_STREAMS
+        : [this.mapPaymentReconciliationStreamValue(streamFilter)];
+
+    const runs: PaymentReconciliationRunRow[] = [];
+    for (const stream of streams) {
+      runs.push(await this.executePaymentReconciliationStream(stream));
+    }
+
+    return runs;
+  }
+
+  private async executePaymentReconciliationStream(
+    stream: PaymentReconciliationStream,
+  ) {
+    const startedAt = new Date();
+    const [run] = await this.prisma.$queryRaw<PaymentReconciliationRunRow[]>(
+      Prisma.sql`
+        INSERT INTO "payment_reconciliation_runs" (
+          id,
+          stream,
+          status,
+          "startedAt",
+          "createdAt",
+          "updatedAt"
+        )
+        VALUES (
+          ${this.createCuid()},
+          ${stream}::"PaymentReconciliationStream",
+          ${PaymentReconciliationRunStatus.RUNNING}::"PaymentReconciliationRunStatus",
+          ${startedAt},
+          NOW(),
+          NOW()
+        )
+        RETURNING
+          id,
+          stream,
+          status,
+          "scannedCount",
+          "matchedCount",
+          "mismatchCount",
+          "missingCount",
+          "errorMessage",
+          "startedAt",
+          "finishedAt",
+          "createdAt",
+          "updatedAt"
+      `,
+    );
+
+    try {
+      const records = await this.buildPaymentReconciliationRecords(stream);
+      const summary = this.summarizePaymentReconciliationRecords(records);
+
+      if (records.length > 0) {
+        await this.insertPaymentReconciliationRecords(run.id, records);
+      }
+
+      return this.updatePaymentReconciliationRun(run.id, {
+        status:
+          summary.mismatchCount > 0 || summary.missingCount > 0
+            ? PaymentReconciliationRunStatus.PARTIAL
+            : PaymentReconciliationRunStatus.SUCCESS,
+        scannedCount: summary.scannedCount,
+        matchedCount: summary.matchedCount,
+        mismatchCount: summary.mismatchCount,
+        missingCount: summary.missingCount,
+        finishedAt: new Date(),
+        errorMessage: null,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Payment reconciliation failed.';
+
+      await this.updatePaymentReconciliationRun(run.id, {
+          status: PaymentReconciliationRunStatus.FAILED,
+          finishedAt: new Date(),
+          errorMessage: message,
+      });
+
+      throw error;
+    }
+  }
+
+  private async buildPaymentReconciliationRecords(
+    stream: PaymentReconciliationStream,
+  ): Promise<PaymentReconciliationRecordDraft[]> {
+    switch (stream) {
+      case PaymentReconciliationStream.WALLET:
+        return this.buildWalletPaymentReconciliationRecords();
+      case PaymentReconciliationStream.CAPTURE:
+        return this.buildCapturePaymentReconciliationRecords();
+      case PaymentReconciliationStream.REFUND:
+        return this.buildRefundPaymentReconciliationRecords();
+      case PaymentReconciliationStream.TRANSFER:
+        return this.buildTransferPaymentReconciliationRecords();
+      default:
+        return [];
+    }
+  }
+
+  private async buildWalletPaymentReconciliationRecords(): Promise<
+    PaymentReconciliationRecordDraft[]
+  > {
+    const topUps = await this.prisma.customerWalletTopUp.findMany({
+      where: {
+        status: {
+          not: CustomerWalletTopUpStatus.PENDING,
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: {
+        id: true,
+        walletId: true,
+        customerId: true,
+        amount: true,
+        currency: true,
+        status: true,
+        stripePaymentIntentId: true,
+        stripeChargeId: true,
+        requiresManualReview: true,
+        failureReason: true,
+        createdAt: true,
+        updatedAt: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        walletTransactions: {
+          select: {
+            amount: true,
+            currency: true,
+            type: true,
+          },
+        },
+      },
+    });
+
+    return topUps.map((topUp) => {
+      const topUpTransactions = topUp.walletTransactions.filter(
+        (transaction) => transaction.type === PaymentTransactionType.TOP_UP,
+      );
+      const actualAmount = this.sumDecimalValues(topUpTransactions.map((item) => item.amount));
+      const currencyMismatch = topUpTransactions.some(
+        (transaction) => transaction.currency !== topUp.currency,
+      );
+
+      let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+      let reason: string | null = null;
+
+      if (topUp.status === CustomerWalletTopUpStatus.SUCCEEDED) {
+        if (!topUp.walletId) {
+          status = PaymentReconciliationStatus.MISSING;
+          reason = 'Wallet top-up succeeded without a linked wallet.';
+        } else if (topUpTransactions.length === 0) {
+          status = PaymentReconciliationStatus.MISSING;
+          reason = 'Wallet top-up succeeded without a wallet transaction.';
+        } else if (currencyMismatch) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason = 'Wallet top-up transaction currency does not match the top-up currency.';
+        } else if (!this.decimalsEqual(actualAmount, topUp.amount)) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason = 'Wallet top-up transaction amount does not match the recorded top-up amount.';
+        }
+      } else if (
+        topUp.status === CustomerWalletTopUpStatus.FAILED ||
+        topUp.status === CustomerWalletTopUpStatus.CANCELLED
+      ) {
+        status =
+          topUpTransactions.length > 0
+            ? PaymentReconciliationStatus.MISMATCH
+            : PaymentReconciliationStatus.FAILED;
+        reason =
+          topUp.failureReason ??
+          (topUpTransactions.length > 0
+            ? 'Failed wallet top-up still produced wallet transactions.'
+            : 'Wallet top-up did not complete successfully.');
+      } else if (
+        topUp.status === CustomerWalletTopUpStatus.DISPUTED ||
+        topUp.status === CustomerWalletTopUpStatus.MANUAL_REVIEW
+      ) {
+        status = PaymentReconciliationStatus.MISMATCH;
+        reason = topUp.requiresManualReview
+          ? 'Wallet top-up is under manual review.'
+          : 'Wallet top-up is disputed and requires reconciliation.';
+      }
+
+      return this.buildPaymentReconciliationDraft({
+        stream: PaymentReconciliationStream.WALLET,
+        status,
+        currency: topUp.currency,
+        expectedAmount: topUp.amount,
+        actualAmount,
+        reference: topUp.id,
+        externalReference: topUp.stripeChargeId ?? topUp.stripePaymentIntentId,
+        walletTopUpId: topUp.id,
+        customerId: topUp.customer.id,
+        customerName: topUp.customer.name,
+        customerEmail: topUp.customer.email,
+        reason,
+        createdAt: topUp.createdAt,
+        updatedAt: topUp.updatedAt,
+      });
+    });
+  }
+
+  private async buildCapturePaymentReconciliationRecords(): Promise<
+    PaymentReconciliationRecordDraft[]
+  > {
+    const holds = await this.prisma.paymentHold.findMany({
+      where: {
+        OR: [
+          { status: PaymentStatus.PAYMENT_CAPTURED },
+          { request: { paymentStatus: PaymentStatus.PAYMENT_CAPTURED } },
+          { settlement: { isNot: null } },
+        ],
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: {
+        id: true,
+        requestId: true,
+        customerId: true,
+        amount: true,
+        currency: true,
+        status: true,
+        stripeChargeId: true,
+        stripePaymentIntentId: true,
+        capturedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        request: {
+          select: {
+            id: true,
+            paymentStatus: true,
+            capturedAmount: true,
+          },
+        },
+        settlement: {
+          select: {
+            id: true,
+            collectedAmount: true,
+            currency: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    return holds.map((hold) => {
+      const settlementAmount = hold.settlement?.collectedAmount ?? null;
+      let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+      let reason: string | null = null;
+
+      if (hold.status !== PaymentStatus.PAYMENT_CAPTURED) {
+        status = PaymentReconciliationStatus.MISMATCH;
+        reason = 'Payment hold is not marked as captured.';
+      } else if (!hold.capturedAt) {
+        status = PaymentReconciliationStatus.MISMATCH;
+        reason = 'Payment hold is captured without a captured timestamp.';
+      } else if (!hold.settlement) {
+        status = PaymentReconciliationStatus.MISSING;
+        reason = 'Captured payment is missing a settlement record.';
+      } else if (hold.request.paymentStatus !== PaymentStatus.PAYMENT_CAPTURED) {
+        status = PaymentReconciliationStatus.MISMATCH;
+        reason = 'Transport request payment status is not marked as captured.';
+      } else if (hold.request.capturedAmount === null) {
+        status = PaymentReconciliationStatus.MISSING;
+        reason = 'Transport request is missing the captured amount.';
+      } else if (
+        hold.settlement.currency !== hold.currency ||
+        !this.decimalsEqual(hold.settlement.collectedAmount, hold.amount) ||
+        !this.decimalsEqual(hold.request.capturedAmount, hold.amount)
+      ) {
+        status = PaymentReconciliationStatus.MISMATCH;
+        reason = 'Captured payment totals do not match across hold, request, and settlement.';
+      }
+
+      return this.buildPaymentReconciliationDraft({
+        stream: PaymentReconciliationStream.CAPTURE,
+        status,
+        currency: hold.currency,
+        expectedAmount: hold.amount,
+        actualAmount: settlementAmount,
+        reference: hold.requestId,
+        externalReference: hold.stripeChargeId ?? hold.stripePaymentIntentId,
+        tripId: hold.requestId,
+        captureId: hold.id,
+        customerId: hold.customer.id,
+        customerName: hold.customer.name,
+        customerEmail: hold.customer.email,
+        reason,
+        createdAt: hold.createdAt,
+        updatedAt: hold.updatedAt,
+      });
+    });
+  }
+
+  private async buildRefundPaymentReconciliationRecords(): Promise<
+    PaymentReconciliationRecordDraft[]
+  > {
+    const settlements = await this.prisma.tripPaymentSettlement.findMany({
+      where: {
+        OR: [
+          { refundedAmount: { gt: new Prisma.Decimal(0) } },
+          {
+            status: {
+              in: [
+                TripPaymentSettlementStatus.REFUND_PENDING,
+                TripPaymentSettlementStatus.PARTIALLY_REFUNDED,
+                TripPaymentSettlementStatus.REFUNDED,
+              ],
+            },
+          },
+        ],
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: {
+        id: true,
+        requestId: true,
+        customerId: true,
+        driverId: true,
+        currency: true,
+        refundedAmount: true,
+        status: true,
+        lastStripeRefundId: true,
+        createdAt: true,
+        updatedAt: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        driver: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        paymentHold: {
+          select: {
+            paymentMethod: true,
+            walletTransactions: {
+              select: {
+                amount: true,
+                currency: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return settlements.map((settlement) => {
+      const refundTransactions = settlement.paymentHold.walletTransactions.filter(
+        (transaction) => transaction.type === PaymentTransactionType.REFUND,
+      );
+      const walletRefundAmount = this.sumDecimalValues(
+        refundTransactions.map((item) => item.amount),
+      );
+      const usesWalletRefund =
+        settlement.paymentHold.paymentMethod === PaymentMethod.APP_WALLET;
+      const actualAmount = usesWalletRefund
+        ? walletRefundAmount
+        : settlement.lastStripeRefundId
+          ? settlement.refundedAmount
+          : null;
+
+      let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+      let reason: string | null = null;
+
+      if (settlement.refundedAmount.comparedTo(0) <= 0) {
+        status = PaymentReconciliationStatus.MISMATCH;
+        reason = 'Refund status is set without a positive refunded amount.';
+      } else if (usesWalletRefund) {
+        const hasCurrencyMismatch = refundTransactions.some(
+          (transaction) => transaction.currency !== settlement.currency,
+        );
+
+        if (refundTransactions.length === 0) {
+          status = PaymentReconciliationStatus.MISSING;
+          reason = 'Wallet refund is missing a wallet refund transaction.';
+        } else if (hasCurrencyMismatch) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason = 'Wallet refund transaction currency does not match the settlement currency.';
+        } else if (!this.decimalsEqual(walletRefundAmount, settlement.refundedAmount)) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason = 'Wallet refund transaction amount does not match the settlement refunded amount.';
+        }
+      } else if (!settlement.lastStripeRefundId) {
+        status = PaymentReconciliationStatus.MISSING;
+        reason =
+          settlement.status === TripPaymentSettlementStatus.REFUND_PENDING
+            ? 'Refund is pending and does not have a Stripe refund id yet.'
+            : 'Refunded settlement is missing a Stripe refund id.';
+      }
+
+      return this.buildPaymentReconciliationDraft({
+        stream: PaymentReconciliationStream.REFUND,
+        status,
+        currency: settlement.currency,
+        expectedAmount: settlement.refundedAmount,
+        actualAmount,
+        reference: settlement.requestId,
+        externalReference: settlement.lastStripeRefundId,
+        tripId: settlement.requestId,
+        refundId: settlement.lastStripeRefundId ?? settlement.id,
+        customerId: settlement.customer.id,
+        driverId: settlement.driver?.id ?? settlement.driverId,
+        customerName: settlement.customer.name,
+        customerEmail: settlement.customer.email,
+        driverName: settlement.driver?.user.name ?? null,
+        driverEmail: settlement.driver?.user.email ?? null,
+        reason,
+        createdAt: settlement.createdAt,
+        updatedAt: settlement.updatedAt,
+      });
+    });
+  }
+
+  private async buildTransferPaymentReconciliationRecords(): Promise<
+    PaymentReconciliationRecordDraft[]
+  > {
+    const earnings = await this.prisma.driverEarning.findMany({
+      where: {
+        trip: {
+          paymentSettlement: {
+            isNot: null,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: {
+        id: true,
+        tripId: true,
+        netAmount: true,
+        currency: true,
+        status: true,
+        stripeTransferId: true,
+        stripeTransferStatus: true,
+        createdAt: true,
+        updatedAt: true,
+        driver: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        trip: {
+          select: {
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            paymentSettlement: {
+              select: {
+                id: true,
+                driverShareAmount: true,
+                driverPayoutState: true,
+                payoutFailureReason: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return earnings
+      .filter((earning) =>
+        Boolean(
+          earning.trip.paymentSettlement &&
+            (earning.trip.paymentSettlement.driverPayoutState !==
+              DriverPayoutState.NOT_EARNED ||
+              earning.stripeTransferId ||
+              earning.status === DriverEarningStatus.PAID_OUT),
+        ),
+      )
+      .map((earning) => {
+        const settlement = earning.trip.paymentSettlement;
+        if (!settlement) {
+          return this.buildPaymentReconciliationDraft({
+            stream: PaymentReconciliationStream.TRANSFER,
+            status: PaymentReconciliationStatus.MISSING,
+            currency: earning.currency,
+            expectedAmount: earning.netAmount,
+            actualAmount: null,
+            reference: earning.tripId,
+            externalReference: earning.stripeTransferId,
+            tripId: earning.tripId,
+            transferId: earning.stripeTransferId,
+            customerId: earning.trip.customer.id,
+            driverId: earning.driver.id,
+            customerName: earning.trip.customer.name,
+            customerEmail: earning.trip.customer.email,
+            driverName: earning.driver.user.name,
+            driverEmail: earning.driver.user.email,
+            reason: 'Driver earning is missing a payout settlement.',
+            createdAt: earning.createdAt,
+            updatedAt: earning.updatedAt,
+          });
+        }
+
+        let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+        let reason: string | null = null;
+
+        if (!this.decimalsEqual(settlement.driverShareAmount, earning.netAmount)) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason = 'Driver earning amount does not match the settlement driver share.';
+        } else if (settlement.driverPayoutState === DriverPayoutState.PAID_OUT) {
+          if (!earning.stripeTransferId) {
+            status = PaymentReconciliationStatus.MISSING;
+            reason = 'Paid-out earning is missing a Stripe transfer id.';
+          } else if (earning.stripeTransferStatus !== 'paid') {
+            status = PaymentReconciliationStatus.MISMATCH;
+            reason = 'Paid-out earning has a non-paid Stripe transfer status.';
+          } else if (earning.status !== DriverEarningStatus.PAID_OUT) {
+            status = PaymentReconciliationStatus.MISMATCH;
+            reason = 'Settlement is paid out but earning status is not PAID_OUT.';
+          }
+        } else if (
+          settlement.driverPayoutState === DriverPayoutState.TRANSFER_FAILED
+        ) {
+          status = PaymentReconciliationStatus.FAILED;
+          reason =
+            settlement.payoutFailureReason ?? 'Driver payout transfer failed.';
+        }
+
+        return this.buildPaymentReconciliationDraft({
+          stream: PaymentReconciliationStream.TRANSFER,
+          status,
+          currency: earning.currency,
+          expectedAmount: earning.netAmount,
+          actualAmount: settlement.driverShareAmount,
+          reference: earning.tripId,
+          externalReference: earning.stripeTransferId,
+          tripId: earning.tripId,
+          transferId: earning.stripeTransferId,
+          customerId: earning.trip.customer.id,
+          driverId: earning.driver.id,
+          customerName: earning.trip.customer.name,
+          customerEmail: earning.trip.customer.email,
+          driverName: earning.driver.user.name,
+          driverEmail: earning.driver.user.email,
+          reason,
+          createdAt: earning.createdAt,
+          updatedAt: settlement.updatedAt,
+        });
+      });
+  }
+
+  private buildPaymentReconciliationDraft(input: {
+    stream: PaymentReconciliationStream;
+    status: PaymentReconciliationStatus;
+    currency: string;
+    expectedAmount: Prisma.Decimal | null;
+    actualAmount: Prisma.Decimal | null;
+    reference: string | null;
+    externalReference?: string | null;
+    tripId?: string | null;
+    walletTopUpId?: string | null;
+    transferId?: string | null;
+    refundId?: string | null;
+    captureId?: string | null;
+    customerId?: string | null;
+    driverId?: string | null;
+    customerName?: string | null;
+    customerEmail?: string | null;
+    driverName?: string | null;
+    driverEmail?: string | null;
+    reason?: string | null;
+    resolvedAt?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): PaymentReconciliationRecordDraft {
+    return {
+      stream: input.stream,
+      status: input.status,
+      currency: input.currency,
+      expectedAmount: input.expectedAmount,
+      actualAmount: input.actualAmount,
+      deltaAmount: this.calculateDeltaAmount(input.expectedAmount, input.actualAmount),
+      reference: input.reference ?? null,
+      externalReference: input.externalReference ?? null,
+      tripId: input.tripId ?? null,
+      walletTopUpId: input.walletTopUpId ?? null,
+      transferId: input.transferId ?? null,
+      refundId: input.refundId ?? null,
+      captureId: input.captureId ?? null,
+      customerId: input.customerId ?? null,
+      driverId: input.driverId ?? null,
+      customerName: input.customerName ?? null,
+      customerEmail: input.customerEmail ?? null,
+      driverName: input.driverName ?? null,
+      driverEmail: input.driverEmail ?? null,
+      reason: input.reason ?? null,
+      resolvedAt: input.status === PaymentReconciliationStatus.MATCHED ? input.updatedAt : input.resolvedAt ?? null,
+    };
+  }
+
+  private summarizePaymentReconciliationRecords(
+    records: PaymentReconciliationRecordDraft[],
+  ) {
+    return records.reduce(
+      (summary, record) => {
+        summary.scannedCount += 1;
+
+        if (record.status === PaymentReconciliationStatus.MATCHED) {
+          summary.matchedCount += 1;
+        } else if (record.status === PaymentReconciliationStatus.MISMATCH) {
+          summary.mismatchCount += 1;
+        } else if (record.status === PaymentReconciliationStatus.MISSING) {
+          summary.missingCount += 1;
+        }
+
+        return summary;
+      },
+      {
+        scannedCount: 0,
+        matchedCount: 0,
+        mismatchCount: 0,
+        missingCount: 0,
+      },
+    );
+  }
+
+  private getPaymentReconciliationSummary(
+    runs: Array<{
+      stream: PaymentReconciliationStream;
+      scannedCount: number;
+      mismatchCount: number;
+      status: PaymentReconciliationRunStatus;
+    }>,
+  ): AdminPaymentReconciliationSummaryDto {
+    return runs.reduce<AdminPaymentReconciliationSummaryDto>(
+      (summary, run) => {
+        if (run.stream === PaymentReconciliationStream.WALLET) {
+          summary.walletCount = run.scannedCount;
+        } else if (run.stream === PaymentReconciliationStream.CAPTURE) {
+          summary.captureCount = run.scannedCount;
+        } else if (run.stream === PaymentReconciliationStream.REFUND) {
+          summary.refundCount = run.scannedCount;
+        } else if (run.stream === PaymentReconciliationStream.TRANSFER) {
+          summary.transferCount = run.scannedCount;
+        }
+
+        summary.mismatchCount += run.mismatchCount;
+        if (run.status === PaymentReconciliationRunStatus.FAILED) {
+          summary.failedJobCount += 1;
+        }
+
+        return summary;
+      },
+      {
+        walletCount: 0,
+        captureCount: 0,
+        refundCount: 0,
+        transferCount: 0,
+        mismatchCount: 0,
+        failedJobCount: 0,
+      },
+    );
+  }
+
+  private mapPaymentReconciliationRun(run: {
+    id: string;
+    stream: PaymentReconciliationStream;
+    status: PaymentReconciliationRunStatus;
+    startedAt: Date;
+    finishedAt: Date | null;
+    scannedCount: number;
+    matchedCount: number;
+    mismatchCount: number;
+    missingCount: number;
+    errorMessage: string | null;
+  }): AdminPaymentReconciliationJobRunDto {
+    return {
+      id: run.id,
+      stream: this.formatPaymentReconciliationStream(run.stream),
+      status: run.status,
+      startedAt: run.startedAt.toISOString(),
+      finishedAt: run.finishedAt?.toISOString() ?? null,
+      scannedCount: run.scannedCount,
+      matchedCount: run.matchedCount,
+      mismatchCount: run.mismatchCount,
+      missingCount: run.missingCount,
+      errorMessage: run.errorMessage,
+    };
+  }
+
+  private mapPaymentReconciliationRecord(
+    record: PaymentReconciliationRecordRow,
+  ): AdminPaymentReconciliationItemDto {
+    return {
+      id: record.id,
+      stream: this.formatPaymentReconciliationStream(record.stream),
+      status: this.formatPaymentReconciliationStatus(record.status),
+      currency: record.currency,
+      expectedAmount: this.decimalLikeToNumber(record.expectedAmount),
+      actualAmount: this.decimalLikeToNumber(record.actualAmount),
+      deltaAmount: this.decimalLikeToNumber(record.deltaAmount),
+      reference: record.reference,
+      externalReference: record.externalReference,
+      tripId: record.tripId,
+      walletTopUpId: record.walletTopUpId,
+      transferId: record.transferId,
+      refundId: record.refundId,
+      captureId: record.captureId,
+      customer: record.customerId || record.customerName || record.customerEmail
+        ? {
+            id: record.customerId,
+            name: record.customerName,
+            email: record.customerEmail,
+          }
+        : null,
+      driver: record.driverId || record.driverName || record.driverEmail
+        ? {
+            id: record.driverId,
+            name: record.driverName,
+            email: record.driverEmail,
+          }
+        : null,
+      reason: record.reason,
+      jobRunId: record.runId,
+      detectedAt: record.createdAt.toISOString(),
+      resolvedAt: record.resolvedAt?.toISOString() ?? null,
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+    };
+  }
+
+  private mapPaymentReconciliationStreamValue(
+    stream: Exclude<AdminPaymentReconciliationStreamFilter, 'all'>,
+  ): PaymentReconciliationStream {
+    if (stream === 'wallet') {
+      return PaymentReconciliationStream.WALLET;
+    }
+
+    if (stream === 'captures') {
+      return PaymentReconciliationStream.CAPTURE;
+    }
+
+    if (stream === 'refunds') {
+      return PaymentReconciliationStream.REFUND;
+    }
+
+    return PaymentReconciliationStream.TRANSFER;
+  }
+
+  private mapPaymentReconciliationStreamFilter(
+    stream: AdminPaymentReconciliationStreamFilter,
+  ): PaymentReconciliationStream | null {
+    if (stream === 'all') {
+      return null;
+    }
+
+    return this.mapPaymentReconciliationStreamValue(stream);
+  }
+
+  private mapPaymentReconciliationStatusFilter(
+    status: AdminPaymentReconciliationStatusFilter,
+  ): PaymentReconciliationStatus | null {
+    if (status === 'all') {
+      return null;
+    }
+
+    if (status === 'matched') {
+      return PaymentReconciliationStatus.MATCHED;
+    }
+
+    if (status === 'mismatch') {
+      return PaymentReconciliationStatus.MISMATCH;
+    }
+
+    if (status === 'missing') {
+      return PaymentReconciliationStatus.MISSING;
+    }
+
+    return PaymentReconciliationStatus.FAILED;
+  }
+
+  private formatPaymentReconciliationStream(
+    stream: PaymentReconciliationStream,
+  ): Exclude<AdminPaymentReconciliationStreamFilter, 'all'> {
+    if (stream === PaymentReconciliationStream.WALLET) {
+      return 'wallet';
+    }
+
+    if (stream === PaymentReconciliationStream.CAPTURE) {
+      return 'captures';
+    }
+
+    if (stream === PaymentReconciliationStream.REFUND) {
+      return 'refunds';
+    }
+
+    return 'transfers';
+  }
+
+  private formatPaymentReconciliationStatus(
+    status: PaymentReconciliationStatus,
+  ): Exclude<AdminPaymentReconciliationStatusFilter, 'all'> {
+    if (status === PaymentReconciliationStatus.MATCHED) {
+      return 'matched';
+    }
+
+    if (status === PaymentReconciliationStatus.MISMATCH) {
+      return 'mismatch';
+    }
+
+    if (status === PaymentReconciliationStatus.MISSING) {
+      return 'missing';
+    }
+
+    return 'failed';
+  }
+
+  private async loadPaymentReconciliationRecords(input: {
+    runIds: string[];
+    stream: PaymentReconciliationStream | null;
+    status: PaymentReconciliationStatus | null;
+    page: number;
+    limit: number;
+  }): Promise<PaymentReconciliationRecordRow[]> {
+    const whereSql = this.buildPaymentReconciliationRecordWhereSql(input);
+    const offset = Math.max(input.page - 1, 0) * input.limit;
+
+    return this.prisma.$queryRaw<PaymentReconciliationRecordRow[]>(
+      Prisma.sql`
+        SELECT
+          id,
+          "runId",
+          stream,
+          status,
+          currency,
+          "expectedAmount",
+          "actualAmount",
+          "deltaAmount",
+          reference,
+          "externalReference",
+          "tripId",
+          "walletTopUpId",
+          "transferId",
+          "refundId",
+          "captureId",
+          "customerId",
+          "driverId",
+          "customerName",
+          "customerEmail",
+          "driverName",
+          "driverEmail",
+          reason,
+          "resolvedAt",
+          "createdAt",
+          "updatedAt"
+        FROM "payment_reconciliation_records"
+        ${whereSql}
+        ORDER BY "updatedAt" DESC, "createdAt" DESC
+        OFFSET ${offset}
+        LIMIT ${input.limit}
+      `,
+    );
+  }
+
+  private async countPaymentReconciliationRecords(input: {
+    runIds: string[];
+    stream: PaymentReconciliationStream | null;
+    status: PaymentReconciliationStatus | null;
+  }): Promise<number> {
+    const whereSql = this.buildPaymentReconciliationRecordWhereSql(input);
+    const rows = await this.prisma.$queryRaw<Array<{ count: bigint | number }>>(
+      Prisma.sql`
+        SELECT COUNT(*)::bigint AS count
+        FROM "payment_reconciliation_records"
+        ${whereSql}
+      `,
+    );
+
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  private buildPaymentReconciliationRecordWhereSql(input: {
+    runIds: string[];
+    stream: PaymentReconciliationStream | null;
+    status: PaymentReconciliationStatus | null;
+  }) {
+    const clauses: Prisma.Sql[] = [];
+
+    if (input.runIds.length > 0) {
+      clauses.push(
+        Prisma.sql`"runId" IN (${Prisma.join(input.runIds.map((runId) => Prisma.sql`${runId}`))})`,
+      );
+    } else {
+      clauses.push(Prisma.sql`1 = 0`);
+    }
+
+    if (input.stream) {
+      clauses.push(
+        Prisma.sql`stream = ${input.stream}::"PaymentReconciliationStream"`,
+      );
+    }
+
+    if (input.status) {
+      clauses.push(
+        Prisma.sql`status = ${input.status}::"PaymentReconciliationStatus"`,
+      );
+    }
+
+    return Prisma.sql`WHERE ${Prisma.join(clauses, ' AND ')}`;
+  }
+
+  private async insertPaymentReconciliationRecords(
+    runId: string,
+    records: PaymentReconciliationRecordDraft[],
+  ): Promise<void> {
+    if (records.length === 0) {
+      return;
+    }
+
+    await this.prisma.$transaction(
+      records.map((record) =>
+        this.prisma.$executeRaw(
+          Prisma.sql`
+            INSERT INTO "payment_reconciliation_records" (
+              id,
+              "runId",
+              stream,
+              status,
+              currency,
+              "expectedAmount",
+              "actualAmount",
+              "deltaAmount",
+              reference,
+              "externalReference",
+              "tripId",
+              "walletTopUpId",
+              "transferId",
+              "refundId",
+              "captureId",
+              "customerId",
+              "driverId",
+              "customerName",
+              "customerEmail",
+              "driverName",
+              "driverEmail",
+              reason,
+              "resolvedAt",
+              "createdAt",
+              "updatedAt"
+            )
+            VALUES (
+              ${this.createCuid()},
+              ${runId},
+              ${record.stream}::"PaymentReconciliationStream",
+              ${record.status}::"PaymentReconciliationStatus",
+              ${record.currency},
+              ${record.expectedAmount},
+              ${record.actualAmount},
+              ${record.deltaAmount},
+              ${record.reference},
+              ${record.externalReference},
+              ${record.tripId},
+              ${record.walletTopUpId},
+              ${record.transferId},
+              ${record.refundId},
+              ${record.captureId},
+              ${record.customerId},
+              ${record.driverId},
+              ${record.customerName},
+              ${record.customerEmail},
+              ${record.driverName},
+              ${record.driverEmail},
+              ${record.reason},
+              ${record.resolvedAt},
+              NOW(),
+              NOW()
+            )
+          `,
+        ),
+      ),
+    );
+  }
+
+  private async updatePaymentReconciliationRun(
+    runId: string,
+    input: {
+      status: PaymentReconciliationRunStatus;
+      finishedAt: Date;
+      errorMessage: string | null;
+      scannedCount?: number;
+      matchedCount?: number;
+      mismatchCount?: number;
+      missingCount?: number;
+    },
+  ): Promise<PaymentReconciliationRunRow> {
+    const rows = await this.prisma.$queryRaw<PaymentReconciliationRunRow[]>(
+      Prisma.sql`
+        UPDATE "payment_reconciliation_runs"
+        SET
+          status = ${input.status}::"PaymentReconciliationRunStatus",
+          "scannedCount" = ${input.scannedCount ?? 0},
+          "matchedCount" = ${input.matchedCount ?? 0},
+          "mismatchCount" = ${input.mismatchCount ?? 0},
+          "missingCount" = ${input.missingCount ?? 0},
+          "finishedAt" = ${input.finishedAt},
+          "errorMessage" = ${input.errorMessage},
+          "updatedAt" = NOW()
+        WHERE id = ${runId}
+        RETURNING
+          id,
+          stream,
+          status,
+          "scannedCount",
+          "matchedCount",
+          "mismatchCount",
+          "missingCount",
+          "errorMessage",
+          "startedAt",
+          "finishedAt",
+          "createdAt",
+          "updatedAt"
+      `,
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException('Payment reconciliation run not found.');
+    }
+
+    return rows[0];
+  }
+
+  private createCuid(): string {
+    return randomUUID().replace(/-/g, '');
+  }
+
+  private sumDecimalValues(values: Prisma.Decimal[]): Prisma.Decimal | null {
+    if (values.length === 0) {
+      return null;
+    }
+
+    return values.reduce(
+      (total, value) => total.add(value),
+      new Prisma.Decimal(0),
+    );
+  }
+
+  private decimalsEqual(
+    left: Prisma.Decimal | null,
+    right: Prisma.Decimal | null,
+  ): boolean {
+    if (left === null || right === null) {
+      return false;
+    }
+
+    return left.toDecimalPlaces(2).equals(right.toDecimalPlaces(2));
+  }
+
+  private calculateDeltaAmount(
+    expectedAmount: Prisma.Decimal | null,
+    actualAmount: Prisma.Decimal | null,
+  ): Prisma.Decimal | null {
+    if (expectedAmount === null || actualAmount === null) {
+      return null;
+    }
+
+    return actualAmount.sub(expectedAmount);
+  }
+
+  private decimalLikeToNumber(
+    value: Prisma.Decimal | number | string | null,
+  ): number | null {
+    if (value === null) {
+      return null;
+    }
+
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      return Number(value);
+    }
+
+    return Number(value);
   }
 
   private async getDriverReviewProfile(

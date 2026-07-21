@@ -171,4 +171,237 @@ describe('AdminService', () => {
       updatedAt: '2026-07-20T08:30:00.000Z',
     });
   });
+
+  it('runs wallet reconciliation jobs and persists a partial run for missing wallet transactions', async () => {
+    const runningRun = {
+      id: 'run-wallet-1',
+      stream: 'WALLET',
+      status: 'RUNNING',
+      scannedCount: 0,
+      matchedCount: 0,
+      mismatchCount: 0,
+      missingCount: 0,
+      errorMessage: null,
+      startedAt: new Date('2026-07-21T09:00:00.000Z'),
+      finishedAt: null,
+      createdAt: new Date('2026-07-21T09:00:00.000Z'),
+      updatedAt: new Date('2026-07-21T09:00:00.000Z'),
+    };
+    const completedRun = {
+      ...runningRun,
+      status: 'PARTIAL',
+      scannedCount: 1,
+      matchedCount: 0,
+      mismatchCount: 0,
+      missingCount: 1,
+      finishedAt: new Date('2026-07-21T09:00:05.000Z'),
+      updatedAt: new Date('2026-07-21T09:00:05.000Z'),
+    };
+
+    const prisma = {
+      customerWalletTopUp: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'topup-1',
+            walletId: 'wallet-1',
+            customerId: 'customer-1',
+            amount: new Prisma.Decimal('40.00'),
+            currency: 'CHF',
+            status: CustomerWalletTopUpStatus.SUCCEEDED,
+            stripePaymentIntentId: 'pi_topup_1',
+            stripeChargeId: 'ch_topup_1',
+            requiresManualReview: false,
+            failureReason: null,
+            createdAt: new Date('2026-07-21T08:00:00.000Z'),
+            updatedAt: new Date('2026-07-21T08:15:00.000Z'),
+            customer: {
+              id: 'customer-1',
+              name: 'Wallet Customer',
+              email: 'wallet@example.com',
+            },
+            walletTransactions: [],
+          },
+        ]),
+      },
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValueOnce([runningRun])
+        .mockResolvedValueOnce([completedRun]),
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      $transaction: jest.fn().mockImplementation(async (operations) => {
+        return Promise.all(operations);
+      }),
+    };
+    const service = new AdminService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
+
+    const result = await service.runPaymentReconciliation({
+      stream: 'wallet',
+    });
+
+    expect(prisma.customerWalletTopUp.findMany).toHaveBeenCalled();
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(result.runs).toEqual([
+      {
+        id: 'run-wallet-1',
+        stream: 'wallet',
+        status: 'PARTIAL',
+        startedAt: '2026-07-21T09:00:00.000Z',
+        finishedAt: '2026-07-21T09:00:05.000Z',
+        scannedCount: 1,
+        matchedCount: 0,
+        mismatchCount: 0,
+        missingCount: 1,
+        errorMessage: null,
+      },
+    ]);
+  });
+
+  it('lists reconciliation records from the latest runs', async () => {
+    const prisma = {
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            id: 'run-wallet-1',
+            stream: 'WALLET',
+            status: 'SUCCESS',
+            scannedCount: 2,
+            matchedCount: 2,
+            mismatchCount: 0,
+            missingCount: 0,
+            errorMessage: null,
+            startedAt: new Date('2026-07-21T09:00:00.000Z'),
+            finishedAt: new Date('2026-07-21T09:00:03.000Z'),
+            createdAt: new Date('2026-07-21T09:00:00.000Z'),
+            updatedAt: new Date('2026-07-21T09:00:03.000Z'),
+          },
+          {
+            id: 'run-capture-1',
+            stream: 'CAPTURE',
+            status: 'PARTIAL',
+            scannedCount: 3,
+            matchedCount: 2,
+            mismatchCount: 1,
+            missingCount: 0,
+            errorMessage: null,
+            startedAt: new Date('2026-07-21T09:01:00.000Z'),
+            finishedAt: new Date('2026-07-21T09:01:04.000Z'),
+            createdAt: new Date('2026-07-21T09:01:00.000Z'),
+            updatedAt: new Date('2026-07-21T09:01:04.000Z'),
+          },
+          {
+            id: 'run-refund-1',
+            stream: 'REFUND',
+            status: 'SUCCESS',
+            scannedCount: 1,
+            matchedCount: 1,
+            mismatchCount: 0,
+            missingCount: 0,
+            errorMessage: null,
+            startedAt: new Date('2026-07-21T09:02:00.000Z'),
+            finishedAt: new Date('2026-07-21T09:02:03.000Z'),
+            createdAt: new Date('2026-07-21T09:02:00.000Z'),
+            updatedAt: new Date('2026-07-21T09:02:03.000Z'),
+          },
+          {
+            id: 'run-transfer-1',
+            stream: 'TRANSFER',
+            status: 'FAILED',
+            scannedCount: 1,
+            matchedCount: 0,
+            mismatchCount: 0,
+            missingCount: 0,
+            errorMessage: 'Transfer reconciliation failed.',
+            startedAt: new Date('2026-07-21T09:03:00.000Z'),
+            finishedAt: new Date('2026-07-21T09:03:01.000Z'),
+            createdAt: new Date('2026-07-21T09:03:00.000Z'),
+            updatedAt: new Date('2026-07-21T09:03:01.000Z'),
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'record-1',
+            runId: 'run-capture-1',
+            stream: 'CAPTURE',
+            status: 'MISMATCH',
+            currency: 'CHF',
+            expectedAmount: '18.50',
+            actualAmount: '17.00',
+            deltaAmount: '-1.50',
+            reference: 'trip-1',
+            externalReference: 'ch_trip_1',
+            tripId: 'trip-1',
+            walletTopUpId: null,
+            transferId: null,
+            refundId: null,
+            captureId: 'hold-1',
+            customerId: 'customer-1',
+            driverId: null,
+            customerName: 'Trip Customer',
+            customerEmail: 'trip@example.com',
+            driverName: null,
+            driverEmail: null,
+            reason: 'Captured payment totals do not match across hold, request, and settlement.',
+            resolvedAt: null,
+            createdAt: new Date('2026-07-21T09:01:04.000Z'),
+            updatedAt: new Date('2026-07-21T09:01:04.000Z'),
+          },
+        ])
+        .mockResolvedValueOnce([{ count: 1n }]),
+    };
+    const service = new AdminService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
+
+    const result = await service.findPaymentReconciliation({
+      page: 1,
+      limit: 20,
+      stream: 'all',
+      status: 'all',
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.summary).toEqual({
+      walletCount: 2,
+      captureCount: 3,
+      refundCount: 1,
+      transferCount: 1,
+      mismatchCount: 1,
+      failedJobCount: 1,
+    });
+    expect(result.items[0]).toEqual({
+      id: 'record-1',
+      stream: 'captures',
+      status: 'mismatch',
+      currency: 'CHF',
+      expectedAmount: 18.5,
+      actualAmount: 17,
+      deltaAmount: -1.5,
+      reference: 'trip-1',
+      externalReference: 'ch_trip_1',
+      tripId: 'trip-1',
+      walletTopUpId: null,
+      transferId: null,
+      refundId: null,
+      captureId: 'hold-1',
+      customer: {
+        id: 'customer-1',
+        name: 'Trip Customer',
+        email: 'trip@example.com',
+      },
+      driver: null,
+      reason: 'Captured payment totals do not match across hold, request, and settlement.',
+      jobRunId: 'run-capture-1',
+      detectedAt: '2026-07-21T09:01:04.000Z',
+      resolvedAt: null,
+      createdAt: '2026-07-21T09:01:04.000Z',
+      updatedAt: '2026-07-21T09:01:04.000Z',
+    });
+  });
 });
