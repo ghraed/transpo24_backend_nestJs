@@ -58,7 +58,15 @@ export const DRIVER_PICKUP_ARRIVAL_RADIUS_METERS = 100;
 export const PICKUP_ITEM_RADIUS_METERS = 150;
 export const DELIVER_ITEM_RADIUS_METERS = 150;
 export const NEAR_DELIVERY_RADIUS_METERS = 5000;
-export const DRIVER_PAYOUT_DELAY_HOURS = 24;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY?.trim() ?? '';
+const IS_STRIPE_TEST_MODE = STRIPE_SECRET_KEY.startsWith('sk_test_');
+const DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE = process.env.DRIVER_PAYOUT_DELAY_HOURS?.trim() ?? '';
+const DRIVER_PAYOUT_DELAY_HOURS_FALLBACK = IS_STRIPE_TEST_MODE ? 0 : 24;
+const parsedDriverPayoutDelayHours = Number(DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE);
+export const DRIVER_PAYOUT_DELAY_HOURS =
+  DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE && Number.isFinite(parsedDriverPayoutDelayHours)
+    ? Math.max(0, parsedDriverPayoutDelayHours)
+    : DRIVER_PAYOUT_DELAY_HOURS_FALLBACK;
 const MAX_PROOF_PHOTOS = 8;
 const PLATFORM_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
 const DEFAULT_CURRENCY =
