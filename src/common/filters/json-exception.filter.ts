@@ -9,7 +9,7 @@ import type { Request, Response } from 'express';
 
 type ErrorBody = {
   statusCode: number;
-  message: string | string[];
+  message: string;
   error?: string;
   timestamp: string;
   path: string;
@@ -65,10 +65,11 @@ export class JsonExceptionFilter implements ExceptionFilter {
             typeof candidate.statusCode === 'number'
               ? candidate.statusCode
               : statusCode,
-          message:
-            candidate.message ??
-            exception.message ??
+          message: this.normalizeMessage(
+            candidate.message,
+            exception.message,
             'Unexpected server error.',
+          ),
           error: candidate.error ?? exception.name,
           timestamp: new Date().toISOString(),
           path,
@@ -86,5 +87,32 @@ export class JsonExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path,
     };
+  }
+
+  private normalizeMessage(
+    value: string | string[] | undefined,
+    fallback: string,
+    defaultMessage: string,
+  ): string {
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      const messages = value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      if (messages.length > 0) {
+        return messages.join(' ');
+      }
+    }
+
+    if (fallback.trim()) {
+      return fallback;
+    }
+
+    return defaultMessage;
   }
 }

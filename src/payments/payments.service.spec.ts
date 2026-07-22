@@ -2,12 +2,14 @@ jest.mock('../notifications/notifications.service', () => ({
   NotificationsService: class NotificationsServiceMock {},
 }));
 
+import { BadRequestException } from '@nestjs/common';
 import {
   AdditionalChargeStatus,
   CustomerWalletTopUpStatus,
   PaymentStatus,
   Prisma,
   TripPaymentSettlementStatus,
+  TransportRequestStatus,
 } from '@prisma/client';
 
 import { PaymentsService } from './payments.service';
@@ -149,8 +151,8 @@ describe('PaymentsService', () => {
       mimeType: 'image/jpeg',
       sizeBytes: 2048,
     });
-    expect(response.appFeeAmount).toBe(2);
-    expect(response.totalChargeAmount).toBe(21.95);
+    expect(response.appFeeAmount).toBe(0);
+    expect(response.totalChargeAmount).toBe(19.95);
     expect(response.approval).toEqual({
       approvedAt: '2026-07-03T08:03:00.000Z',
       approvedByCustomerId: 'customer-1',
@@ -169,6 +171,44 @@ describe('PaymentsService', () => {
       },
       failureReason: null,
     });
+  });
+
+  it('rejects additional charge approval after the trip is delivered', async () => {
+    const prisma = {
+      additionalCharge: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'charge-1',
+          requestId: 'request-1',
+          customerId: 'customer-1',
+          status: AdditionalChargeStatus.PENDING,
+          approvalInFlightAt: null,
+        }),
+      },
+      transportRequest: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'request-1',
+          customerId: 'customer-1',
+          status: TransportRequestStatus.DELIVERED,
+        }),
+      },
+    };
+    const serviceWithPrisma = new PaymentsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      serviceWithPrisma.approveAdditionalCharge({
+        customerId: 'customer-1',
+        requestId: 'request-1',
+        chargeId: 'charge-1',
+        confirmationLocale: 'en',
+        confirmationText: 'Agree',
+      }),
+    ).rejects.toThrow(
+      new BadRequestException('This additional charge request has expired.'),
+    );
   });
 
   it('schedules the first payout job for the earning availability time', async () => {

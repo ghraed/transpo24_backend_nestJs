@@ -9,6 +9,7 @@ import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 import type { File as MulterFile } from 'multer';
 import {
+  AdditionalChargeStatus,
   DriverEarningStatus,
   DriverPayoutState,
   DriverStatus,
@@ -962,7 +963,21 @@ export class TripsService {
 
     const currency =
       acceptedOffer?.currency ?? trip.currency ?? DEFAULT_CURRENCY;
-    const amounts = this.calculateDriverEarningAmounts(grossAmount);
+    const additionalChargeAggregate = await tx.additionalCharge.aggregate({
+      where: {
+        requestId: trip.id,
+        status: AdditionalChargeStatus.CAPTURED,
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+    const reimbursedExpenseAmount =
+      additionalChargeAggregate._sum.amount ?? new Prisma.Decimal(0);
+    const amounts = this.calculateDriverEarningAmounts(
+      grossAmount,
+      reimbursedExpenseAmount,
+    );
     const availableAt = this.calculateDriverEarningAvailableAt(
       trip.deliveredAt,
     );
@@ -983,6 +998,9 @@ export class TripsService {
     await tx.tripPaymentSettlement.updateMany({
       where: { requestId: trip.id },
       data: {
+        retainedAmount: amounts.grossAmount.sub(reimbursedExpenseAmount),
+        driverShareAmount: amounts.netAmount.sub(reimbursedExpenseAmount),
+        platformShareAmount: amounts.platformFeeAmount,
         driverPayoutState: DriverPayoutState.EARNING_CREATED,
         payoutFailureReason: null,
         payoutAttemptCount: 0,
@@ -992,18 +1010,27 @@ export class TripsService {
     });
   }
 
-  calculateDriverEarningAmounts(grossAmount: Prisma.Decimal): {
+  calculateDriverEarningAmounts(
+    grossAmount: Prisma.Decimal,
+    reimbursedExpenseAmount: Prisma.Decimal = new Prisma.Decimal(0),
+  ): {
     grossAmount: Prisma.Decimal;
     platformFeeAmount: Prisma.Decimal;
     netAmount: Prisma.Decimal;
   } {
-    const normalizedGross = new Prisma.Decimal(grossAmount).toDecimalPlaces(2);
-    const platformFeeAmount = normalizedGross
+    const normalizedServiceAmount = new Prisma.Decimal(grossAmount).toDecimalPlaces(2);
+    const normalizedReimbursedExpenseAmount = new Prisma.Decimal(
+      reimbursedExpenseAmount,
+    ).toDecimalPlaces(2);
+    const platformFeeAmount = normalizedServiceAmount
       .mul(PLATFORM_FEE_PERCENTAGE)
       .toDecimalPlaces(2);
-    const netAmount = normalizedGross.sub(platformFeeAmount).toDecimalPlaces(2);
+    const totalGrossAmount = normalizedServiceAmount
+      .add(normalizedReimbursedExpenseAmount)
+      .toDecimalPlaces(2);
+    const netAmount = totalGrossAmount.sub(platformFeeAmount).toDecimalPlaces(2);
     return {
-      grossAmount: normalizedGross,
+      grossAmount: totalGrossAmount,
       platformFeeAmount,
       netAmount,
     };

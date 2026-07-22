@@ -267,7 +267,7 @@ const SUCCESSFUL_COLLECTION_STATUSES = new Set<PaymentStatus>([
   PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
   PaymentStatus.PAYMENT_REFUNDED,
 ]);
-const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal(0.1);
+const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal(0);
 const TRIP_CANCELLATION_FEE_RATE = new Prisma.Decimal(0.15);
 const DRIVER_CANCELLATION_SHARE_RATE = new Prisma.Decimal(0.5);
 const STALE_PAYOUT_TRANSFER_MINUTES = 15;
@@ -783,6 +783,7 @@ export class PaymentsService {
     }
 
     if (
+      request.status === TransportRequestStatus.DELIVERED ||
       request.status === TransportRequestStatus.CANCELLED ||
       request.status === TransportRequestStatus.COMPLETED
     ) {
@@ -1153,10 +1154,30 @@ export class PaymentsService {
     }
 
     if (
+      request.status === TransportRequestStatus.DELIVERED ||
       request.status === TransportRequestStatus.CANCELLED ||
       request.status === TransportRequestStatus.COMPLETED
     ) {
       throw new BadRequestException('This additional charge request has expired.');
+    }
+
+    const existingEarning = await this.prisma.driverEarning.findUnique({
+      where: { tripId: input.requestId },
+      select: {
+        id: true,
+        status: true,
+        stripeTransferId: true,
+      },
+    });
+
+    if (
+      existingEarning &&
+      (existingEarning.status === DriverEarningStatus.PAID_OUT ||
+        existingEarning.stripeTransferId)
+    ) {
+      throw new ConflictException(
+        'This additional expense can no longer be approved because the driver payout for this trip has already been sent.',
+      );
     }
 
     const customer = await this.prisma.user.findUnique({
@@ -1269,6 +1290,20 @@ export class PaymentsService {
         select: ADDITIONAL_CHARGE_SELECT,
       });
 
+      if (existingEarning) {
+        await this.prisma.driverEarning.update({
+          where: { id: existingEarning.id },
+          data: {
+            grossAmount: {
+              increment: charge.amount,
+            },
+            netAmount: {
+              increment: charge.amount,
+            },
+          },
+        });
+      }
+
       const driverProfile = await this.prisma.driverProfile.findUnique({
         where: { id: updatedCharge.driverId },
         select: { userId: true },
@@ -1310,7 +1345,7 @@ export class PaymentsService {
       });
 
       this.toAdditionalChargeResponseDto(updatedCharge);
-      throw error;
+      throw new BadRequestException(failureReason);
     }
   }
 
