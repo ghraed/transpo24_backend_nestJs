@@ -470,6 +470,27 @@ export class TripsService {
       }
 
       if (current.itemPickedUpAt) {
+        const normalizedTrip = await tx.transportRequest.update({
+          where: { id: current.id },
+          data: {
+            status: TransportRequestStatus.ITEM_PICKED_UP,
+            pickupConfirmedByDriver: true,
+            pickupNotes: current.pickupNotes ?? input.notes ?? null,
+            pickupProofImageUrl:
+              current.pickupProofImageUrl ?? input.proofImageUrl ?? null,
+          },
+          select: {
+            id: true,
+            customerId: true,
+            assignedDriverId: true,
+            status: true,
+            itemPickedUpAt: true,
+            pickupNotes: true,
+            pickupProofImageUrl: true,
+            updatedAt: true,
+          },
+        });
+
         const proofPhotos = await tx.transportRequestProofPhoto.findMany({
           where: {
             requestId: current.id,
@@ -480,7 +501,7 @@ export class TripsService {
         });
 
         return {
-          trip: current,
+          trip: normalizedTrip,
           proofPhotos,
         };
       }
@@ -548,12 +569,6 @@ export class TripsService {
       driverProfile.id,
     );
 
-    if (trip.status !== TransportRequestStatus.ITEM_PICKED_UP) {
-      throw new BadRequestException(
-        'Trip status must be ITEM_PICKED_UP before starting delivery.',
-      );
-    }
-
     const now = new Date();
     const updated = await this.prisma.$transaction(async (tx) => {
       const current = await tx.transportRequest.findUnique({
@@ -563,6 +578,7 @@ export class TripsService {
           customerId: true,
           assignedDriverId: true,
           status: true,
+          itemPickedUpAt: true,
           driverGoingToDropoffAt: true,
           dropoffLatitude: true,
           dropoffLongitude: true,
@@ -575,27 +591,56 @@ export class TripsService {
         throw new NotFoundException('Trip not found.');
       }
 
-      if (current.status !== TransportRequestStatus.ITEM_PICKED_UP) {
+      if (
+        current.status !== TransportRequestStatus.ITEM_PICKED_UP &&
+        !(
+          current.status === TransportRequestStatus.DRIVER_ARRIVED_PICKUP &&
+          current.itemPickedUpAt
+        )
+      ) {
         throw new BadRequestException(
           'Trip status must be ITEM_PICKED_UP before starting delivery.',
         );
       }
 
-      if (current.driverGoingToDropoffAt) {
+      const normalizedTrip =
+        current.status === TransportRequestStatus.ITEM_PICKED_UP
+          ? current
+          : await tx.transportRequest.update({
+              where: { id: current.id },
+              data: {
+                status: TransportRequestStatus.ITEM_PICKED_UP,
+                pickupConfirmedByDriver: true,
+              },
+              select: {
+                id: true,
+                customerId: true,
+                assignedDriverId: true,
+                status: true,
+                itemPickedUpAt: true,
+                driverGoingToDropoffAt: true,
+                dropoffLatitude: true,
+                dropoffLongitude: true,
+                dropoffAddress: true,
+                updatedAt: true,
+              },
+            });
+
+      if (normalizedTrip.driverGoingToDropoffAt) {
         throw new BadRequestException(
           'Delivery has already started for this trip.',
         );
       }
 
       if (
-        current.dropoffLatitude === null ||
-        current.dropoffLongitude === null
+        normalizedTrip.dropoffLatitude === null ||
+        normalizedTrip.dropoffLongitude === null
       ) {
         throw new BadRequestException('Dropoff location is missing.');
       }
 
       return tx.transportRequest.update({
-        where: { id: current.id },
+        where: { id: normalizedTrip.id },
         data: {
           status: TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
           driverGoingToDropoffAt: now,
