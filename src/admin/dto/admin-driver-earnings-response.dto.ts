@@ -1,6 +1,11 @@
 import { DriverEarningStatus, DriverPayoutState } from '@prisma/client';
 
-export type AdminDriverEarningsView = 'all' | 'pending' | 'active' | 'failed';
+export type AdminDriverEarningsView =
+  | 'all'
+  | 'pending'
+  | 'active'
+  | 'failed'
+  | 'paid';
 
 export interface AdminDriverEarningPartyDto {
   id: string;
@@ -28,6 +33,8 @@ export interface AdminDriverEarningItemDto {
   driver: AdminDriverEarningPartyDto;
   customer: AdminDriverEarningPartyDto;
   stripe: AdminDriverStripeStatusDto;
+  grossAmount: number;
+  platformFeeAmount: number;
   netAmount: number;
   currency: string;
   earningStatus: DriverEarningStatus;

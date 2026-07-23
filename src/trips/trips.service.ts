@@ -55,9 +55,9 @@ const TERMINAL_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.COMPLETED,
 ];
 
-export const DRIVER_PICKUP_ARRIVAL_RADIUS_METERS = 100;
-export const PICKUP_ITEM_RADIUS_METERS = 150;
-export const DELIVER_ITEM_RADIUS_METERS = 150;
+export const DRIVER_PICKUP_ARRIVAL_RADIUS_METERS = 1500;
+export const PICKUP_ITEM_RADIUS_METERS = 1500;
+export const DELIVER_ITEM_RADIUS_METERS = 1500;
 export const NEAR_DELIVERY_RADIUS_METERS = 5000;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY?.trim() ?? '';
 const IS_STRIPE_TEST_MODE = STRIPE_SECRET_KEY.startsWith('sk_test_');

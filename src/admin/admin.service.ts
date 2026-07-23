@@ -242,6 +242,8 @@ type ReviewProfileSource = {
 type DriverEarningAdminSource = {
   id: string;
   tripId: string;
+  grossAmount: Prisma.Decimal;
+  platformFeeAmount: Prisma.Decimal;
   netAmount: Prisma.Decimal;
   currency: string;
   status: DriverEarningStatus;
@@ -907,6 +909,15 @@ export class AdminService {
         },
       },
     };
+    const paidWhere: Prisma.DriverEarningWhereInput = {
+      trip: {
+        paymentSettlement: {
+          is: {
+            driverPayoutState: DriverPayoutState.PAID_OUT,
+          },
+        },
+      },
+    };
 
     if (view === 'pending') {
       return pendingWhere;
@@ -920,8 +931,12 @@ export class AdminService {
       return failedWhere;
     }
 
+    if (view === 'paid') {
+      return paidWhere;
+    }
+
     return {
-      OR: [pendingWhere, activeWhere, failedWhere],
+      OR: [pendingWhere, activeWhere, failedWhere, paidWhere],
     };
   }
 
@@ -929,6 +944,8 @@ export class AdminService {
     return {
       id: true,
       tripId: true,
+      grossAmount: true,
+      platformFeeAmount: true,
       netAmount: true,
       currency: true,
       status: true,
@@ -1033,6 +1050,8 @@ export class AdminService {
         detailsSubmitted: earning.driver.stripeDetailsSubmitted,
         payoutsEnabled: earning.driver.stripePayoutsEnabled,
       },
+      grossAmount: Number(earning.grossAmount),
+      platformFeeAmount: Number(earning.platformFeeAmount),
       netAmount: Number(earning.netAmount),
       currency: earning.currency,
       earningStatus: earning.status,

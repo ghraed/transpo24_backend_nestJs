@@ -18,6 +18,6 @@ export class AdminDriverEarningsQueryDto {
   limit?: number = 20;
 
   @IsOptional()
-  @IsIn(['all', 'pending', 'active', 'failed'])
+  @IsIn(['all', 'pending', 'active', 'failed', 'paid'])
   view?: AdminDriverEarningsView = 'all';
 }
