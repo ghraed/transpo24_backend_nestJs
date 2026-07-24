@@ -103,6 +103,7 @@ describe('PaymentsService', () => {
             confirmationText: string | null;
           };
           payment: {
+            paymentOption: 'SAVED_CARD' | 'CASH_ON_DELIVERY' | null;
             stripePaymentIntentId: string | null;
             stripeChargeId: string | null;
             savedPaymentMethod: {
@@ -160,6 +161,7 @@ describe('PaymentsService', () => {
       confirmationText: 'Agree',
     });
     expect(response.payment).toEqual({
+      paymentOption: 'SAVED_CARD',
       stripePaymentIntentId: 'pi_123',
       stripeChargeId: 'ch_123',
       savedPaymentMethod: {

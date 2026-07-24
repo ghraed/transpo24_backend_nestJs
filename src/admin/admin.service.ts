@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
+  AdditionalChargeStatus,
   CustomerWalletTopUpStatus,
   DocumentStatus,
   DriverDocumentType,
@@ -115,6 +116,8 @@ const PAYMENT_RECONCILIATION_STREAMS: PaymentReconciliationStream[] = [
   PaymentReconciliationStream.REFUND,
   PaymentReconciliationStream.TRANSFER,
 ];
+
+const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal('0.10');
 
 type PaymentReconciliationRecordDraft = {
   stream: PaymentReconciliationStream;
@@ -268,6 +271,21 @@ type DriverEarningAdminSource = {
       name: string;
       email: string;
     };
+    additionalCharges: Array<{
+      id: string;
+      amount: Prisma.Decimal;
+      currency: string;
+      status: AdditionalChargeStatus;
+      approvedAt: Date | null;
+      stripePaymentIntentId: string | null;
+      stripeChargeId: string | null;
+      savedPaymentMethodId: string | null;
+      savedPaymentMethodBrand: string | null;
+      savedPaymentMethodLast4: string | null;
+      savedPaymentMethodExpMonth: number | null;
+      savedPaymentMethodExpYear: number | null;
+      createdAt: Date;
+    }>;
     paymentSettlement: {
       id: string;
       driverPayoutState: DriverPayoutState;
@@ -552,7 +570,9 @@ export class AdminService {
     ]);
 
     return {
-      items: items.map((item) => this.mapDriverEarning(item)),
+      items: (items as unknown as DriverEarningAdminSource[]).map((item) =>
+        this.mapDriverEarning(item),
+      ),
       total,
       summary,
     };
@@ -940,7 +960,7 @@ export class AdminService {
     };
   }
 
-  private driverEarningAdminSelect() {
+  private driverEarningAdminSelect(): Prisma.DriverEarningSelect {
     return {
       id: true,
       tripId: true,
@@ -977,6 +997,26 @@ export class AdminService {
               email: true,
             },
           },
+          additionalCharges: {
+            orderBy: {
+              createdAt: 'desc' as const,
+            },
+            select: {
+              id: true,
+              amount: true,
+              currency: true,
+              status: true,
+              approvedAt: true,
+              stripePaymentIntentId: true,
+              stripeChargeId: true,
+              savedPaymentMethodId: true,
+              savedPaymentMethodBrand: true,
+              savedPaymentMethodLast4: true,
+              savedPaymentMethodExpMonth: true,
+              savedPaymentMethodExpYear: true,
+              createdAt: true,
+            },
+          },
           paymentSettlement: {
             select: {
               id: true,
@@ -989,7 +1029,7 @@ export class AdminService {
           },
         },
       },
-    };
+    } satisfies Prisma.DriverEarningSelect;
   }
 
   private async getDriverEarningsSummary(): Promise<AdminDriverEarningSummaryDto> {
@@ -1018,7 +1058,7 @@ export class AdminService {
     return this.prisma.driverEarning.findUnique({
       where: { tripId },
       select: this.driverEarningAdminSelect(),
-    });
+    }) as Promise<DriverEarningAdminSource | null>;
   }
 
   private mapDriverEarning(
@@ -1069,7 +1109,68 @@ export class AdminService {
       stripeTransferStatus: earning.stripeTransferStatus,
       canRetry: retryState.canRetry,
       retryBlockedReason: retryState.retryBlockedReason,
+      additionalCharges: earning.trip.additionalCharges.map((charge) => ({
+        id: charge.id,
+        amount: Number(charge.amount),
+        appFeeAmount: Number(this.calculateAdditionalChargeAppFee(charge.amount)),
+        totalChargeAmount: Number(this.calculateAdditionalChargeTotal(charge.amount)),
+        currency: charge.currency,
+        status: charge.status,
+        paymentOption: this.getAdditionalChargePaymentOption({
+          approvedAt: charge.approvedAt,
+          stripePaymentIntentId: charge.stripePaymentIntentId,
+          stripeChargeId: charge.stripeChargeId,
+          savedPaymentMethodId: charge.savedPaymentMethodId,
+        }),
+        savedPaymentMethod: charge.savedPaymentMethodId
+          ? {
+              id: charge.savedPaymentMethodId,
+              brand: charge.savedPaymentMethodBrand,
+              last4: charge.savedPaymentMethodLast4,
+              expMonth: charge.savedPaymentMethodExpMonth,
+              expYear: charge.savedPaymentMethodExpYear,
+            }
+          : null,
+        createdAt: charge.createdAt.toISOString(),
+      })),
     };
+  }
+
+  private getAdditionalChargePaymentOption(input: {
+    approvedAt: Date | null;
+    stripePaymentIntentId: string | null;
+    stripeChargeId: string | null;
+    savedPaymentMethodId: string | null;
+  }): 'SAVED_CARD' | 'CASH_ON_DELIVERY' | null {
+    if (
+      input.savedPaymentMethodId ||
+      input.stripePaymentIntentId ||
+      input.stripeChargeId
+    ) {
+      return 'SAVED_CARD';
+    }
+
+    if (input.approvedAt) {
+      return 'CASH_ON_DELIVERY';
+    }
+
+    return null;
+  }
+
+  private calculateAdditionalChargeAppFee(
+    baseAmount: Prisma.Decimal,
+  ): Prisma.Decimal {
+    return baseAmount
+      .mul(ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE)
+      .toDecimalPlaces(2);
+  }
+
+  private calculateAdditionalChargeTotal(
+    baseAmount: Prisma.Decimal,
+  ): Prisma.Decimal {
+    return baseAmount
+      .add(this.calculateAdditionalChargeAppFee(baseAmount))
+      .toDecimalPlaces(2);
   }
 
   private getDriverEarningRetryState(earning: DriverEarningAdminSource): {

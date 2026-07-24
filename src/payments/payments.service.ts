@@ -82,6 +82,7 @@ type ApproveAdditionalChargeInput = {
   chargeId: string;
   confirmationLocale: string;
   confirmationText: string;
+  paymentOption: 'SAVED_CARD' | 'CASH_ON_DELIVERY';
 };
 
 type SaveDefaultPaymentMethodInput = {
@@ -902,6 +903,7 @@ export class PaymentsService {
       throw new NotFoundException('Customer account not found.');
     }
 
+
     const stripeCustomerId = await this.stripeService.ensureCustomer({
       customerId: customer.id,
       email: customer.email,
@@ -1107,6 +1109,7 @@ export class PaymentsService {
 
     const confirmationLocale = input.confirmationLocale.trim();
     const confirmationText = input.confirmationText.trim();
+    const paymentOption = input.paymentOption;
 
     if (!confirmationLocale) {
       throw new BadRequestException('confirmationLocale is required.');
@@ -1114,6 +1117,10 @@ export class PaymentsService {
 
     if (!confirmationText) {
       throw new BadRequestException('confirmationText is required.');
+    }
+
+    if (paymentOption !== 'SAVED_CARD' && paymentOption !== 'CASH_ON_DELIVERY') {
+      throw new BadRequestException('paymentOption is invalid.');
     }
 
     const charge = await this.prisma.additionalCharge.findFirst({
@@ -1211,6 +1218,49 @@ export class PaymentsService {
       throw new ConflictException(
         'This additional charge is already being processed. Please refresh and try again.',
       );
+    }
+
+    if (paymentOption === 'CASH_ON_DELIVERY') {
+      const updatedCharge = await this.prisma.additionalCharge.update({
+        where: { id: charge.id },
+        data: {
+          approvalInFlightAt: null,
+          status: AdditionalChargeStatus.CAPTURED,
+          approvedAt: new Date(),
+          approvedByCustomerId: input.customerId,
+          approvalLocale: confirmationLocale,
+          approvalConfirmationText: confirmationText,
+          stripePaymentIntentId: null,
+          stripeChargeId: null,
+          savedPaymentMethodId: null,
+          savedPaymentMethodBrand: null,
+          savedPaymentMethodLast4: null,
+          savedPaymentMethodExpMonth: null,
+          savedPaymentMethodExpYear: null,
+          paymentFailureReason: null,
+        },
+        select: ADDITIONAL_CHARGE_SELECT,
+      });
+
+      const driverProfile = await this.prisma.driverProfile.findUnique({
+        where: { id: updatedCharge.driverId },
+        select: { userId: true },
+      });
+
+      const response = this.toAdditionalChargeResponseDto(updatedCharge);
+
+      if (driverProfile?.userId) {
+        await this.notificationsService.notifyDriverAdditionalChargeApproved({
+          driverUserId: driverProfile.userId,
+          requestId: response.requestId,
+          amount: response.totalChargeAmount.toFixed(2),
+          currency: response.currency,
+          paymentOption: response.payment.paymentOption,
+          savedPaymentMethod: response.payment.savedPaymentMethod,
+        });
+      }
+
+      return response;
     }
 
     const stripeCustomerId = await this.stripeService.ensureCustomer({
@@ -1317,6 +1367,8 @@ export class PaymentsService {
           requestId: response.requestId,
           amount: response.totalChargeAmount.toFixed(2),
           currency: response.currency,
+          paymentOption: response.payment.paymentOption,
+          savedPaymentMethod: response.payment.savedPaymentMethod,
         });
       }
 
@@ -3282,6 +3334,13 @@ export class PaymentsService {
     createdAt: Date;
     updatedAt: Date;
   }): AdditionalChargeResponseDto {
+    const paymentOption = this.getAdditionalChargePaymentOption({
+      approvedAt: charge.approvedAt,
+      stripePaymentIntentId: charge.stripePaymentIntentId,
+      stripeChargeId: charge.stripeChargeId,
+      savedPaymentMethodId: charge.savedPaymentMethodId,
+    });
+
     return {
       id: charge.id,
       requestId: charge.requestId,
@@ -3306,6 +3365,7 @@ export class PaymentsService {
         confirmationText: charge.approvalConfirmationText,
       },
       payment: {
+        paymentOption,
         stripePaymentIntentId: charge.stripePaymentIntentId,
         stripeChargeId: charge.stripeChargeId,
         savedPaymentMethod: charge.savedPaymentMethodId
@@ -3323,6 +3383,27 @@ export class PaymentsService {
       createdAt: charge.createdAt.toISOString(),
       updatedAt: charge.updatedAt.toISOString(),
     };
+  }
+
+  private getAdditionalChargePaymentOption(input: {
+    approvedAt: Date | null;
+    stripePaymentIntentId: string | null;
+    stripeChargeId: string | null;
+    savedPaymentMethodId: string | null;
+  }): 'SAVED_CARD' | 'CASH_ON_DELIVERY' | null {
+    if (
+      input.savedPaymentMethodId ||
+      input.stripePaymentIntentId ||
+      input.stripeChargeId
+    ) {
+      return 'SAVED_CARD';
+    }
+
+    if (input.approvedAt) {
+      return 'CASH_ON_DELIVERY';
+    }
+
+    return null;
   }
 
   private toSavedPaymentMethodSummary(

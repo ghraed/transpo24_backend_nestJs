@@ -372,21 +372,35 @@ export class NotificationsService {
     requestId: string;
     amount: string;
     currency: string;
+    paymentOption: 'SAVED_CARD' | 'CASH_ON_DELIVERY' | null;
+    savedPaymentMethod?: {
+      brand: string | null;
+      last4: string | null;
+    } | null;
   }): Promise<void> {
     const normalizedCurrency = input.currency.trim().toUpperCase();
     const amountLabel = `${input.amount} ${normalizedCurrency}`;
+    const paymentLabel =
+      input.paymentOption === 'CASH_ON_DELIVERY'
+        ? 'by cash on delivery'
+        : input.savedPaymentMethod?.last4
+          ? `with ${(input.savedPaymentMethod.brand ?? 'card').toUpperCase()} •••• ${input.savedPaymentMethod.last4}`
+          : 'with the customer saved card';
 
     await this.sendToUsers({
       userIds: [input.driverUserId],
       app: PushApp.DRIVER,
       title: 'Additional expense approved',
-      body: `The client approved your additional expense of ${amountLabel}.`,
+      body: `The client approved your additional expense of ${amountLabel} ${paymentLabel}.`,
       type: 'ADDITIONAL_CHARGE_APPROVED',
       data: {
         requestId: input.requestId,
         tripId: input.requestId,
         amount: input.amount,
         currency: normalizedCurrency,
+        paymentOption: input.paymentOption,
+        savedPaymentMethodBrand: input.savedPaymentMethod?.brand ?? null,
+        savedPaymentMethodLast4: input.savedPaymentMethod?.last4 ?? null,
       },
     });
   }

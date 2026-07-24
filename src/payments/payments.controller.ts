@@ -192,6 +192,7 @@ export class PaymentsController {
       chargeId,
       confirmationLocale: dto.confirmationLocale,
       confirmationText: dto.confirmationText,
+      paymentOption: dto.paymentOption,
     });
 
     this.tripsGateway.emitAdditionalChargeAdded(charge.customerId, charge);
