@@ -527,6 +527,7 @@ type RequestDetailsSource = {
   requiresLoadingHelp: boolean;
   loadingWorkersCount: number | null;
   specialInstructions: string | null;
+  customerNote: string | null;
   service: {
     id: string;
     key: ServiceKey;
@@ -584,6 +585,7 @@ type AcceptedJobRequestSource = {
   requiresLoadingHelp: boolean;
   loadingWorkersCount: number | null;
   specialInstructions: string | null;
+  customerNote: string | null;
   service: {
     id: string;
     key: ServiceKey;
@@ -733,6 +735,7 @@ const DRIVER_REQUEST_DETAILS_SELECT = {
   requiresLoadingHelp: true,
   loadingWorkersCount: true,
   specialInstructions: true,
+  customerNote: true,
   service: {
     select: {
       id: true,
@@ -2622,6 +2625,7 @@ export class DriverService {
         requiresLoadingHelp: true,
         loadingWorkersCount: true,
         specialInstructions: true,
+        customerNote: true,
         service: {
           select: {
             id: true,
@@ -2702,6 +2706,7 @@ export class DriverService {
         requiresLoadingHelp: true,
         loadingWorkersCount: true,
         specialInstructions: true,
+        customerNote: true,
         service: {
           select: {
             id: true,
@@ -4474,6 +4479,7 @@ export class DriverService {
     return {
       ...summary,
       offerStatus,
+      customerNote: request.customerNote,
       customer: {
         firstName: customerFirstName,
         rating: null,
@@ -5692,6 +5698,7 @@ export class DriverService {
 
     return {
       ...summary,
+      customerNote: request.customerNote,
       customer: {
         firstName: customerFirstName,
         phone: null,

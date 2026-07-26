@@ -63,6 +63,7 @@ export interface DriverRequestAlertsResponseDto {
 
 export interface DriverRequestDetailsResponseDto extends DriverRequestAlertSummaryDto {
   offerStatus: DriverOfferStatus | null;
+  customerNote: string | null;
   customer: {
     firstName: string | null;
     rating: number | null;

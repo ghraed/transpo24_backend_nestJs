@@ -49,6 +49,7 @@ export interface DriverAcceptedJobSummaryDto {
 }
 
 export interface DriverAcceptedJobDetailsResponseDto extends DriverAcceptedJobSummaryDto {
+  customerNote: string | null;
   customer: {
     firstName: string | null;
     phone: string | null;
