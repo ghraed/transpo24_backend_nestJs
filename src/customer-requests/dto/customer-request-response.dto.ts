@@ -157,7 +157,7 @@ export class CustomerHomeResponseDto {
   customer!: {
     id: string;
     fullName: string | null;
-    email: string;
+    email: string | null;
     phone: string | null;
     avatarUrl: string | null;
   };

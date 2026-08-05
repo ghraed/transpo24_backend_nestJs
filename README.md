@@ -23,6 +23,44 @@ WEB_PUSH_VAPID_SUBJECT=mailto:admin@transpo24.com
 
 Do not expose the private VAPID key to the frontend. Browser Web Push requires HTTPS in production.
 
+## Customer authentication with Twilio Verify SMS
+
+Customer registration and login use the same two endpoints: an SMS verification is sent, and an approved code either signs in the existing customer for that E.164 phone number or creates a customer. Driver and admin email/password authentication is unchanged.
+
+Create a Verify Service in Twilio Console under **Verify > Services**, open it, and copy its `VA...` Service SID. Configure SMS for that Verify service, then set these backend-only values in `.env`:
+
+```env
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_VERIFY_SERVICE_SID=
+```
+
+Never use `EXPO_PUBLIC_` for these values and never commit real credentials. The API refuses to start if the required Twilio values are missing.
+
+Twilio trial accounts can send Verify OTPs only to recipient numbers verified in the Twilio Console. Twilio Verify selects the SMS sender automatically; do not set a fixed `from` number or include a purchased phone number in the Verify API request. Check the current [Twilio Verify SMS guide](https://www.twilio.com/docs/verify/sms) and [Verify API prerequisites](https://www.twilio.com/docs/verify/api/verification) before deployment.
+
+Phone numbers are independently normalized by both clients and the API and stored in E.164. Redis is used for shared OTP request/attempt throttling when configured; local development falls back to an in-process limiter. Twilio stores the OTP itself—the application database does not.
+
+Apply the additive migration and run verification with:
+
+```bash
+npm install
+npx prisma migrate deploy
+npx prisma generate
+npm run build
+npm test -- --runInBand
+```
+
+The migration adds nullable unique `User.phoneNumber`, `User.isProfileCompleted`, and revocable `refresh_sessions`. It does not delete, merge, or rewrite existing users, emails, or password hashes. Existing rows receive `isProfileCompleted = true`; their phone number remains `NULL` until deliberately linked. Before production deployment, audit any customer phone data held outside `User.phoneNumber` and explicitly backfill normalized, conflict-free values if applicable.
+
+Customer auth endpoints:
+
+- `POST /auth/phone/send-code`
+- `POST /auth/phone/verify-code`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `POST /auth/phone/complete-profile` (customer access token required)
+
 ## Google Cloud Translation
 
 Install dependencies, then configure one of these backend-only authentication modes:

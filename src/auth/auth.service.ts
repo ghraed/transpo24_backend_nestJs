@@ -1,4 +1,10 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from 'crypto';
 
 import {
   BadRequestException,
@@ -7,7 +13,7 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { DriverStatus, UserRole } from '@prisma/client';
+import { DriverStatus, Prisma, UserRole } from '@prisma/client';
 
 import type { AuthenticatedUser } from './auth.types';
 import { hashPassword, verifyPassword } from '../common/security/password.util';
@@ -18,6 +24,12 @@ import { RegisterDriverResponseDto } from './dto/register-driver-response.dto';
 import { RegisterDriverDto } from './dto/register-driver.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
+import { PhoneAuthResponseDto } from './dto/phone-auth-response.dto';
+import { SendPhoneCodeDto } from './dto/send-phone-code.dto';
+import { VerifyPhoneCodeDto } from './dto/verify-phone-code.dto';
+import { normalizePhoneNumber } from './phone-number.util';
+import { PhoneAuthRateLimitService } from './phone-auth-rate-limit.service';
+import { TwilioVerifyService } from './twilio-verify.service';
 
 type AccessTokenPayload = {
   sub: string;
@@ -43,12 +55,202 @@ interface RegisterDriverInput {
 const ACCESS_TOKEN_SECRET =
   process.env.ACCESS_TOKEN_SECRET ?? 'transpo24-dev-access-token-secret';
 const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+const CUSTOMER_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_DRIVER_FIRST_NAME = 'Driver';
 const DEFAULT_DRIVER_LAST_NAME = 'Account';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly customerSessionUserSelect = {
+    id: true,
+    name: true,
+    email: true,
+    phoneNumber: true,
+    role: true,
+    deletedAt: true,
+    isProfileCompleted: true,
+  } as const;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly twilioVerify: TwilioVerifyService,
+    private readonly phoneRateLimit: PhoneAuthRateLimitService,
+  ) {}
+
+  async sendPhoneCode(
+    dto: SendPhoneCodeDto,
+    ipAddress: string,
+  ): Promise<{ success: true; message: string }> {
+    const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
+    await this.phoneRateLimit.assertCanSend(phoneNumber, ipAddress);
+    await this.twilioVerify.sendCode(phoneNumber);
+
+    return { success: true, message: 'Verification code sent' };
+  }
+
+  async verifyPhoneCode(
+    dto: VerifyPhoneCodeDto,
+    ipAddress: string,
+  ): Promise<PhoneAuthResponseDto> {
+    const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
+    await this.phoneRateLimit.assertCanVerify(phoneNumber, ipAddress);
+    const verification = await this.twilioVerify.verifyCode(
+      phoneNumber,
+      dto.code,
+    );
+
+    if (verification === 'invalid') {
+      throw new UnauthorizedException('The verification code is incorrect.');
+    }
+    if (verification !== 'approved') {
+      throw new UnauthorizedException(
+        'The verification code has expired. Request a new code.',
+      );
+    }
+
+    const driverWithPhone = await this.prisma.driverProfile.findUnique({
+      where: { phone: phoneNumber },
+      select: { userId: true },
+    });
+    const existing = await this.prisma.user.findUnique({
+      where: { phoneNumber },
+      select: this.customerSessionUserSelect,
+    });
+
+    if (
+      driverWithPhone &&
+      (!existing || driverWithPhone.userId !== existing.id)
+    ) {
+      throw new ForbiddenException(
+        'This phone number cannot be used in the customer application.',
+      );
+    }
+
+    if (
+      existing &&
+      (existing.role !== UserRole.CUSTOMER || existing.deletedAt)
+    ) {
+      throw new ForbiddenException(
+        'This phone number cannot be used in the customer application.',
+      );
+    }
+
+    let user = existing;
+    let isNewUser = false;
+    if (!user) {
+      try {
+        user = await this.prisma.user.create({
+          data: {
+            name: 'Customer',
+            email: this.createCustomerPlaceholderEmail(phoneNumber),
+            passwordHash: hashPassword(randomBytes(32).toString('base64url')),
+            phoneNumber,
+            role: UserRole.CUSTOMER,
+            isProfileCompleted: false,
+          },
+          select: this.customerSessionUserSelect,
+        });
+        isNewUser = true;
+      } catch (error) {
+        if (
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          error.code !== 'P2002'
+        ) {
+          throw error;
+        }
+        user = await this.prisma.user.findUnique({
+          where: { phoneNumber },
+          select: this.customerSessionUserSelect,
+        });
+      }
+    }
+
+    if (!user || user.role !== UserRole.CUSTOMER || user.deletedAt) {
+      throw new ForbiddenException('Customer access is required.');
+    }
+
+    return this.issueCustomerSession(user, isNewUser);
+  }
+
+  async refreshCustomerSession(
+    refreshToken: string,
+  ): Promise<PhoneAuthResponseDto> {
+    const tokenHash = this.hashRefreshToken(refreshToken);
+    const session = await this.prisma.refreshSession.findUnique({
+      where: { tokenHash },
+      include: { user: { select: this.customerSessionUserSelect } },
+    });
+
+    if (
+      !session ||
+      session.revokedAt ||
+      session.expiresAt.getTime() <= Date.now() ||
+      session.user.role !== UserRole.CUSTOMER ||
+      session.user.deletedAt ||
+      !session.user.phoneNumber
+    ) {
+      throw new UnauthorizedException('Refresh session is invalid or expired.');
+    }
+
+    const replacement = this.createRefreshToken();
+    const replacementId = randomUUID();
+    await this.prisma.$transaction(async (tx) => {
+      const rotated = await tx.refreshSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: {
+          revokedAt: new Date(),
+          lastUsedAt: new Date(),
+          replacedById: replacementId,
+        },
+      });
+      if (rotated.count !== 1) {
+        throw new UnauthorizedException(
+          'Refresh session is invalid or expired.',
+        );
+      }
+      await tx.refreshSession.create({
+        data: {
+          id: replacementId,
+          userId: session.userId,
+          tokenHash: this.hashRefreshToken(replacement),
+          expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+        },
+      });
+    });
+
+    return this.buildCustomerSessionResponse(session.user, replacement, false);
+  }
+
+  async logoutCustomer(refreshToken: string): Promise<{ success: true }> {
+    await this.prisma.refreshSession.updateMany({
+      where: {
+        tokenHash: this.hashRefreshToken(refreshToken),
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date(), lastUsedAt: new Date() },
+    });
+    return { success: true };
+  }
+
+  async completeCustomerProfile(
+    userId: string,
+    name: string,
+  ): Promise<{ success: true; name: string }> {
+    const normalizedName = name.trim();
+    const updated = await this.prisma.user.updateMany({
+      where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
+      data: { name: normalizedName, isProfileCompleted: true },
+    });
+    if (updated.count !== 1) {
+      throw new ForbiddenException('Customer access is required.');
+    }
+    return { success: true, name: normalizedName };
+  }
 
   async resetUsersForTesting(): Promise<{
     deletedUsers: number;
@@ -460,6 +662,87 @@ export class AuthService {
     };
   }
 
+  private async issueCustomerSession(
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      phoneNumber: string | null;
+      role: UserRole;
+      deletedAt: Date | null;
+      isProfileCompleted: boolean;
+    },
+    isNewUser: boolean,
+  ): Promise<PhoneAuthResponseDto> {
+    const refreshToken = this.createRefreshToken();
+    await this.prisma.refreshSession.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashRefreshToken(refreshToken),
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      },
+    });
+    return this.buildCustomerSessionResponse(user, refreshToken, isNewUser);
+  }
+
+  private buildCustomerSessionResponse(
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      phoneNumber: string | null;
+      role: UserRole;
+      isProfileCompleted: boolean;
+    },
+    refreshToken: string,
+    isNewUser: boolean,
+  ): PhoneAuthResponseDto {
+    if (!user.phoneNumber || user.role !== UserRole.CUSTOMER) {
+      throw new ForbiddenException(
+        'Customer phone authentication is required.',
+      );
+    }
+
+    return {
+      accessToken: this.createAccessToken(
+        {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          hasDriverProfile: false,
+        },
+        CUSTOMER_ACCESS_TOKEN_TTL_SECONDS,
+      ),
+      refreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: UserRole.CUSTOMER,
+      },
+      isNewUser,
+      profileCompleted: user.isProfileCompleted,
+    };
+  }
+
+  private createCustomerPlaceholderEmail(phoneNumber: string): string {
+    const identifier = createHash('sha256')
+      .update(phoneNumber)
+      .digest('hex')
+      .slice(0, 32);
+    return `phone-${identifier}@customers.transpo24.local`;
+  }
+
+  private createRefreshToken(): string {
+    return randomBytes(48).toString('base64url');
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
   private normalizeCountryCodes(values: string[]): string[] {
     return Array.from(
       new Set(
@@ -548,14 +831,17 @@ export class AuthService {
     }
   }
 
-  private createAccessToken(user: AuthenticatedUser): string {
+  private createAccessToken(
+    user: AuthenticatedUser,
+    ttlSeconds = ACCESS_TOKEN_TTL_SECONDS,
+  ): string {
     const payload: AccessTokenPayload = {
       sub: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       hasDriverProfile: user.hasDriverProfile,
-      exp: Math.floor(Date.now() / 1000) + ACCESS_TOKEN_TTL_SECONDS,
+      exp: Math.floor(Date.now() / 1000) + ttlSeconds,
     };
 
     const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(

@@ -2870,6 +2870,7 @@ export class CustomerRequestsService {
         id: true,
         name: true,
         email: true,
+        phoneNumber: true,
       },
     });
 
@@ -2961,8 +2962,10 @@ export class CustomerRequestsService {
       customer: {
         id: customer.id,
         fullName: customer.name ?? null,
-        email: customer.email,
-        phone: null,
+        email: customer.email.endsWith('@customers.transpo24.local')
+          ? null
+          : customer.email,
+        phone: customer.phoneNumber,
         avatarUrl: null,
       },
       activeRequest: activeRequest

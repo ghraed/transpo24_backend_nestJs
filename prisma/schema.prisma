@@ -351,6 +351,8 @@ model User {
   name          String
   email         String             @unique
   passwordHash  String
+  phoneNumber   String?            @unique
+  isProfileCompleted Boolean       @default(true)
   role          UserRole           @default(CUSTOMER)
   stripeCustomerId String?         @unique
   deletedAt     DateTime?
@@ -369,9 +371,27 @@ model User {
   webPushSubscriptions WebPushSubscription[]
   paymentReconciliationRecords PaymentReconciliationRecord[]
   chatRooms     ChatRoom[]           @relation("ChatRoomClient")
+  refreshSessions RefreshSession[]
 
   @@index([deletedAt])
   @@index([role, deletedAt])
+}
+
+model RefreshSession {
+  id           String    @id @default(cuid())
+  userId       String
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("refresh_sessions")
 }
 
 model PushToken {

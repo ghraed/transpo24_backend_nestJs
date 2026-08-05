@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -7,6 +8,13 @@ import { RegisterDriverResponseDto } from './dto/register-driver-response.dto';
 import { RegisterDriverDto } from './dto/register-driver.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
 import { RegisterDto } from './dto/register.dto';
+import { PhoneAuthResponseDto } from './dto/phone-auth-response.dto';
+import { RefreshSessionDto } from './dto/refresh-session.dto';
+import { SendPhoneCodeDto } from './dto/send-phone-code.dto';
+import { VerifyPhoneCodeDto } from './dto/verify-phone-code.dto';
+import { CompleteCustomerProfileDto } from './dto/complete-customer-profile.dto';
+import { CustomerAuthGuard } from './guards/customer-auth.guard';
+import type { AuthenticatedRequest } from './auth.types';
 
 @Controller('auth')
 export class AuthController {
@@ -50,5 +58,42 @@ export class AuthController {
     keptEmail: string;
   }> {
     return this.authService.resetDriversForTesting();
+  }
+
+  @Post('phone/send-code')
+  sendPhoneCode(
+    @Body() dto: SendPhoneCodeDto,
+    @Req() request: Request,
+  ): Promise<{ success: true; message: string }> {
+    return this.authService.sendPhoneCode(dto, request.ip || 'unknown');
+  }
+
+  @Post('phone/verify-code')
+  verifyPhoneCode(
+    @Body() dto: VerifyPhoneCodeDto,
+    @Req() request: Request,
+  ): Promise<PhoneAuthResponseDto> {
+    return this.authService.verifyPhoneCode(dto, request.ip || 'unknown');
+  }
+
+  @Post('refresh')
+  refreshSession(
+    @Body() dto: RefreshSessionDto,
+  ): Promise<PhoneAuthResponseDto> {
+    return this.authService.refreshCustomerSession(dto.refreshToken);
+  }
+
+  @Post('logout')
+  logout(@Body() dto: RefreshSessionDto): Promise<{ success: true }> {
+    return this.authService.logoutCustomer(dto.refreshToken);
+  }
+
+  @UseGuards(CustomerAuthGuard)
+  @Post('phone/complete-profile')
+  completeCustomerProfile(
+    @Body() dto: CompleteCustomerProfileDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{ success: true; name: string }> {
+    return this.authService.completeCustomerProfile(request.user.id, dto.name);
   }
 }

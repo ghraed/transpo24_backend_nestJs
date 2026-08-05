@@ -15,11 +15,13 @@ import { TripsModule } from './trips/trips.module';
 import { ServicesModule } from './services/services.module';
 import { TranslationModule } from './translations/translations.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
+import { validateEnvironment } from './config/environment';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validateEnvironment,
     }),
     AdminModule,
     AuthModule,
