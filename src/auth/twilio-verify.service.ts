@@ -41,13 +41,22 @@ export class TwilioVerifyService {
       if (!['pending', 'approved'].includes(verification.status)) {
         throw new BadGatewayException(SEND_CODE_FAILURE_MESSAGE);
       }
+
+      this.logger.log(
+        JSON.stringify({
+          event: 'twilio_verify_send_accepted',
+          phone: maskPhoneNumber(phoneNumber),
+          verificationSid: verification.sid,
+          status: verification.status,
+        }),
+      );
     } catch (error) {
       if (error instanceof BadGatewayException) {
         throw error;
       }
 
       this.logTwilioFailure('send', phoneNumber, error);
-      throw new ServiceUnavailableException(SEND_CODE_FAILURE_MESSAGE);
+      throw new ServiceUnavailableException(this.sendFailureMessage(error));
     }
   }
 
@@ -106,5 +115,29 @@ export class TwilioVerifyService {
       return undefined;
     }
     return typeof error.code === 'number' ? error.code : undefined;
+  }
+
+  private sendFailureMessage(error: unknown): string {
+    const message = this.readMessage(error);
+    const providerCode = this.readCode(error);
+
+    if (!message) {
+      return SEND_CODE_FAILURE_MESSAGE;
+    }
+
+    return providerCode
+      ? `Twilio error ${providerCode}: ${message}`
+      : `Twilio error: ${message}`;
+  }
+
+  private readMessage(error: unknown): string | undefined {
+    if (!error || typeof error !== 'object' || !('message' in error)) {
+      return undefined;
+    }
+
+    const message = error.message;
+    return typeof message === 'string' && message.trim()
+      ? message.trim()
+      : undefined;
   }
 }

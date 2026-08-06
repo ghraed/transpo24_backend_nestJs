@@ -3,7 +3,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import { DriverStatus, Prisma, UserRole } from '@prisma/client';
 
 import { AuthService } from './auth.service';
 
@@ -21,7 +21,9 @@ function createHarness() {
   const prisma = {
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
       updateMany: jest.fn(),
     },
     driverProfile: { findUnique: jest.fn() },
@@ -146,17 +148,190 @@ describe('AuthService phone authentication', () => {
     ).rejects.toThrow(message);
   });
 
-  it('blocks a driver phone from the customer flow', async () => {
+  it('allows the same phone number to be used by a customer and a driver', async () => {
     const { service, prisma, twilio } = createHarness();
     twilio.verifyCode.mockResolvedValue('approved');
     prisma.driverProfile.findUnique.mockResolvedValue({ userId: 'driver-1' });
-    prisma.user.findUnique.mockResolvedValue(null);
-    await expect(
-      service.verifyPhoneCode(
-        { phoneNumber: customer.phoneNumber, code: '123456' },
-        '127.0.0.1',
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    prisma.user.findUnique.mockResolvedValue(customer);
+
+    const response = await service.verifyPhoneCode(
+      { phoneNumber: customer.phoneNumber, code: '123456' },
+      '127.0.0.1',
+    );
+
+    expect(response.user.phoneNumber).toBe(customer.phoneNumber);
+    expect(response.isNewUser).toBe(false);
+  });
+
+  it('creates a new customer even when the phone already belongs to a driver profile', async () => {
+    const { service, prisma, twilio } = createHarness();
+    twilio.verifyCode.mockResolvedValue('approved');
+    prisma.driverProfile.findUnique.mockResolvedValue({ userId: 'driver-1' });
+    prisma.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(customer);
+    prisma.user.create.mockResolvedValue(customer);
+
+    const response = await service.verifyPhoneCode(
+      { phoneNumber: customer.phoneNumber, code: '123456' },
+      '127.0.0.1',
+    );
+
+    expect(response.isNewUser).toBe(true);
+    expect(prisma.user.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a legacy driver user phone number for a customer account', async () => {
+    const { service, prisma, twilio } = createHarness();
+    const legacyDriver = {
+      ...customer,
+      id: 'driver-1',
+      role: UserRole.DRIVER,
+    };
+    twilio.verifyCode.mockResolvedValue('approved');
+    prisma.user.findUnique
+      .mockResolvedValueOnce(legacyDriver)
+      .mockResolvedValueOnce(customer);
+    prisma.driverProfile.findUnique.mockResolvedValue({
+      phone: customer.phoneNumber,
+    });
+    prisma.user.create.mockResolvedValue(customer);
+
+    const response = await service.verifyPhoneCode(
+      { phoneNumber: customer.phoneNumber, code: '123456' },
+      '127.0.0.1',
+    );
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'driver-1' },
+      data: { phoneNumber: null },
+    });
+    expect(response.isNewUser).toBe(true);
+  });
+
+  it('reactivates a deleted customer after successful phone verification', async () => {
+    const { service, prisma, twilio } = createHarness();
+    const deletedCustomer = {
+      ...customer,
+      deletedAt: new Date('2026-08-06T08:51:25.305Z'),
+    };
+    twilio.verifyCode.mockResolvedValue('approved');
+    prisma.user.findUnique.mockResolvedValue(deletedCustomer);
+    prisma.user.update.mockResolvedValue(customer);
+
+    const response = await service.verifyPhoneCode(
+      { phoneNumber: customer.phoneNumber, code: '123456' },
+      '127.0.0.1',
+    );
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: customer.id },
+      data: { deletedAt: null },
+      select: expect.any(Object),
+    });
+    expect(response.isNewUser).toBe(false);
+  });
+
+  it('keeps a newly registered driver in the onboarding flow', async () => {
+    const { service, prisma } = createHarness();
+    prisma.$transaction.mockResolvedValue([null, null]);
+    prisma.user.create.mockResolvedValue({
+      id: 'driver-user-1',
+      email: 'driver@example.com',
+      role: UserRole.DRIVER,
+      driverProfile: {
+        id: 'driver-profile-1',
+        firstName: 'New',
+        lastName: 'Driver',
+        phone: '+96170123457',
+        countryCode: 'LB',
+        countryCodes: ['LB'],
+        city: 'Beirut',
+        cities: ['Beirut'],
+        status: DriverStatus.PENDING_PROFILE,
+        isProfileCompleted: false,
+      },
+    });
+
+    const response = await service.registerDriver({
+      firstName: 'New',
+      lastName: 'Driver',
+      email: 'driver@example.com',
+      phone: '+96170123457',
+      password: 'driver@test.com',
+      countryCode: 'LB',
+      countryCodes: ['LB'],
+      city: 'Beirut',
+      cities: ['Beirut'],
+    });
+
+    expect(response.nextStep).toBe('COMPLETE_PROFILE');
+    expect(response.driver.status).toBe(DriverStatus.PENDING_PROFILE);
+    expect(response.driver.isProfileCompleted).toBe(false);
+  });
+
+  it('creates a new driver account through phone verification', async () => {
+    const { service, prisma, twilio } = createHarness();
+    twilio.verifyCode.mockResolvedValue('approved');
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      id: 'driver-user-2',
+      name: 'Driver',
+      email: 'phone-driver@example.com',
+      role: UserRole.DRIVER,
+      deletedAt: null,
+      driverProfile: {
+        id: 'driver-profile-2',
+        firstName: '',
+        lastName: '',
+        phone: '+96170123458',
+        countryCode: null,
+        countryCodes: [],
+        city: null,
+        cities: [],
+        status: DriverStatus.PENDING_PROFILE,
+        isProfileCompleted: false,
+      },
+    });
+
+    const response = await service.verifyDriverPhoneCode(
+      { phoneNumber: '+96170123458', code: '123456' },
+      '127.0.0.1',
+    );
+
+    expect(response.user.role).toBe(UserRole.DRIVER);
+    expect(response.driver?.phone).toBe('+96170123458');
+    expect(response.nextStep).toBe('COMPLETE_PROFILE');
+  });
+
+  it('logs an existing driver in through phone verification', async () => {
+    const { service, prisma, twilio } = createHarness();
+    twilio.verifyCode.mockResolvedValue('approved');
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'driver-user-3',
+      name: 'Existing Driver',
+      email: 'existing-driver@example.com',
+      role: UserRole.DRIVER,
+      deletedAt: null,
+      driverProfile: {
+        id: 'driver-profile-3',
+        firstName: 'Existing',
+        lastName: 'Driver',
+        phone: '+96170123459',
+        countryCode: 'LB',
+        countryCodes: ['LB'],
+        city: 'Beirut',
+        cities: ['Beirut'],
+        status: DriverStatus.PENDING_DOCUMENTS,
+        isProfileCompleted: true,
+      },
+    });
+
+    const response = await service.verifyDriverPhoneCode(
+      { phoneNumber: '+96170123459', code: '123456' },
+      '127.0.0.1',
+    );
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(response.nextStep).toBe('UPLOAD_DOCUMENTS');
   });
 
   it('rotates a valid refresh session', async () => {

@@ -37,6 +37,22 @@ export class AuthController {
     return this.authService.loginDriver(dto);
   }
 
+  @Post('driver/phone/send-code')
+  sendDriverPhoneCode(
+    @Body() dto: SendPhoneCodeDto,
+    @Req() request: Request,
+  ): Promise<{ success: true; message: string }> {
+    return this.authService.sendDriverPhoneCode(dto, request.ip || 'unknown');
+  }
+
+  @Post('driver/phone/verify-code')
+  verifyDriverPhoneCode(
+    @Body() dto: VerifyPhoneCodeDto,
+    @Req() request: Request,
+  ): Promise<LoginResponseDto> {
+    return this.authService.verifyDriverPhoneCode(dto, request.ip || 'unknown');
+  }
+
   @Post('login')
   login(@Body() dto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.login(dto);

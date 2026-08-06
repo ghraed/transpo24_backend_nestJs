@@ -72,6 +72,28 @@ export class AuthService {
     isProfileCompleted: true,
   } as const;
 
+  private readonly driverSessionUserSelect = {
+    id: true,
+    name: true,
+    email: true,
+    role: true,
+    deletedAt: true,
+    driverProfile: {
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        countryCode: true,
+        countryCodes: true,
+        city: true,
+        cities: true,
+        status: true,
+        isProfileCompleted: true,
+      },
+    },
+  } as const;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly twilioVerify: TwilioVerifyService,
@@ -89,42 +111,45 @@ export class AuthService {
     return { success: true, message: 'Verification code sent' };
   }
 
+  async sendDriverPhoneCode(
+    dto: SendPhoneCodeDto,
+    ipAddress: string,
+  ): Promise<{ success: true; message: string }> {
+    return this.sendPhoneCode(dto, ipAddress);
+  }
+
   async verifyPhoneCode(
     dto: VerifyPhoneCodeDto,
     ipAddress: string,
   ): Promise<PhoneAuthResponseDto> {
     const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
-    await this.phoneRateLimit.assertCanVerify(phoneNumber, ipAddress);
-    const verification = await this.twilioVerify.verifyCode(
-      phoneNumber,
-      dto.code,
-    );
-
-    if (verification === 'invalid') {
-      throw new UnauthorizedException('The verification code is incorrect.');
-    }
-    if (verification !== 'approved') {
-      throw new UnauthorizedException(
-        'The verification code has expired. Request a new code.',
-      );
-    }
-
-    const driverWithPhone = await this.prisma.driverProfile.findUnique({
-      where: { phone: phoneNumber },
-      select: { userId: true },
-    });
-    const existing = await this.prisma.user.findUnique({
+    await this.assertApprovedPhoneVerification(phoneNumber, dto.code, ipAddress);
+    let existing = await this.prisma.user.findUnique({
       where: { phoneNumber },
       select: this.customerSessionUserSelect,
     });
 
-    if (
-      driverWithPhone &&
-      (!existing || driverWithPhone.userId !== existing.id)
-    ) {
-      throw new ForbiddenException(
-        'This phone number cannot be used in the customer application.',
-      );
+    if (existing?.role === UserRole.DRIVER && !existing.deletedAt) {
+      const driverProfile = await this.prisma.driverProfile.findUnique({
+        where: { userId: existing.id },
+        select: { phone: true },
+      });
+
+      if (driverProfile?.phone === phoneNumber) {
+        await this.prisma.user.update({
+          where: { id: existing.id },
+          data: { phoneNumber: null },
+        });
+        existing = null;
+      }
+    }
+
+    if (existing?.role === UserRole.CUSTOMER && existing.deletedAt) {
+      existing = await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { deletedAt: null },
+        select: this.customerSessionUserSelect,
+      });
     }
 
     if (
@@ -171,6 +196,51 @@ export class AuthService {
     }
 
     return this.issueCustomerSession(user, isNewUser);
+  }
+
+  async verifyDriverPhoneCode(
+    dto: VerifyPhoneCodeDto,
+    ipAddress: string,
+  ): Promise<LoginResponseDto> {
+    const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
+    await this.assertApprovedPhoneVerification(phoneNumber, dto.code, ipAddress);
+
+    let user = await this.prisma.user.findFirst({
+      where: {
+        role: UserRole.DRIVER,
+        driverProfile: {
+          is: { phone: phoneNumber },
+        },
+      },
+      select: this.driverSessionUserSelect,
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          name: 'Driver',
+          email: this.createDriverPlaceholderEmail(phoneNumber),
+          passwordHash: hashPassword(randomBytes(32).toString('base64url')),
+          role: UserRole.DRIVER,
+          driverProfile: {
+            create: {
+              firstName: '',
+              lastName: '',
+              phone: phoneNumber,
+              countryCode: null,
+              countryCodes: [],
+              city: null,
+              cities: [],
+              status: DriverStatus.PENDING_PROFILE,
+              isProfileCompleted: false,
+            },
+          },
+        },
+        select: this.driverSessionUserSelect,
+      });
+    }
+
+    return this.buildDriverAuthResponse(user);
   }
 
   async refreshCustomerSession(
@@ -733,6 +803,96 @@ export class AuthService {
       .digest('hex')
       .slice(0, 32);
     return `phone-${identifier}@customers.transpo24.local`;
+  }
+
+  private createDriverPlaceholderEmail(phoneNumber: string): string {
+    const identifier = createHash('sha256')
+      .update(phoneNumber)
+      .digest('hex')
+      .slice(0, 32);
+    return `phone-${identifier}@drivers.transpo24.local`;
+  }
+
+  private async assertApprovedPhoneVerification(
+    phoneNumber: string,
+    code: string,
+    ipAddress: string,
+  ): Promise<void> {
+    await this.phoneRateLimit.assertCanVerify(phoneNumber, ipAddress);
+    const verification = await this.twilioVerify.verifyCode(phoneNumber, code);
+
+    if (verification === 'invalid') {
+      throw new UnauthorizedException('The verification code is incorrect.');
+    }
+
+    if (verification !== 'approved') {
+      throw new UnauthorizedException(
+        'The verification code has expired. Request a new code.',
+      );
+    }
+  }
+
+  private buildDriverAuthResponse(user: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    deletedAt: Date | null;
+    driverProfile: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      countryCode: string | null;
+      countryCodes: string[];
+      city: string | null;
+      cities: string[];
+      status: DriverStatus;
+      isProfileCompleted: boolean;
+    } | null;
+  }): LoginResponseDto {
+    if (
+      user.role !== UserRole.DRIVER ||
+      user.deletedAt ||
+      !user.driverProfile
+    ) {
+      throw new ForbiddenException('Driver access is required.');
+    }
+
+    const nextStep = this.getDriverLoginNextStep({
+      status: user.driverProfile.status,
+      isProfileCompleted: user.driverProfile.isProfileCompleted,
+    });
+
+    return {
+      accessToken: this.createAccessToken({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        hasDriverProfile: true,
+      }),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      driver: {
+        id: user.driverProfile.id,
+        firstName: user.driverProfile.firstName,
+        lastName: user.driverProfile.lastName,
+        phone: user.driverProfile.phone,
+        countryCode: user.driverProfile.countryCode,
+        countryCodes: user.driverProfile.countryCodes,
+        city: user.driverProfile.city,
+        cities: user.driverProfile.cities,
+        status: user.driverProfile.status,
+        isProfileCompleted: user.driverProfile.isProfileCompleted,
+      },
+      nextStep:
+        nextStep === 'ADD_VEHICLE_DOCUMENTS' ? 'UPLOAD_DOCUMENTS' : nextStep,
+    };
   }
 
   private createRefreshToken(): string {
