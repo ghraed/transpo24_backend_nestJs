@@ -243,6 +243,27 @@ export class AuthService {
     return this.buildDriverAuthResponse(user);
   }
 
+  async continueDriverSession(accessToken: string): Promise<LoginResponseDto> {
+    // The token is held in Expo SecureStore and acts as this phone's trusted
+    // credential. Its normal expiry is intentionally ignored here so a driver
+    // can return on the same device without another SMS verification.
+    const trustedUser = this.getUserFromSignedAccessToken(accessToken, true);
+    if (!trustedUser || trustedUser.role !== UserRole.DRIVER) {
+      throw new UnauthorizedException('Trusted driver session is invalid.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: trustedUser.id },
+      select: this.driverSessionUserSelect,
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Trusted driver session is invalid.');
+    }
+
+    return this.buildDriverAuthResponse(user);
+  }
+
   async refreshCustomerSession(
     refreshToken: string,
   ): Promise<PhoneAuthResponseDto> {
@@ -935,6 +956,13 @@ export class AuthService {
   }
 
   getUserFromAccessToken(token: string): AuthenticatedUser | null {
+    return this.getUserFromSignedAccessToken(token, false);
+  }
+
+  private getUserFromSignedAccessToken(
+    token: string,
+    allowExpired: boolean,
+  ): AuthenticatedUser | null {
     const [encodedPayload, providedSignature] = token.split('.');
     if (!encodedPayload || !providedSignature) {
       return null;
@@ -972,7 +1000,7 @@ export class AuthService {
         return null;
       }
 
-      if (payload.exp * 1000 <= Date.now()) {
+      if (!allowExpired && payload.exp * 1000 <= Date.now()) {
         return null;
       }
 

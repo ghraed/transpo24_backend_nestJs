@@ -13,6 +13,7 @@ import { RefreshSessionDto } from './dto/refresh-session.dto';
 import { SendPhoneCodeDto } from './dto/send-phone-code.dto';
 import { VerifyPhoneCodeDto } from './dto/verify-phone-code.dto';
 import { CompleteCustomerProfileDto } from './dto/complete-customer-profile.dto';
+import { ContinueDriverSessionDto } from './dto/continue-driver-session.dto';
 import { CustomerAuthGuard } from './guards/customer-auth.guard';
 import type { AuthenticatedRequest } from './auth.types';
 
@@ -51,6 +52,13 @@ export class AuthController {
     @Req() request: Request,
   ): Promise<LoginResponseDto> {
     return this.authService.verifyDriverPhoneCode(dto, request.ip || 'unknown');
+  }
+
+  @Post('driver/session/continue')
+  continueDriverSession(
+    @Body() dto: ContinueDriverSessionDto,
+  ): Promise<LoginResponseDto> {
+    return this.authService.continueDriverSession(dto.accessToken);
   }
 
   @Post('login')
