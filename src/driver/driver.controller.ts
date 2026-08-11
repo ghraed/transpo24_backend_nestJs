@@ -309,7 +309,7 @@ export class DriverController {
       coverageAreas: dto.coverageAreas ?? null,
       fullNameOnId: dto.fullNameOnId ?? null,
       dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-      idOrResidencyNumber: dto.idOrResidencyNumber ?? null,
+      idOrResidencyNumber: dto.idOrResidencyNumber,
       addressLine1: dto.addressLine1 ?? null,
       addressLine2: dto.addressLine2 ?? null,
       postalCode: dto.postalCode ?? null,

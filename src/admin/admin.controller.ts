@@ -8,6 +8,7 @@ import {
   Query,
   Put,
   UseGuards,
+  StreamableFile,
 } from '@nestjs/common';
 
 import { AdminService } from './admin.service';
@@ -33,6 +34,9 @@ import {
 import { AdminDriverReviewResponseDto } from './dto/admin-driver-review-response.dto';
 import { ReviewDriverRequestDto } from './dto/review-driver-request.dto';
 import { RunPaymentReconciliationDto } from './dto/run-payment-reconciliation.dto';
+import { createReadStream } from 'node:fs';
+import { AdminDeliveryOperationsQueryDto } from './dto/admin-delivery-operations-query.dto';
+import { AdminDeliveryOperationsListResponseDto } from './dto/admin-delivery-operations-response.dto';
 
 @Controller('admin')
 @UseGuards(AuthenticatedUserGuard, AdminRoleGuard)
@@ -84,6 +88,22 @@ export class AdminController {
     @Query() query: AdminDriverEarningsQueryDto,
   ): Promise<AdminDriverEarningsListResponseDto> {
     return this.adminService.findDriverEarnings(query);
+  }
+
+  @Get('delivery-operations')
+  findDeliveryOperations(
+    @Query() query: AdminDeliveryOperationsQueryDto,
+  ): Promise<AdminDeliveryOperationsListResponseDto> {
+    return this.adminService.findDeliveryOperations(query);
+  }
+
+  @Get('delivery-operations/proofs/:proofId/view-image')
+  async viewDeliveryProof(@Param('proofId') proofId: string): Promise<StreamableFile> {
+    const proof = await this.adminService.getDeliveryProofImage(proofId);
+    return new StreamableFile(createReadStream(proof.path), {
+      type: proof.mimeType,
+      disposition: 'inline',
+    });
   }
 
   @Get('payments/disputes')

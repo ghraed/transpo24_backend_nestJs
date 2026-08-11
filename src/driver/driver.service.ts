@@ -3399,6 +3399,15 @@ export class DriverService {
     existingProfile: DriverProfileSource;
     changes: Partial<UpdateDriverProfileInput>;
   }): Promise<DriverProfileSource> {
+    if (
+      input.existingProfile.idOrResidencyNumber &&
+      input.changes.idOrResidencyNumber !== undefined
+    ) {
+      throw new BadRequestException(
+        'ID or residency number cannot be changed after it has been saved.',
+      );
+    }
+
     const nextFirstName =
       input.changes.firstName !== undefined
         ? input.changes.firstName.trim()

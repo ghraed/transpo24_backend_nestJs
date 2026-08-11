@@ -7,6 +7,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { extname, resolve, sep } from 'node:path';
 import {
   AdditionalChargeStatus,
   CustomerWalletTopUpStatus,
@@ -62,6 +64,15 @@ import {
   AdminDriverReviewVehicleDto,
 } from './dto/admin-driver-review-response.dto';
 import { RunPaymentReconciliationDto } from './dto/run-payment-reconciliation.dto';
+import { AdminDeliveryOperationsQueryDto } from './dto/admin-delivery-operations-query.dto';
+import {
+  AdminDeliveryOperationsItemDto,
+  AdminDeliveryOperationsListResponseDto,
+  AdminDeliveryOperationsOfferDto,
+  AdminDeliveryOperationsPartyDto,
+  AdminDeliveryOperationsPhotoDto,
+  AdminDeliveryOperationsSummaryDto,
+} from './dto/admin-delivery-operations-response.dto';
 
 const DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES: DriverDocumentType[] = [
   DriverDocumentType.PERSONAL_SELFIE,
@@ -240,6 +251,69 @@ type ReviewProfileSource = {
   };
   documents: ReviewDocumentSource[];
   vehicles: ReviewVehicleSource[];
+};
+
+type DeliveryOperationsSource = {
+  id: string;
+  status: string;
+  createdAt: Date;
+  submittedAt: Date | null;
+  scheduledPickupAt: Date | null;
+  isImmediate: boolean;
+  pickupAddress: string | null;
+  dropoffAddress: string | null;
+  itemTitle: string | null;
+  itemType: string | null;
+  itemDescription: string | null;
+  itemBrand: string | null;
+  itemModel: string | null;
+  itemYear: number | null;
+  itemCondition: string | null;
+  itemWeightKg: number | null;
+  itemLengthCm: number | null;
+  itemWidthCm: number | null;
+  itemHeightCm: number | null;
+  specialInstructions: string | null;
+  customerNote: string | null;
+  goodsDescription: string | null;
+  goodsNumberOfPieces: number | null;
+  goodsIsFragile: boolean;
+  furnitureDescription: string | null;
+  furnitureApproximateItemCount: number | null;
+  vehicleVin: string | null;
+  vehicleBrand: string | null;
+  vehicleModel: string | null;
+  vehicleManufactureYear: number | null;
+  acceptedOfferId: string | null;
+  acceptedAt: Date | null;
+  driverArrivedPickupAt: Date | null;
+  itemPickedUpAt: Date | null;
+  driverGoingToDropoffAt: Date | null;
+  deliveredAt: Date | null;
+  completedAt: Date | null;
+  pickupNotes: string | null;
+  deliveryNotes: string | null;
+  pickupProofImageUrl: string | null;
+  deliveryProofImageUrl: string | null;
+  pickupConfirmedByDriver: boolean;
+  deliveryConfirmedByDriver: boolean;
+  finalPrice: Prisma.Decimal | null;
+  currency: string | null;
+  paymentStatus: string | null;
+  paymentMethod: string | null;
+  heldAmount: Prisma.Decimal | null;
+  capturedAmount: Prisma.Decimal | null;
+  service: { nameEn: string };
+  customer: { id: string; name: string; email: string; phoneNumber: string | null };
+  assignedDriver: { id: string; phone: string; user: { name: string; email: string; phoneNumber: string | null } } | null;
+  offers: Array<{
+    id: string; price: Prisma.Decimal; currency: string; status: string; message: string | null;
+    estimatedPickupAt: Date | null; estimatedDeliveryAt: Date | null; estimatedDurationMinutes: number | null;
+    createdAt: Date; acceptedAt: Date | null; rejectedAt: Date | null; cancelledAt: Date | null;
+    driver: { id: string; phone: string; user: { name: string; email: string; phoneNumber: string | null } };
+  }>;
+  photos: Array<{ id: string; url: string; originalName: string | null; createdAt: Date }>;
+  proofPhotos: Array<{ id: string; type: string; url: string; originalName: string | null; createdAt: Date }>;
 };
 
 type DriverEarningAdminSource = {
@@ -576,6 +650,70 @@ export class AdminService {
       total,
       summary,
     };
+  }
+
+  async findDeliveryOperations(
+    query: AdminDeliveryOperationsQueryDto,
+  ): Promise<AdminDeliveryOperationsListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where = this.buildDeliveryOperationsWhere(query);
+    const [records, total, summary] = await Promise.all([
+      this.prisma.transportRequest.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: this.deliveryOperationsSelect(),
+      }),
+      this.prisma.transportRequest.count({ where }),
+      this.getDeliveryOperationsSummary(),
+    ]);
+
+    return {
+      items: (records as unknown as DeliveryOperationsSource[]).map((record) =>
+        this.mapDeliveryOperationsRecord(record),
+      ),
+      total,
+      summary,
+    };
+  }
+
+  async getDeliveryProofImage(
+    proofId: string,
+  ): Promise<{ path: string; mimeType: string }> {
+    const legacyMatch = /^legacy-(pickup|delivery)-(.+)$/.exec(proofId);
+
+    if (legacyMatch) {
+      const [, kind, requestId] = legacyMatch;
+      const request = await this.prisma.transportRequest.findUnique({
+        where: { id: requestId },
+        select: {
+          pickupProofImageUrl: true,
+          deliveryProofImageUrl: true,
+        },
+      });
+      const url = kind === 'pickup'
+        ? request?.pickupProofImageUrl
+        : request?.deliveryProofImageUrl;
+
+      if (!url) {
+        throw new NotFoundException('Delivery proof image not found.');
+      }
+
+      return this.localUploadImage(url);
+    }
+
+    const photo = await this.prisma.transportRequestProofPhoto.findUnique({
+      where: { id: proofId },
+      select: { storageKey: true, url: true, mimeType: true },
+    });
+
+    if (!photo) {
+      throw new NotFoundException('Delivery proof image not found.');
+    }
+
+    return this.localUploadImage(photo.storageKey ?? photo.url, photo.mimeType);
   }
 
   async findPaymentDisputes(
@@ -2664,6 +2802,208 @@ export class AdminService {
     }
 
     return profile;
+  }
+
+  private buildDeliveryOperationsWhere(
+    query: AdminDeliveryOperationsQueryDto,
+  ): Prisma.TransportRequestWhereInput {
+    const where: Prisma.TransportRequestWhereInput = {};
+
+    if (query.view === 'active') {
+      where.status = {
+        in: [
+          'ACCEPTED',
+          'DRIVER_ASSIGNED',
+          'DRIVER_GOING_TO_PICKUP',
+          'DRIVER_ARRIVED_PICKUP',
+          'ITEM_PICKED_UP',
+          'PICKUP_IN_PROGRESS',
+          'IN_TRANSIT',
+          'DRIVER_GOING_TO_DROPOFF',
+        ],
+      };
+    } else if (query.view === 'unassigned') {
+      where.assignedDriverId = null;
+      where.status = { notIn: ['COMPLETED', 'DELIVERED', 'CANCELLED'] };
+    } else if (query.view === 'completed') {
+      where.status = { in: ['COMPLETED', 'DELIVERED'] };
+    } else if (query.view === 'cancelled') {
+      where.status = 'CANCELLED';
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      where.OR = [
+        { id: { contains: search, mode: 'insensitive' } },
+        { pickupAddress: { contains: search, mode: 'insensitive' } },
+        { dropoffAddress: { contains: search, mode: 'insensitive' } },
+        { customer: { is: { name: { contains: search, mode: 'insensitive' } } } },
+        { customer: { is: { email: { contains: search, mode: 'insensitive' } } } },
+        {
+          assignedDriver: {
+            is: { user: { is: { name: { contains: search, mode: 'insensitive' } } } },
+          },
+        },
+      ];
+    }
+
+    return where;
+  }
+
+  private async getDeliveryOperationsSummary(): Promise<AdminDeliveryOperationsSummaryDto> {
+    const [total, active, unassigned, completed] = await Promise.all([
+      this.prisma.transportRequest.count(),
+      this.prisma.transportRequest.count({
+        where: {
+          status: {
+            in: [
+              'ACCEPTED', 'DRIVER_ASSIGNED', 'DRIVER_GOING_TO_PICKUP',
+              'DRIVER_ARRIVED_PICKUP', 'ITEM_PICKED_UP', 'PICKUP_IN_PROGRESS',
+              'IN_TRANSIT', 'DRIVER_GOING_TO_DROPOFF',
+            ],
+          },
+        },
+      }),
+      this.prisma.transportRequest.count({
+        where: { assignedDriverId: null, status: { notIn: ['COMPLETED', 'DELIVERED', 'CANCELLED'] } },
+      }),
+      this.prisma.transportRequest.count({ where: { status: { in: ['COMPLETED', 'DELIVERED'] } } }),
+    ]);
+
+    return { total, active, unassigned, completed };
+  }
+
+  private deliveryOperationsSelect() {
+    return {
+      id: true, status: true, createdAt: true, submittedAt: true, scheduledPickupAt: true,
+      isImmediate: true, pickupAddress: true, dropoffAddress: true, itemTitle: true,
+      itemType: true, itemDescription: true, itemBrand: true, itemModel: true, itemYear: true,
+      itemCondition: true, itemWeightKg: true, itemLengthCm: true, itemWidthCm: true,
+      itemHeightCm: true, specialInstructions: true, customerNote: true, goodsDescription: true,
+      goodsNumberOfPieces: true, goodsIsFragile: true, furnitureDescription: true,
+      furnitureApproximateItemCount: true, vehicleVin: true, vehicleBrand: true,
+      vehicleModel: true, vehicleManufactureYear: true, acceptedOfferId: true, acceptedAt: true,
+      driverArrivedPickupAt: true, itemPickedUpAt: true, driverGoingToDropoffAt: true,
+      deliveredAt: true, completedAt: true, pickupNotes: true, deliveryNotes: true,
+      pickupProofImageUrl: true, deliveryProofImageUrl: true,
+      pickupConfirmedByDriver: true, deliveryConfirmedByDriver: true, finalPrice: true,
+      currency: true, paymentStatus: true, paymentMethod: true, heldAmount: true,
+      capturedAmount: true,
+      service: { select: { nameEn: true } },
+      customer: { select: { id: true, name: true, email: true, phoneNumber: true } },
+      assignedDriver: {
+        select: { id: true, phone: true, user: { select: { name: true, email: true, phoneNumber: true } } },
+      },
+      offers: {
+        orderBy: { createdAt: 'asc' as const },
+        select: {
+          id: true, price: true, currency: true, status: true, message: true,
+          estimatedPickupAt: true, estimatedDeliveryAt: true, estimatedDurationMinutes: true,
+          createdAt: true, acceptedAt: true, rejectedAt: true, cancelledAt: true,
+          driver: { select: { id: true, phone: true, user: { select: { name: true, email: true, phoneNumber: true } } } },
+        },
+      },
+      photos: { orderBy: { sortOrder: 'asc' as const }, select: { id: true, url: true, originalName: true, createdAt: true } },
+      proofPhotos: { orderBy: { createdAt: 'asc' as const }, select: { id: true, type: true, url: true, originalName: true, createdAt: true } },
+    };
+  }
+
+  private mapDeliveryOperationsRecord(record: DeliveryOperationsSource): AdminDeliveryOperationsItemDto {
+    return {
+      id: record.id,
+      status: record.status,
+      service: record.service.nameEn,
+      createdAt: record.createdAt.toISOString(),
+      submittedAt: record.submittedAt?.toISOString() ?? null,
+      scheduledPickupAt: record.scheduledPickupAt?.toISOString() ?? null,
+      isImmediate: record.isImmediate,
+      customer: this.deliveryOperationsCustomer(record.customer),
+      assignedDriver: record.assignedDriver ? this.deliveryOperationsDriver(record.assignedDriver) : null,
+      acceptedOfferId: record.acceptedOfferId,
+      route: { pickupAddress: record.pickupAddress, dropoffAddress: record.dropoffAddress },
+      item: {
+        title: record.itemTitle,
+        type: record.itemType,
+        description: record.itemDescription,
+        details: {
+          brand: record.itemBrand ?? record.vehicleBrand, model: record.itemModel ?? record.vehicleModel,
+          year: record.itemYear ?? record.vehicleManufactureYear, condition: record.itemCondition,
+          weightKg: record.itemWeightKg, dimensionsCm: [record.itemLengthCm, record.itemWidthCm, record.itemHeightCm].every((value) => value !== null) ? `${record.itemLengthCm} × ${record.itemWidthCm} × ${record.itemHeightCm}` : null,
+          vin: record.vehicleVin, goodsDescription: record.goodsDescription, pieces: record.goodsNumberOfPieces,
+          fragile: record.goodsIsFragile || null, furnitureDescription: record.furnitureDescription,
+          furnitureItemCount: record.furnitureApproximateItemCount, instructions: record.specialInstructions,
+          customerNote: record.customerNote,
+        },
+      },
+      offers: record.offers.map((offer) => this.mapDeliveryOperationsOffer(offer)),
+      delivery: {
+        acceptedAt: record.acceptedAt?.toISOString() ?? null,
+        driverArrivedPickupAt: record.driverArrivedPickupAt?.toISOString() ?? null,
+        itemPickedUpAt: record.itemPickedUpAt?.toISOString() ?? null,
+        driverGoingToDropoffAt: record.driverGoingToDropoffAt?.toISOString() ?? null,
+        deliveredAt: record.deliveredAt?.toISOString() ?? null,
+        completedAt: (record.completedAt ?? record.deliveredAt)?.toISOString() ?? null,
+        pickupNotes: record.pickupNotes, deliveryNotes: record.deliveryNotes,
+        pickupConfirmedByDriver: record.pickupConfirmedByDriver,
+        deliveryConfirmedByDriver: record.deliveryConfirmedByDriver,
+      },
+      payment: {
+        finalPrice: this.decimalLikeToNumber(record.finalPrice), currency: record.currency,
+        status: record.paymentStatus, method: record.paymentMethod,
+        heldAmount: this.decimalLikeToNumber(record.heldAmount), capturedAmount: this.decimalLikeToNumber(record.capturedAmount),
+      },
+      photos: record.photos.map((photo): AdminDeliveryOperationsPhotoDto => ({ id: photo.id, url: photo.url, type: null, originalName: photo.originalName, createdAt: photo.createdAt.toISOString() })),
+      proofPhotos: [
+        ...record.proofPhotos.map((photo): AdminDeliveryOperationsPhotoDto => ({ id: photo.id, url: photo.url, type: photo.type, originalName: photo.originalName, createdAt: photo.createdAt.toISOString() })),
+        ...(record.pickupProofImageUrl ? [{ id: `legacy-pickup-${record.id}`, url: record.pickupProofImageUrl, type: 'PICKUP', originalName: null, createdAt: record.itemPickedUpAt?.toISOString() ?? record.createdAt.toISOString() }] : []),
+        ...(record.deliveryProofImageUrl ? [{ id: `legacy-delivery-${record.id}`, url: record.deliveryProofImageUrl, type: 'DELIVERY', originalName: null, createdAt: record.deliveredAt?.toISOString() ?? record.createdAt.toISOString() }] : []),
+      ],
+    };
+  }
+
+  private deliveryOperationsCustomer(customer: DeliveryOperationsSource['customer']): AdminDeliveryOperationsPartyDto {
+    return { id: customer.id, name: customer.name, email: customer.email, phone: customer.phoneNumber };
+  }
+
+  private deliveryOperationsDriver(driver: NonNullable<DeliveryOperationsSource['assignedDriver']>): AdminDeliveryOperationsPartyDto {
+    return { id: driver.id, name: driver.user.name, email: driver.user.email, phone: driver.phone || driver.user.phoneNumber };
+  }
+
+  private mapDeliveryOperationsOffer(offer: DeliveryOperationsSource['offers'][number]): AdminDeliveryOperationsOfferDto {
+    const respondedAt = offer.acceptedAt ?? offer.rejectedAt ?? offer.cancelledAt;
+    return {
+      id: offer.id, driver: this.deliveryOperationsDriver(offer.driver), price: this.decimalLikeToNumber(offer.price) ?? 0,
+      currency: offer.currency, status: offer.status, message: offer.message,
+      estimatedPickupAt: offer.estimatedPickupAt?.toISOString() ?? null,
+      estimatedDeliveryAt: offer.estimatedDeliveryAt?.toISOString() ?? null,
+      estimatedDurationMinutes: offer.estimatedDurationMinutes, sentAt: offer.createdAt.toISOString(),
+      respondedAt: respondedAt?.toISOString() ?? null,
+    };
+  }
+
+  private localUploadImage(
+    storageKeyOrUrl: string,
+    mimeType?: string,
+  ): { path: string; mimeType: string } {
+    const storageKey = storageKeyOrUrl.replace(/^\/+/, '');
+    const uploadsRoot = resolve(process.cwd(), 'uploads');
+    const path = resolve(process.cwd(), storageKey);
+
+    if (
+      !storageKey.startsWith('uploads/') ||
+      !(path === uploadsRoot || path.startsWith(`${uploadsRoot}${sep}`)) ||
+      !existsSync(path)
+    ) {
+      throw new NotFoundException('Delivery proof image not found.');
+    }
+
+    const inferredMimeType = {
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+    }[extname(path).toLowerCase()] ?? 'image/jpeg';
+
+    return { path, mimeType: mimeType ?? inferredMimeType };
   }
 
   private adminUserSelect() {

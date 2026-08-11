@@ -824,6 +824,7 @@ export class TripsService {
           data: {
             status: TransportRequestStatus.DELIVERED,
             deliveredAt: now,
+            completedAt: now,
             deliveryConfirmedByDriver: true,
             deliveryNotes: input.notes ?? null,
             deliveryProofImageUrl:
