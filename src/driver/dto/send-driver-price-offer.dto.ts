@@ -1,15 +1,4 @@
-import {
-  IsDateString,
-  IsInt,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-  MinLength,
-} from 'class-validator';
+import { IsDateString, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class SendDriverPriceOfferDto {
   @IsNumber()
@@ -17,9 +6,8 @@ export class SendDriverPriceOfferDto {
   @Max(100000)
   price!: number;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
   @MaxLength(3)
   currency!: string;
 

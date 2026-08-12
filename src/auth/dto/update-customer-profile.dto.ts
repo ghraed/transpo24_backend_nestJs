@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsString, Length, MaxLength, MinLength } from 'class-validator';
 
-export class CompleteCustomerProfileDto {
+export class UpdateCustomerProfileDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(2)

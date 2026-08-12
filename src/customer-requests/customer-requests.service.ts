@@ -2871,6 +2871,7 @@ export class CustomerRequestsService {
         name: true,
         email: true,
         phoneNumber: true,
+        countryCode: true,
       },
     });
 
@@ -2966,6 +2967,7 @@ export class CustomerRequestsService {
           ? null
           : customer.email,
         phone: customer.phoneNumber,
+        countryCode: customer.countryCode,
         avatarUrl: null,
       },
       activeRequest: activeRequest

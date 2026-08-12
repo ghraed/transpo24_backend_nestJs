@@ -97,6 +97,7 @@ import {
   OfferNewPayload,
   PaginatedResponse,
 } from '../trips/trips.types';
+import { currencyForCountryCode } from '../common/currency/country-currency.util';
 
 interface GetDriverMeInput {
   userId: string;
@@ -302,7 +303,7 @@ interface SendDriverPriceOfferInput {
   userId: string;
   requestId: string;
   price: number;
-  currency: string;
+  currency?: string;
   estimatedPickupAt?: Date;
   estimatedDeliveryAt?: Date;
   estimatedDurationMinutes?: number;
@@ -1890,11 +1891,10 @@ export class DriverService {
   ): Promise<SendDriverPriceOfferResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
     this.ensureDriverOnboardingForAlerts(profile);
+    const normalizedCurrency = currencyForCountryCode(profile.countryCode);
 
     this.validateOfferInput(input);
-    const normalizedCurrency = input.currency.trim().toUpperCase();
     if (!SUPPORTED_OFFER_CURRENCIES.has(normalizedCurrency)) {
-      // TODO: validate against request country currency when country/currency mapping is introduced.
       throw new BadRequestException(
         `currency must be one of: ${Array.from(SUPPORTED_OFFER_CURRENCIES).join(', ')}.`,
       );
@@ -5146,12 +5146,18 @@ export class DriverService {
   }
 
   private async resolveDriverCurrency(driverId: string): Promise<string> {
-    const latest = await this.prisma.driverEarning.findFirst({
-      where: { driverId },
-      orderBy: { createdAt: 'desc' },
-      select: { currency: true },
-    });
-    return latest?.currency ?? 'USD';
+    const [latest, profile] = await Promise.all([
+      this.prisma.driverEarning.findFirst({
+        where: { driverId },
+        orderBy: { createdAt: 'desc' },
+        select: { currency: true },
+      }),
+      this.prisma.driverProfile.findUnique({
+        where: { id: driverId },
+        select: { countryCode: true },
+      }),
+    ]);
+    return latest?.currency ?? currencyForCountryCode(profile?.countryCode);
   }
 
   private mapDriverEarningsSummaryResponse(input: {
@@ -5214,6 +5220,7 @@ export class DriverService {
 
   private async ensureDriverProfile(userId: string): Promise<{
     id: string;
+    countryCode: string | null;
     status: DriverStatus;
     isProfileCompleted: boolean;
   }> {
@@ -5223,6 +5230,7 @@ export class DriverService {
         driverProfile: {
           select: {
             id: true,
+            countryCode: true,
             status: true,
             isProfileCompleted: true,
           },

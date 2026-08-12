@@ -6,6 +6,7 @@ export interface PhoneAuthResponseDto {
     name: string;
     email: string;
     phoneNumber: string;
+    countryCode: string | null;
     role: 'CUSTOMER';
   };
   isNewUser: boolean;

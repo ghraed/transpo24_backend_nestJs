@@ -13,6 +13,7 @@ import { RefreshSessionDto } from './dto/refresh-session.dto';
 import { SendPhoneCodeDto } from './dto/send-phone-code.dto';
 import { VerifyPhoneCodeDto } from './dto/verify-phone-code.dto';
 import { CompleteCustomerProfileDto } from './dto/complete-customer-profile.dto';
+import { UpdateCustomerProfileDto } from './dto/update-customer-profile.dto';
 import { ContinueDriverSessionDto } from './dto/continue-driver-session.dto';
 import { CustomerAuthGuard } from './guards/customer-auth.guard';
 import type { AuthenticatedRequest } from './auth.types';
@@ -117,7 +118,24 @@ export class AuthController {
   completeCustomerProfile(
     @Body() dto: CompleteCustomerProfileDto,
     @Req() request: AuthenticatedRequest,
-  ): Promise<{ success: true; name: string }> {
-    return this.authService.completeCustomerProfile(request.user.id, dto.name);
+  ): Promise<{ success: true; name: string; countryCode: string }> {
+    return this.authService.completeCustomerProfile(
+      request.user.id,
+      dto.name,
+      dto.countryCode,
+    );
+  }
+
+  @UseGuards(CustomerAuthGuard)
+  @Post('phone/update-profile')
+  updateCustomerProfile(
+    @Body() dto: UpdateCustomerProfileDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{ success: true; name: string; countryCode: string }> {
+    return this.authService.updateCustomerProfile(
+      request.user.id,
+      dto.name,
+      dto.countryCode,
+    );
   }
 }

@@ -159,6 +159,7 @@ export class CustomerHomeResponseDto {
     fullName: string | null;
     email: string | null;
     phone: string | null;
+    countryCode: string | null;
     avatarUrl: string | null;
   };
   activeRequest!: CustomerHomeRequestSummaryDto | null;

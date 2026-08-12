@@ -30,6 +30,7 @@ import { VerifyPhoneCodeDto } from './dto/verify-phone-code.dto';
 import { normalizePhoneNumber } from './phone-number.util';
 import { PhoneAuthRateLimitService } from './phone-auth-rate-limit.service';
 import { TwilioVerifyService } from './twilio-verify.service';
+import { normalizeCountryCode } from '../common/currency/country-currency.util';
 
 type AccessTokenPayload = {
   sub: string;
@@ -67,6 +68,7 @@ export class AuthService {
     name: true,
     email: true,
     phoneNumber: true,
+    countryCode: true,
     role: true,
     deletedAt: true,
     isProfileCompleted: true,
@@ -331,16 +333,53 @@ export class AuthService {
   async completeCustomerProfile(
     userId: string,
     name: string,
-  ): Promise<{ success: true; name: string }> {
+    countryCode: string,
+  ): Promise<{ success: true; name: string; countryCode: string }> {
     const normalizedName = name.trim();
+    const normalizedCountryCode = normalizeCountryCode(countryCode);
+    if (!normalizedCountryCode) {
+      throw new BadRequestException('countryCode must be a 2-letter ISO country code.');
+    }
     const updated = await this.prisma.user.updateMany({
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
-      data: { name: normalizedName, isProfileCompleted: true },
+      data: {
+        name: normalizedName,
+        countryCode: normalizedCountryCode,
+        isProfileCompleted: true,
+      },
     });
     if (updated.count !== 1) {
       throw new ForbiddenException('Customer access is required.');
     }
-    return { success: true, name: normalizedName };
+    return {
+      success: true,
+      name: normalizedName,
+      countryCode: normalizedCountryCode,
+    };
+  }
+
+  async updateCustomerProfile(
+    userId: string,
+    name: string,
+    countryCode: string,
+  ): Promise<{ success: true; name: string; countryCode: string }> {
+    const normalizedName = name.trim();
+    const normalizedCountryCode = normalizeCountryCode(countryCode);
+    if (!normalizedCountryCode) {
+      throw new BadRequestException('countryCode must be a 2-letter ISO country code.');
+    }
+    const updated = await this.prisma.user.updateMany({
+      where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
+      data: { name: normalizedName, countryCode: normalizedCountryCode },
+    });
+    if (updated.count !== 1) {
+      throw new ForbiddenException('Customer access is required.');
+    }
+    return {
+      success: true,
+      name: normalizedName,
+      countryCode: normalizedCountryCode,
+    };
   }
 
   async resetUsersForTesting(): Promise<{
@@ -759,6 +798,7 @@ export class AuthService {
       name: string;
       email: string;
       phoneNumber: string | null;
+      countryCode: string | null;
       role: UserRole;
       deletedAt: Date | null;
       isProfileCompleted: boolean;
@@ -782,6 +822,7 @@ export class AuthService {
       name: string;
       email: string;
       phoneNumber: string | null;
+      countryCode: string | null;
       role: UserRole;
       isProfileCompleted: boolean;
     },
@@ -811,6 +852,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
+        countryCode: user.countryCode,
         role: UserRole.CUSTOMER,
       },
       isNewUser,

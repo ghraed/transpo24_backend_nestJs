@@ -352,6 +352,7 @@ model User {
   email         String             @unique
   passwordHash  String
   phoneNumber   String?            @unique
+  countryCode   String?
   isProfileCompleted Boolean       @default(true)
   role          UserRole           @default(CUSTOMER)
   stripeCustomerId String?         @unique
