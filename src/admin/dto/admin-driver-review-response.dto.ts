@@ -51,5 +51,6 @@ export interface AdminDriverReviewResponseDto {
   createdAt: string;
   updatedAt: string;
   onboardingDocuments: AdminDriverReviewDocumentDto[];
+  vehicles: AdminDriverReviewVehicleDto[];
   vehicle: AdminDriverReviewVehicleDto | null;
 }

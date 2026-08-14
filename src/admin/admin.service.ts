@@ -937,6 +937,88 @@ export class AdminService {
     return this.findDriverReviewById(id);
   }
 
+  async approveDriverReviewVehicle(
+    id: string,
+    vehicleId: string,
+  ): Promise<AdminDriverReviewResponseDto> {
+    const profile = await this.getDriverReviewProfile(id);
+    const vehicle = profile.vehicles.find((item) => item.id === vehicleId);
+
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle submission not found for this driver.');
+    }
+
+    if (!this.hasRequiredVehicleDocuments(vehicle.documents)) {
+      throw new BadRequestException(
+        'This vehicle does not have all required documents.',
+      );
+    }
+
+    if (!this.hasVehicleLoadCapacityProfile(vehicle)) {
+      throw new BadRequestException(
+        'This vehicle does not have a complete load-capacity profile.',
+      );
+    }
+
+    const reviewedAt = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.driverProfile.update({
+        where: { id: profile.id },
+        data: { status: DriverStatus.APPROVED },
+      }),
+      this.prisma.driverDocument.updateMany({
+        where: {
+          driverId: profile.id,
+          vehicleId: null,
+          type: { in: DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES },
+          status: {
+            in: [
+              DocumentStatus.UPLOADED,
+              DocumentStatus.PENDING_REVIEW,
+              DocumentStatus.UNDER_REVIEW,
+              DocumentStatus.REJECTED,
+            ],
+          },
+        },
+        data: {
+          status: DocumentStatus.APPROVED,
+          rejectionReason: null,
+          reviewedAt,
+        },
+      }),
+      this.prisma.driverVehicle.update({
+        where: { id: vehicle.id },
+        data: {
+          status: DriverVehicleReviewStatus.APPROVED,
+          rejectionReason: null,
+          isActive: true,
+        },
+      }),
+      this.prisma.driverDocument.updateMany({
+        where: {
+          driverId: profile.id,
+          vehicleId: vehicle.id,
+          status: {
+            in: [
+              DocumentStatus.UPLOADED,
+              DocumentStatus.PENDING_REVIEW,
+              DocumentStatus.UNDER_REVIEW,
+              DocumentStatus.REJECTED,
+            ],
+          },
+        },
+        data: {
+          status: DocumentStatus.APPROVED,
+          rejectionReason: null,
+          reviewedAt,
+        },
+      }),
+    ]);
+
+    return this.findDriverReviewById(id);
+  }
+
   async declineDriverReview(
     id: string,
     reason?: string,
@@ -3139,6 +3221,7 @@ export class AdminService {
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
       onboardingDocuments,
+      vehicles: profile.vehicles.map((vehicle) => this.mapReviewVehicle(vehicle)),
       vehicle: reviewVehicle ? this.mapReviewVehicle(reviewVehicle) : null,
     };
   }

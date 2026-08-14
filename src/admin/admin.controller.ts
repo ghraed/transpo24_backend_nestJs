@@ -141,6 +141,14 @@ export class AdminController {
     return this.adminService.approveDriverReview(id);
   }
 
+  @Post('driver-reviews/:id/vehicles/:vehicleId/approve')
+  approveDriverReviewVehicle(
+    @Param('id') id: string,
+    @Param('vehicleId') vehicleId: string,
+  ): Promise<AdminDriverReviewResponseDto> {
+    return this.adminService.approveDriverReviewVehicle(id, vehicleId);
+  }
+
   @Post('driver-reviews/:id/decline')
   declineDriverReview(
     @Param('id') id: string,
