@@ -207,6 +207,7 @@ describe('PaymentsService', () => {
         chargeId: 'charge-1',
         confirmationLocale: 'en',
         confirmationText: 'Agree',
+        paymentOption: 'CASH_ON_DELIVERY',
       }),
     ).rejects.toThrow(
       new BadRequestException('This additional charge request has expired.'),
@@ -370,7 +371,12 @@ describe('PaymentsService', () => {
       serviceWithMocks as unknown as {
         attemptDriverPayoutForTrip: (
           tripId: string,
-          input: { requestedBy: 'automatic_retry' | 'driver_manual_retry' | 'admin_manual_retry' },
+          input: {
+            requestedBy:
+              | 'automatic_retry'
+              | 'driver_manual_retry'
+              | 'admin_manual_retry';
+          },
         ) => Promise<{
           transferred: boolean;
           stripeTransferId: string | null;
@@ -399,25 +405,23 @@ describe('PaymentsService', () => {
   it('persists trip-charge and wallet-top-up dispute state from Stripe webhooks', async () => {
     const tx = {
       paymentHold: {
-        findFirst: jest
-          .fn()
-          .mockResolvedValueOnce({
-            id: 'hold-1',
-            requestId: 'trip-1',
-            acceptedOfferId: 'offer-1',
-            customerId: 'customer-1',
-            driverId: 'driver-1',
-            amount: new Prisma.Decimal('18.50'),
-            currency: 'CHF',
-            paymentMethod: 'CREDIT_CARD',
-            provider: 'STRIPE',
-            status: PaymentStatus.PAYMENT_CAPTURED,
-            stripePaymentIntentId: 'pi_trip_1',
-            stripeClientSecret: 'secret',
-            stripeChargeId: 'ch_trip_1',
-            createdAt: new Date('2026-07-20T09:00:00.000Z'),
-            updatedAt: new Date('2026-07-20T09:00:00.000Z'),
-          }),
+        findFirst: jest.fn().mockResolvedValueOnce({
+          id: 'hold-1',
+          requestId: 'trip-1',
+          acceptedOfferId: 'offer-1',
+          customerId: 'customer-1',
+          driverId: 'driver-1',
+          amount: new Prisma.Decimal('18.50'),
+          currency: 'CHF',
+          paymentMethod: 'CREDIT_CARD',
+          provider: 'STRIPE',
+          status: PaymentStatus.PAYMENT_CAPTURED,
+          stripePaymentIntentId: 'pi_trip_1',
+          stripeClientSecret: 'secret',
+          stripeChargeId: 'ch_trip_1',
+          createdAt: new Date('2026-07-20T09:00:00.000Z'),
+          updatedAt: new Date('2026-07-20T09:00:00.000Z'),
+        }),
         update: jest.fn().mockResolvedValue(undefined),
       },
       transportRequest: {
@@ -463,7 +467,9 @@ describe('PaymentsService', () => {
       },
     };
     const prisma = {
-      $transaction: jest.fn().mockImplementation(async (callback) => callback(tx)),
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (callback) => callback(tx)),
     };
     const stripeService = {
       constructWebhookEvent: jest

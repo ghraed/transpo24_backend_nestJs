@@ -5,9 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
-import type { File as MulterFile } from 'multer';
+type ProofUploadFile = {
+  path: string;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
 import {
   AdditionalChargeStatus,
   DriverEarningStatus,
@@ -16,7 +20,6 @@ import {
   Prisma,
   TransportProofPhotoType,
   TransportRequestStatus,
-  UserRole,
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -61,11 +64,13 @@ export const DELIVER_ITEM_RADIUS_METERS = 1500;
 export const NEAR_DELIVERY_RADIUS_METERS = 5000;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY?.trim() ?? '';
 const IS_STRIPE_TEST_MODE = STRIPE_SECRET_KEY.startsWith('sk_test_');
-const DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE = process.env.DRIVER_PAYOUT_DELAY_HOURS?.trim() ?? '';
+const DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE =
+  process.env.DRIVER_PAYOUT_DELAY_HOURS?.trim() ?? '';
 const DRIVER_PAYOUT_DELAY_HOURS_FALLBACK = IS_STRIPE_TEST_MODE ? 0 : 24;
 const parsedDriverPayoutDelayHours = Number(DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE);
 export const DRIVER_PAYOUT_DELAY_HOURS =
-  DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE && Number.isFinite(parsedDriverPayoutDelayHours)
+  DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE &&
+  Number.isFinite(parsedDriverPayoutDelayHours)
     ? Math.max(0, parsedDriverPayoutDelayHours)
     : DRIVER_PAYOUT_DELAY_HOURS_FALLBACK;
 const MAX_PROOF_PHOTOS = 8;
@@ -1019,7 +1024,9 @@ export class TripsService {
     platformFeeAmount: Prisma.Decimal;
     netAmount: Prisma.Decimal;
   } {
-    const normalizedServiceAmount = new Prisma.Decimal(grossAmount).toDecimalPlaces(2);
+    const normalizedServiceAmount = new Prisma.Decimal(
+      grossAmount,
+    ).toDecimalPlaces(2);
     const normalizedReimbursedExpenseAmount = new Prisma.Decimal(
       reimbursedExpenseAmount,
     ).toDecimalPlaces(2);
@@ -1029,7 +1036,9 @@ export class TripsService {
     const totalGrossAmount = normalizedServiceAmount
       .add(normalizedReimbursedExpenseAmount)
       .toDecimalPlaces(2);
-    const netAmount = totalGrossAmount.sub(platformFeeAmount).toDecimalPlaces(2);
+    const netAmount = totalGrossAmount
+      .sub(platformFeeAmount)
+      .toDecimalPlaces(2);
     return {
       grossAmount: totalGrossAmount,
       platformFeeAmount,
@@ -1373,7 +1382,7 @@ export class TripsService {
   }
 
   private ensureProofPhotoInput(input: {
-    proofPhotos?: MulterFile[];
+    proofPhotos?: ProofUploadFile[];
     legacyProofImageUrl?: string;
     action: string;
   }): void {
@@ -1393,7 +1402,7 @@ export class TripsService {
     input: {
       requestId: string;
       type: TransportProofPhotoType;
-      files: MulterFile[];
+      files: ProofUploadFile[];
     },
   ): Promise<
     Array<{

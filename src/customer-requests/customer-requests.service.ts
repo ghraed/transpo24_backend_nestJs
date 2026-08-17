@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
-import type { File as MulterFile } from 'multer';
+type MulterFile = Express.Multer.File;
 import {
   DocumentStatus,
   DriverDocumentType,
@@ -3398,7 +3398,8 @@ export class CustomerRequestsService {
     if (!PRE_PICKUP_CANCELABLE_REQUEST_STATUSES.has(request.status)) {
       return {
         canCancelCollectedTrip: false,
-        reason: 'Trip cancellation is not available for the current request state.',
+        reason:
+          'Trip cancellation is not available for the current request state.',
         refundPreview: null,
         action: 'NONE',
       };
@@ -3413,7 +3414,9 @@ export class CustomerRequestsService {
         request.paymentSettlement.collectedAmount.toString(),
       );
       const refundedAmount = Number((collectedAmount * 0.85).toFixed(2));
-      const retainedAmount = Number((collectedAmount - refundedAmount).toFixed(2));
+      const retainedAmount = Number(
+        (collectedAmount - refundedAmount).toFixed(2),
+      );
 
       return {
         canCancelCollectedTrip: true,
@@ -3429,8 +3432,8 @@ export class CustomerRequestsService {
 
     const canCancelPaymentHold = Boolean(
       request.paymentHold &&
-        !request.paymentSettlement &&
-        CANCELLABLE_COLLECTED_PAYMENT_STATUSES.has(request.paymentHold.status),
+      !request.paymentSettlement &&
+      CANCELLABLE_COLLECTED_PAYMENT_STATUSES.has(request.paymentHold.status),
     );
 
     return {

@@ -14,7 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
-import type { File as MulterFile } from 'multer';
+type MulterFile = Express.Multer.File;
 import { mkdirSync } from 'node:fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'node:path';

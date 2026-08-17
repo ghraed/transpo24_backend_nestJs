@@ -1,30 +1,15 @@
 import 'dotenv/config';
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import express from 'express';
 import { join } from 'node:path';
 
 import { AppModule } from './app.module';
-import { JsonExceptionFilter } from './common/filters/json-exception.filter';
+import { configureHttpApplication } from './config/http';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
 
-  app.use('/webhooks/stripe', express.raw({ type: 'application/json' }));
-
-  app.enableCors({
-    origin: true,
-    credentials: true,
-  });
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-  app.useGlobalFilters(new JsonExceptionFilter());
+  configureHttpApplication(app);
 
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 

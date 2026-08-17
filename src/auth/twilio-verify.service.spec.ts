@@ -23,12 +23,13 @@ describe('TwilioVerifyService', () => {
 
   it('uses Twilio Verify SMS without a fixed sender', async () => {
     const config = {
-      getOrThrow: jest.fn((key: string) =>
-        ({
-          TWILIO_ACCOUNT_SID: 'AC_test',
-          TWILIO_AUTH_TOKEN: 'secret',
-          TWILIO_VERIFY_SERVICE_SID: 'VA_test',
-        })[key],
+      getOrThrow: jest.fn(
+        (key: string) =>
+          ({
+            TWILIO_ACCOUNT_SID: 'AC_test',
+            TWILIO_AUTH_TOKEN: 'secret',
+            TWILIO_VERIFY_SERVICE_SID: 'VA_test',
+          })[key],
       ),
     } as unknown as ConfigService;
     const service = new TwilioVerifyService(config);
@@ -45,12 +46,13 @@ describe('TwilioVerifyService', () => {
 
   it("returns Twilio's delivery error and provider code to the client", async () => {
     const config = {
-      getOrThrow: jest.fn((key: string) =>
-        ({
-          TWILIO_ACCOUNT_SID: 'AC_test',
-          TWILIO_AUTH_TOKEN: 'secret',
-          TWILIO_VERIFY_SERVICE_SID: 'VA_test',
-        })[key],
+      getOrThrow: jest.fn(
+        (key: string) =>
+          ({
+            TWILIO_ACCOUNT_SID: 'AC_test',
+            TWILIO_AUTH_TOKEN: 'secret',
+            TWILIO_VERIFY_SERVICE_SID: 'VA_test',
+          })[key],
       ),
     } as unknown as ConfigService;
     const service = new TwilioVerifyService(config);

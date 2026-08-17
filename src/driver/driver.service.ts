@@ -30,7 +30,7 @@ import {
 } from '@prisma/client';
 import { unlink } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import type { File as MulterFile } from 'multer';
+type MulterFile = Express.Multer.File;
 
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -79,7 +79,6 @@ import {
   DriverVehicleLoadCapacitiesListResponseDto,
   DriverVehicleLoadCapacityResponseDto,
   UpsertDriverVehicleLoadCapacityDto,
-  type WorkingDayScheduleResponseDto,
 } from './dto/driver-load-capacity.dto';
 import {
   canVehicleSupportRequestLoad,
@@ -812,7 +811,6 @@ const DRIVER_OFFER_SELECT = {
   updatedAt: true,
 } satisfies Prisma.DriverOfferSelect;
 
-const MAX_VEHICLE_PHOTOS = 8;
 const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const WEEK_DAYS_ORDER: DayOfWeek[] = [
   DayOfWeek.MONDAY,
@@ -841,22 +839,6 @@ const ACCEPTED_JOB_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.IN_TRANSIT,
   TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
 ];
-
-const CANONICAL_VEHICLE_DOCUMENT_TYPES = {
-  frontPhoto: DriverDocumentType.VEHICLE_FRONT_PHOTO,
-  rearPhoto: DriverDocumentType.VEHICLE_REAR_PHOTO,
-  sidePhoto: DriverDocumentType.VEHICLE_SIDE_PHOTO,
-  licensePlatePhoto: DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
-  registrationFrontDocument: DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
-  registrationBackDocument: DriverDocumentType.VEHICLE_REGISTRATION_BACK,
-  insuranceDocument: DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
-} as const;
-
-const LEGACY_COMPATIBLE_VEHICLE_DOCUMENT_TYPES = {
-  registration: DriverDocumentType.VEHICLE_REGISTRATION,
-  insurance: DriverDocumentType.VEHICLE_INSURANCE,
-  photo: DriverDocumentType.VEHICLE_PHOTO,
-} as const;
 
 @Injectable()
 export class DriverService {
@@ -3050,8 +3032,10 @@ export class DriverService {
   async approveVehicleForTesting(
     input: DeactivateDriverVehicleInput,
   ): Promise<VehicleResponseDto> {
-    const allowInProduction = process.env.ALLOW_TESTING_APPROVAL === 'true';
-    if (process.env.NODE_ENV === 'production' && !allowInProduction) {
+    if (
+      process.env.NODE_ENV === 'production' ||
+      process.env.ENABLE_TEST_ENDPOINTS !== 'true'
+    ) {
       throw new BadRequestException(
         'Testing approval is disabled in production.',
       );
@@ -3215,11 +3199,7 @@ export class DriverService {
       select: DRIVER_DOCUMENT_SELECT,
     });
 
-    const hasRequired = this.hasRequiredVehicleDocuments(documents);
-    const nextDriverStatus = this.resolveStatusAfterDocuments(
-      profile.status,
-      hasRequired,
-    );
+    const nextDriverStatus = this.resolveStatusAfterDocuments(profile.status);
 
     if (nextDriverStatus !== profile.status) {
       await this.prisma.driverProfile.update({
@@ -3770,7 +3750,6 @@ export class DriverService {
 
   private resolveStatusAfterDocuments(
     currentStatus: DriverStatus,
-    hasRequiredDocs: boolean,
   ): DriverStatus {
     if (
       currentStatus === DriverStatus.APPROVED ||
@@ -5806,8 +5785,10 @@ export class DriverService {
   }
 
   private assertTestingModeEnabled(): void {
-    const allowInProduction = process.env.ALLOW_TESTING_APPROVAL === 'true';
-    if (process.env.NODE_ENV === 'production' && !allowInProduction) {
+    if (
+      process.env.NODE_ENV === 'production' ||
+      process.env.ENABLE_TEST_ENDPOINTS !== 'true'
+    ) {
       throw new BadRequestException(
         'Testing approval is disabled in production.',
       );

@@ -98,7 +98,9 @@ export class AdminController {
   }
 
   @Get('delivery-operations/proofs/:proofId/view-image')
-  async viewDeliveryProof(@Param('proofId') proofId: string): Promise<StreamableFile> {
+  async viewDeliveryProof(
+    @Param('proofId') proofId: string,
+  ): Promise<StreamableFile> {
     const proof = await this.adminService.getDeliveryProofImage(proofId);
     return new StreamableFile(createReadStream(proof.path), {
       type: proof.mimeType,

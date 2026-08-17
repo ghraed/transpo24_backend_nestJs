@@ -23,12 +23,13 @@ import {
 } from '@nestjs/platform-express';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
-import type { File as MulterFile } from 'multer';
+type MulterFile = Express.Multer.File;
 import { mkdirSync } from 'node:fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'node:path';
 
 import { DriverAuthGuard } from '../auth/guards/driver-auth.guard';
+import { TestingOnlyGuard } from '../auth/guards/testing-only.guard';
 import { CreateDriverVehicleDto } from './dto/create-driver-vehicle.dto';
 import { UpdateDriverVehicleDto } from './dto/update-driver-vehicle.dto';
 import { DriverAvailabilityResponseDto } from './dto/driver-availability-response.dto';
@@ -215,7 +216,7 @@ export class DriverController {
       {
         storage: diskStorage({
           destination: (req, _file, callback) => {
-            const driverIdValue = req.user?.id;
+            const driverIdValue = (req as AuthenticatedRequest).user?.id;
             const driverId =
               typeof driverIdValue === 'string'
                 ? driverIdValue
@@ -358,6 +359,7 @@ export class DriverController {
   }
 
   @Patch('me/testing/approve')
+  @UseGuards(TestingOnlyGuard)
   async approveMeForTesting(
     @Req() request: AuthenticatedRequest,
   ): Promise<DriverMeResponseDto> {
@@ -365,6 +367,7 @@ export class DriverController {
   }
 
   @Post('me/testing/send-customer-notification')
+  @UseGuards(TestingOnlyGuard)
   async sendCustomerTestNotification(
     @Req() request: AuthenticatedRequest,
     @Body() dto: SendTestCustomerNotificationDto,
@@ -455,7 +458,7 @@ export class DriverController {
     FileInterceptor('invoice', {
       storage: diskStorage({
         destination: (req, _file, callback) => {
-          const driverIdValue = req.user?.id;
+          const driverIdValue = (req as AuthenticatedRequest).user?.id;
           const requestIdValue = req.params?.requestId;
           const driverId =
             typeof driverIdValue === 'string'
@@ -743,6 +746,7 @@ export class DriverController {
   }
 
   @Patch('me/vehicles/:vehicleId/testing/approve')
+  @UseGuards(TestingOnlyGuard)
   async approveVehicleForTesting(
     @Req() request: AuthenticatedRequest,
     @Param('vehicleId') vehicleId: string,
@@ -810,7 +814,7 @@ export class DriverController {
     FilesInterceptor('photos', MAX_TRIP_PROOF_PHOTOS, {
       storage: diskStorage({
         destination: (req, _file, callback) => {
-          const driverIdValue = req.user?.id;
+          const driverIdValue = (req as AuthenticatedRequest).user?.id;
           const tripIdValue = req.params?.tripId;
           const driverId =
             typeof driverIdValue === 'string'
@@ -885,6 +889,7 @@ export class DriverController {
     @Param() params: DriverTripParamDto,
     @Body() _dto: StartDeliveryDto,
   ): Promise<StartDeliveryResponse> {
+    void _dto;
     const result = await this.tripsService.startDelivery({
       driverId: request.user.id,
       tripId: params.tripId,
@@ -903,7 +908,7 @@ export class DriverController {
     FilesInterceptor('photos', MAX_TRIP_PROOF_PHOTOS, {
       storage: diskStorage({
         destination: (req, _file, callback) => {
-          const driverIdValue = req.user?.id;
+          const driverIdValue = (req as AuthenticatedRequest).user?.id;
           const tripIdValue = req.params?.tripId;
           const driverId =
             typeof driverIdValue === 'string'
@@ -1007,7 +1012,7 @@ export class DriverController {
       {
         storage: diskStorage({
           destination: (req, _file, callback) => {
-            const driverIdValue = req.user?.id;
+            const driverIdValue = (req as AuthenticatedRequest).user?.id;
             const vehicleIdValue = req.params?.vehicleId;
             const driverId =
               typeof driverIdValue === 'string'

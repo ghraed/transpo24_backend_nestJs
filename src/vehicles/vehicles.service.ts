@@ -308,7 +308,6 @@ export class VehiclesService {
     const transmission = response?.data?.transmission;
     const drivetrain = response?.data?.drivetrain;
     const fuel = response?.data?.fuel;
-    const dimensions = response?.data?.dimensions;
 
     return {
       vin: this.normalizeText(intro?.vin) ?? vin,

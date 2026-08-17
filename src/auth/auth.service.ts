@@ -125,7 +125,11 @@ export class AuthService {
     ipAddress: string,
   ): Promise<PhoneAuthResponseDto> {
     const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
-    await this.assertApprovedPhoneVerification(phoneNumber, dto.code, ipAddress);
+    await this.assertApprovedPhoneVerification(
+      phoneNumber,
+      dto.code,
+      ipAddress,
+    );
     let existing = await this.prisma.user.findUnique({
       where: { phoneNumber },
       select: this.customerSessionUserSelect,
@@ -205,7 +209,11 @@ export class AuthService {
     ipAddress: string,
   ): Promise<LoginResponseDto> {
     const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
-    await this.assertApprovedPhoneVerification(phoneNumber, dto.code, ipAddress);
+    await this.assertApprovedPhoneVerification(
+      phoneNumber,
+      dto.code,
+      ipAddress,
+    );
 
     let user = await this.prisma.user.findFirst({
       where: {
@@ -338,7 +346,9 @@ export class AuthService {
     const normalizedName = name.trim();
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
-      throw new BadRequestException('countryCode must be a 2-letter ISO country code.');
+      throw new BadRequestException(
+        'countryCode must be a 2-letter ISO country code.',
+      );
     }
     const updated = await this.prisma.user.updateMany({
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
@@ -366,7 +376,9 @@ export class AuthService {
     const normalizedName = name.trim();
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
-      throw new BadRequestException('countryCode must be a 2-letter ISO country code.');
+      throw new BadRequestException(
+        'countryCode must be a 2-letter ISO country code.',
+      );
     }
     const updated = await this.prisma.user.updateMany({
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },

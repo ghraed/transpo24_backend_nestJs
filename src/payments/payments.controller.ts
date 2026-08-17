@@ -13,7 +13,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { Request } from 'express';
+import type { Request } from 'express';
 
 import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
 import { CustomerRequestsService } from '../customer-requests/customer-requests.service';
@@ -201,7 +201,7 @@ export class PaymentsController {
 
   @Post('webhooks/stripe')
   async handleStripeWebhook(
-    @Req() request: Request & { body: Buffer },
+    @Req() request: Request<Record<string, string>, unknown, Buffer>,
     @Headers('stripe-signature') signature: string | undefined,
   ): Promise<{ received: true; type: string }> {
     if (!signature?.trim()) {

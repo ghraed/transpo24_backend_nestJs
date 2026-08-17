@@ -15,17 +15,29 @@ import {
 } from 'class-validator';
 import { normalizeDriverVehicleTypeInput } from './driver-vehicle-type.util';
 
+function useLegacyField(
+  value: unknown,
+  object: unknown,
+  field: string,
+): unknown {
+  if (value !== undefined && value !== null) return value;
+  if (object && typeof object === 'object' && field in object) {
+    return (object as Record<string, unknown>)[field];
+  }
+  return value;
+}
+
 export class CreateDriverVehicleDto {
   @Transform(({ value }) => normalizeDriverVehicleTypeInput(value))
   @IsEnum(VehicleType)
   vehicleType!: VehicleType;
 
-  @Transform(({ value, obj }) => value ?? obj.make)
+  @Transform(({ value, obj }) => useLegacyField(value, obj, 'make'))
   @IsString()
   @MinLength(2)
   brand!: string;
 
-  @Transform(({ value, obj }) => value ?? obj.model)
+  @Transform(({ value, obj }) => useLegacyField(value, obj, 'model'))
   @IsString()
   @MinLength(1)
   model!: string;
@@ -35,7 +47,7 @@ export class CreateDriverVehicleDto {
   @Max(new Date().getFullYear() + 1)
   year!: number;
 
-  @Transform(({ value, obj }) => value ?? obj.plateNumber)
+  @Transform(({ value, obj }) => useLegacyField(value, obj, 'plateNumber'))
   @IsString()
   @IsNotEmpty()
   licensePlateNumber!: string;

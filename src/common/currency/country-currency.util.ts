@@ -35,7 +35,9 @@ const EURO_COUNTRY_CODES = new Set([
   'XK',
 ]);
 
-export function normalizeCountryCode(countryCode?: string | null): string | null {
+export function normalizeCountryCode(
+  countryCode?: string | null,
+): string | null {
   const normalized = countryCode?.trim().toUpperCase() ?? '';
   return normalized.length === 2 ? normalized : null;
 }

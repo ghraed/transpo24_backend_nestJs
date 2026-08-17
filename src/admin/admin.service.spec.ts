@@ -85,11 +85,7 @@ describe('AdminService', () => {
         ]),
       },
     };
-    const service = new AdminService(
-      prisma as never,
-      {} as never,
-      {} as never,
-    );
+    const service = new AdminService(prisma as never, {} as never, {} as never);
 
     const result = await service.findPaymentDisputes({
       page: 1,
@@ -232,11 +228,7 @@ describe('AdminService', () => {
         return Promise.all(operations);
       }),
     };
-    const service = new AdminService(
-      prisma as never,
-      {} as never,
-      {} as never,
-    );
+    const service = new AdminService(prisma as never, {} as never, {} as never);
 
     const result = await service.runPaymentReconciliation({
       stream: 'wallet',
@@ -345,7 +337,8 @@ describe('AdminService', () => {
             customerEmail: 'trip@example.com',
             driverName: null,
             driverEmail: null,
-            reason: 'Captured payment totals do not match across hold, request, and settlement.',
+            reason:
+              'Captured payment totals do not match across hold, request, and settlement.',
             resolvedAt: null,
             createdAt: new Date('2026-07-21T09:01:04.000Z'),
             updatedAt: new Date('2026-07-21T09:01:04.000Z'),
@@ -353,11 +346,7 @@ describe('AdminService', () => {
         ])
         .mockResolvedValueOnce([{ count: 1n }]),
     };
-    const service = new AdminService(
-      prisma as never,
-      {} as never,
-      {} as never,
-    );
+    const service = new AdminService(prisma as never, {} as never, {} as never);
 
     const result = await service.findPaymentReconciliation({
       page: 1,
@@ -396,7 +385,8 @@ describe('AdminService', () => {
         email: 'trip@example.com',
       },
       driver: null,
-      reason: 'Captured payment totals do not match across hold, request, and settlement.',
+      reason:
+        'Captured payment totals do not match across hold, request, and settlement.',
       jobRunId: 'run-capture-1',
       detectedAt: '2026-07-21T09:01:04.000Z',
       resolvedAt: null,

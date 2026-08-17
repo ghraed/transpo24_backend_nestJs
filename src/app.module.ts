@@ -15,6 +15,7 @@ import { TripsModule } from './trips/trips.module';
 import { ServicesModule } from './services/services.module';
 import { TranslationModule } from './translations/translations.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
+import { HealthModule } from './health/health.module';
 import { validateEnvironment } from './config/environment';
 
 @Module({
@@ -29,6 +30,7 @@ import { validateEnvironment } from './config/environment';
     ServicesModule,
     CustomerRequestsModule,
     DriverModule,
+    HealthModule,
     NotificationsModule,
     PaymentsModule,
     PushTokensModule,

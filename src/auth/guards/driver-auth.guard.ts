@@ -31,7 +31,7 @@ export class DriverAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired token.');
     }
 
-    if (user.role !== UserRole.DRIVER && !user.hasDriverProfile) {
+    if (user.role !== UserRole.DRIVER || !user.hasDriverProfile) {
       throw new ForbiddenException('Driver access is required.');
     }
 

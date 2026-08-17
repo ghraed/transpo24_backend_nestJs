@@ -208,3 +208,37 @@ npm run lint
 npm run build
 npm run test
 ```
+
+## Production verification
+
+The release gate runs unit tests with coverage, HTTP contract tests, and a
+production build:
+
+```bash
+npm run test:ci
+npx prisma validate
+npx prisma migrate status
+```
+
+The HTTP contract suite covers validation and unknown-field rejection,
+authentication and role boundaries, CORS, security headers, sanitized errors,
+push-token input, production-disabled test routes, and health probes. Unit tests
+cover authentication/session rotation, OTP throttling, payments and Stripe,
+driver/trip workflows, notifications, chat, translations, vehicle lookup, and
+environment validation. Coverage thresholds prevent the current baseline from
+regressing; raise them as legacy services receive deeper scenario coverage.
+
+Production requires explicit `DATABASE_URL`, Twilio Verify credentials, a
+unique `ACCESS_TOKEN_SECRET` of at least 32 characters, exact `CORS_ORIGINS`,
+Stripe live credentials, and an HTTPS `DRIVER_APP_BASE_URL`. The process fails
+fast when these are missing or unsafe. Keep `ENABLE_TEST_ENDPOINTS=false`.
+
+Infrastructure probes:
+
+- `GET /health/live` checks that the API process is running.
+- `GET /health/ready` checks that PostgreSQL accepts a query.
+
+Before routing real traffic, apply migrations, test Stripe and Twilio in the
+target account, verify Redis availability and queue workers, exercise upload
+storage persistence, and confirm backup/restore and monitoring alerts in the
+deployment environment. Automated tests cannot certify those external systems.

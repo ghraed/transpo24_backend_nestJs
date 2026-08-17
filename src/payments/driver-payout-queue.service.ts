@@ -38,9 +38,7 @@ const DRIVER_PAYOUT_REMOVE_COMPLETED_COUNT = 100;
 const DRIVER_PAYOUT_REMOVE_FAILED_COUNT = 200;
 
 @Injectable()
-export class DriverPayoutQueueService
-  implements OnModuleInit, OnModuleDestroy
-{
+export class DriverPayoutQueueService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DriverPayoutQueueService.name);
   private readonly connectionOptions: ConnectionOptions | null;
   private queue: Queue<DriverPayoutJobData> | null = null;
@@ -112,7 +110,11 @@ export class DriverPayoutQueueService
     if (existingJob) {
       const state = await existingJob.getState();
 
-      if (state === 'active' || state === 'waiting' || state === 'waiting-children') {
+      if (
+        state === 'active' ||
+        state === 'waiting' ||
+        state === 'waiting-children'
+      ) {
         return true;
       }
 

@@ -167,7 +167,9 @@ describe('AuthService phone authentication', () => {
     const { service, prisma, twilio } = createHarness();
     twilio.verifyCode.mockResolvedValue('approved');
     prisma.driverProfile.findUnique.mockResolvedValue({ userId: 'driver-1' });
-    prisma.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(customer);
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(customer);
     prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(

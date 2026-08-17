@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsString, Length, MaxLength, MinLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  Length,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateCustomerProfileDto {
   @IsString()

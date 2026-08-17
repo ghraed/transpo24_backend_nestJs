@@ -9,7 +9,7 @@ import {
   ServiceUnavailableException,
   forwardRef,
 } from '@nestjs/common';
-import type { File as MulterFile } from 'multer';
+type MulterFile = Express.Multer.File;
 import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 import {
@@ -525,20 +525,22 @@ export class PaymentsService {
       );
     }
 
-    return this.prisma.$transaction((tx) =>
-      this.cancelCollectedTripTx(tx, input.requestId, input.customerId),
-    ).then(async (result) => {
-      if (result.driverShareAmount > 0) {
-        await this.queueDriverPayoutForTrip(input.requestId);
-      }
+    return this.prisma
+      .$transaction((tx) =>
+        this.cancelCollectedTripTx(tx, input.requestId, input.customerId),
+      )
+      .then(async (result) => {
+        if (result.driverShareAmount > 0) {
+          await this.queueDriverPayoutForTrip(input.requestId);
+        }
 
-      return {
-        requestStatus: result.requestStatus,
-        currency: result.currency,
-        refundedAmount: result.refundedAmount,
-        retainedAmount: result.retainedAmount,
-      };
-    });
+        return {
+          requestStatus: result.requestStatus,
+          currency: result.currency,
+          refundedAmount: result.refundedAmount,
+          retainedAmount: result.retainedAmount,
+        };
+      });
   }
 
   private async cancelCollectedTripTx(
@@ -580,8 +582,12 @@ export class PaymentsService {
       return {
         requestStatus: request.status,
         currency: request.paymentSettlement.currency,
-        refundedAmount: Number(request.paymentSettlement.refundedAmount.toString()),
-        retainedAmount: Number(request.paymentSettlement.retainedAmount.toString()),
+        refundedAmount: Number(
+          request.paymentSettlement.refundedAmount.toString(),
+        ),
+        retainedAmount: Number(
+          request.paymentSettlement.retainedAmount.toString(),
+        ),
         driverShareAmount: Number(
           request.paymentSettlement.driverShareAmount.toString(),
         ),
@@ -609,7 +615,9 @@ export class PaymentsService {
     }
 
     if (!SUCCESSFUL_COLLECTION_STATUSES.has(request.paymentHold.status)) {
-      throw new ConflictException('This trip has not been collected successfully.');
+      throw new ConflictException(
+        'This trip has not been collected successfully.',
+      );
     }
 
     const refundableAmount = this.calculateCustomerCancellationRefund(
@@ -620,9 +628,7 @@ export class PaymentsService {
       .toDecimalPlaces(2);
     const driverShareAmount =
       request.acceptedOfferId && request.assignedDriverId
-        ? retainedAmount
-            .mul(DRIVER_CANCELLATION_SHARE_RATE)
-            .toDecimalPlaces(2)
+        ? retainedAmount.mul(DRIVER_CANCELLATION_SHARE_RATE).toDecimalPlaces(2)
         : new Prisma.Decimal(0);
     const platformShareAmount = retainedAmount
       .sub(driverShareAmount)
@@ -702,10 +708,9 @@ export class PaymentsService {
         driverShareAmount,
         platformShareAmount,
         status: TripPaymentSettlementStatus.PARTIALLY_REFUNDED,
-        driverPayoutState:
-          driverShareAmount.gt(0)
-            ? DriverPayoutState.EARNING_CREATED
-            : DriverPayoutState.NOT_APPLICABLE,
+        driverPayoutState: driverShareAmount.gt(0)
+          ? DriverPayoutState.EARNING_CREATED
+          : DriverPayoutState.NOT_APPLICABLE,
         requiresManualReview: false,
         lastStripeRefundId: refundId,
         payoutFailureReason: null,
@@ -716,7 +721,7 @@ export class PaymentsService {
       select: TRIP_PAYMENT_SETTLEMENT_SELECT,
     });
 
-    const payment = await tx.paymentHold.update({
+    await tx.paymentHold.update({
       where: { id: request.paymentHold.id },
       data: {
         status: PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
@@ -879,11 +884,14 @@ export class PaymentsService {
       return null;
     }
 
-    const paymentMethod = await this.stripeService.getCustomerDefaultPaymentMethod(
-      customer.stripeCustomerId,
-    );
+    const paymentMethod =
+      await this.stripeService.getCustomerDefaultPaymentMethod(
+        customer.stripeCustomerId,
+      );
 
-    return paymentMethod ? this.toSavedPaymentMethodSummary(paymentMethod) : null;
+    return paymentMethod
+      ? this.toSavedPaymentMethodSummary(paymentMethod)
+      : null;
   }
 
   async saveCustomerDefaultPaymentMethod(
@@ -903,7 +911,6 @@ export class PaymentsService {
       throw new NotFoundException('Customer account not found.');
     }
 
-
     const stripeCustomerId = await this.stripeService.ensureCustomer({
       customerId: customer.id,
       email: customer.email,
@@ -920,10 +927,11 @@ export class PaymentsService {
       });
     }
 
-    const paymentMethod = await this.stripeService.attachCustomerDefaultPaymentMethod({
-      customerId: stripeCustomerId,
-      paymentMethodId: input.stripePaymentMethodId,
-    });
+    const paymentMethod =
+      await this.stripeService.attachCustomerDefaultPaymentMethod({
+        customerId: stripeCustomerId,
+        paymentMethodId: input.stripePaymentMethodId,
+      });
 
     return this.toSavedPaymentMethodSummary(paymentMethod);
   }
@@ -952,7 +960,11 @@ export class PaymentsService {
       throw new NotFoundException('Customer account not found.');
     }
 
-    return this.toCustomerWalletSummaryDto(input.customerId, wallet, transactions);
+    return this.toCustomerWalletSummaryDto(
+      input.customerId,
+      wallet,
+      transactions,
+    );
   }
 
   async createCustomerWalletTopUp(
@@ -1039,7 +1051,11 @@ export class PaymentsService {
 
     return {
       topUp: this.toCustomerWalletTopUpDto(topUp),
-      wallet: this.toCustomerWalletSummaryDto(input.customerId, wallet, transactions),
+      wallet: this.toCustomerWalletSummaryDto(
+        input.customerId,
+        wallet,
+        transactions,
+      ),
     };
   }
 
@@ -1092,7 +1108,11 @@ export class PaymentsService {
 
     return {
       topUp: this.toCustomerWalletTopUpDto(topUp),
-      wallet: this.toCustomerWalletSummaryDto(input.customerId, wallet, transactions),
+      wallet: this.toCustomerWalletSummaryDto(
+        input.customerId,
+        wallet,
+        transactions,
+      ),
     };
   }
 
@@ -1119,7 +1139,10 @@ export class PaymentsService {
       throw new BadRequestException('confirmationText is required.');
     }
 
-    if (paymentOption !== 'SAVED_CARD' && paymentOption !== 'CASH_ON_DELIVERY') {
+    if (
+      paymentOption !== 'SAVED_CARD' &&
+      paymentOption !== 'CASH_ON_DELIVERY'
+    ) {
       throw new BadRequestException('paymentOption is invalid.');
     }
 
@@ -1140,11 +1163,15 @@ export class PaymentsService {
     }
 
     if (charge.status === AdditionalChargeStatus.CAPTURED) {
-      throw new ConflictException('This additional charge has already been approved.');
+      throw new ConflictException(
+        'This additional charge has already been approved.',
+      );
     }
 
     if (charge.status === AdditionalChargeStatus.CANCELLED) {
-      throw new BadRequestException('This additional charge is no longer available.');
+      throw new BadRequestException(
+        'This additional charge is no longer available.',
+      );
     }
 
     const request = await this.prisma.transportRequest.findUnique({
@@ -1165,7 +1192,9 @@ export class PaymentsService {
       request.status === TransportRequestStatus.CANCELLED ||
       request.status === TransportRequestStatus.COMPLETED
     ) {
-      throw new BadRequestException('This additional charge request has expired.');
+      throw new BadRequestException(
+        'This additional charge request has expired.',
+      );
     }
 
     const existingEarning = await this.prisma.driverEarning.findUnique({
@@ -1280,7 +1309,9 @@ export class PaymentsService {
     }
 
     const savedPaymentMethod =
-      await this.stripeService.getCustomerDefaultPaymentMethod(stripeCustomerId);
+      await this.stripeService.getCustomerDefaultPaymentMethod(
+        stripeCustomerId,
+      );
 
     if (!savedPaymentMethod) {
       await this.prisma.additionalCharge.update({
@@ -1302,7 +1333,9 @@ export class PaymentsService {
       );
     }
 
-    const totalChargeAmount = this.calculateAdditionalChargeTotal(charge.amount);
+    const totalChargeAmount = this.calculateAdditionalChargeTotal(
+      charge.amount,
+    );
 
     try {
       const paymentIntent = await this.stripeService.createOffSessionCharge({
@@ -1375,7 +1408,9 @@ export class PaymentsService {
       return response;
     } catch (error) {
       const failureReason =
-        error instanceof Error ? error.message : 'Failed to capture additional charge payment.';
+        error instanceof Error
+          ? error.message
+          : 'Failed to capture additional charge payment.';
 
       const updatedCharge = await this.prisma.additionalCharge.update({
         where: { id: charge.id },
@@ -1744,7 +1779,7 @@ export class PaymentsService {
         reason: 'sweep',
         runAt:
           candidate.driverPayoutState === DriverPayoutState.EARNING_CREATED
-            ? candidate.request.driverEarning?.availableAt ?? now
+            ? (candidate.request.driverEarning?.availableAt ?? now)
             : now,
         replaceDelayed: true,
       });
@@ -1920,7 +1955,9 @@ export class PaymentsService {
       };
     } catch (error) {
       const reason =
-        error instanceof Error ? error.message : 'Driver payout transfer failed.';
+        error instanceof Error
+          ? error.message
+          : 'Driver payout transfer failed.';
 
       await this.prisma.driverEarning.update({
         where: { id: context.earningId },
@@ -2225,9 +2262,9 @@ export class PaymentsService {
       });
 
       if (nextStatus === PaymentStatus.PAYMENT_CAPTURED) {
-      await tx.tripPaymentSettlement.upsert({
-        where: { requestId: hold.requestId },
-        update: {
+        await tx.tripPaymentSettlement.upsert({
+          where: { requestId: hold.requestId },
+          update: {
             paymentHoldId: hold.id,
             customerId: hold.customerId,
             driverId: hold.driverId,
@@ -2240,24 +2277,24 @@ export class PaymentsService {
             platformShareAmount: new Prisma.Decimal(0),
             status: TripPaymentSettlementStatus.COLLECTED,
             driverPayoutState: DriverPayoutState.NOT_EARNED,
-          requiresManualReview: false,
-          lastStripeRefundId: null,
-          disputeReportedAt: null,
-          stripeDisputeId: null,
-          disputeStatus: null,
-          disputeReason: null,
-          disputeAmount: null,
-          disputeCurrency: null,
-          disputeCreatedAt: null,
-          disputeUpdatedAt: null,
-          disputeClosedAt: null,
-          disputeEvidenceDueBy: null,
-          payoutFailureReason: null,
-          payoutAttemptCount: 0,
-          lastPayoutAttemptAt: null,
-          nextPayoutRetryAt: null,
-        },
-        create: {
+            requiresManualReview: false,
+            lastStripeRefundId: null,
+            disputeReportedAt: null,
+            stripeDisputeId: null,
+            disputeStatus: null,
+            disputeReason: null,
+            disputeAmount: null,
+            disputeCurrency: null,
+            disputeCreatedAt: null,
+            disputeUpdatedAt: null,
+            disputeClosedAt: null,
+            disputeEvidenceDueBy: null,
+            payoutFailureReason: null,
+            payoutAttemptCount: 0,
+            lastPayoutAttemptAt: null,
+            nextPayoutRetryAt: null,
+          },
+          create: {
             requestId: hold.requestId,
             paymentHoldId: hold.id,
             customerId: hold.customerId,
@@ -2271,24 +2308,24 @@ export class PaymentsService {
             platformShareAmount: new Prisma.Decimal(0),
             status: TripPaymentSettlementStatus.COLLECTED,
             driverPayoutState: DriverPayoutState.NOT_EARNED,
-          requiresManualReview: false,
-          lastStripeRefundId: null,
-          disputeReportedAt: null,
-          stripeDisputeId: null,
-          disputeStatus: null,
-          disputeReason: null,
-          disputeAmount: null,
-          disputeCurrency: null,
-          disputeCreatedAt: null,
-          disputeUpdatedAt: null,
-          disputeClosedAt: null,
-          disputeEvidenceDueBy: null,
-          payoutFailureReason: null,
-          payoutAttemptCount: 0,
-          lastPayoutAttemptAt: null,
-          nextPayoutRetryAt: null,
-        },
-      });
+            requiresManualReview: false,
+            lastStripeRefundId: null,
+            disputeReportedAt: null,
+            stripeDisputeId: null,
+            disputeStatus: null,
+            disputeReason: null,
+            disputeAmount: null,
+            disputeCurrency: null,
+            disputeCreatedAt: null,
+            disputeUpdatedAt: null,
+            disputeClosedAt: null,
+            disputeEvidenceDueBy: null,
+            payoutFailureReason: null,
+            payoutAttemptCount: 0,
+            lastPayoutAttemptAt: null,
+            nextPayoutRetryAt: null,
+          },
+        });
       }
     });
   }
@@ -2384,7 +2421,10 @@ export class PaymentsService {
         data: {
           status: nextStatus,
           stripeChargeId: this.getStripeChargeId(paymentIntent),
-          failureReason: this.getWalletTopUpFailureReason(paymentIntent, nextStatus),
+          failureReason: this.getWalletTopUpFailureReason(
+            paymentIntent,
+            nextStatus,
+          ),
           failedAt:
             nextStatus === CustomerWalletTopUpStatus.FAILED
               ? new Date()
@@ -2819,18 +2859,20 @@ export class PaymentsService {
       });
     }
 
-    const paymentIntent = await this.stripeService.createImmediateCaptureIntent({
-      customerId: stripeCustomerId,
-      amount: this.toStripeMinorUnit(input.amount),
-      currency: input.currency.toLowerCase(),
-      stripePaymentMethodId: input.stripePaymentMethodId,
-      metadata: {
-        requestId: input.requestId,
-        customerId: input.customerId,
-        driverId: input.driverId,
-        acceptedOfferId: input.acceptedOfferId,
+    const paymentIntent = await this.stripeService.createImmediateCaptureIntent(
+      {
+        customerId: stripeCustomerId,
+        amount: this.toStripeMinorUnit(input.amount),
+        currency: input.currency.toLowerCase(),
+        stripePaymentMethodId: input.stripePaymentMethodId,
+        metadata: {
+          requestId: input.requestId,
+          customerId: input.customerId,
+          driverId: input.driverId,
+          acceptedOfferId: input.acceptedOfferId,
+        },
       },
-    });
+    );
 
     try {
       const status = this.mapStripeIntentStatus(paymentIntent);
@@ -3211,7 +3253,9 @@ export class PaymentsService {
       disputeStatus: settlement.disputeStatus,
       disputeReason: settlement.disputeReason,
       disputeAmount:
-        settlement.disputeAmount !== null ? Number(settlement.disputeAmount) : null,
+        settlement.disputeAmount !== null
+          ? Number(settlement.disputeAmount)
+          : null,
       disputeCurrency: settlement.disputeCurrency,
       disputeCreatedAt: settlement.disputeCreatedAt
         ? settlement.disputeCreatedAt.toISOString()
@@ -3267,7 +3311,9 @@ export class PaymentsService {
     };
   }
 
-  private toCustomerWalletTopUpDto(topUp: WalletTopUpRecord): CustomerWalletTopUpDto {
+  private toCustomerWalletTopUpDto(
+    topUp: WalletTopUpRecord,
+  ): CustomerWalletTopUpDto {
     return {
       id: topUp.id,
       walletId: topUp.walletId,
@@ -3284,7 +3330,8 @@ export class PaymentsService {
       stripeDisputeId: topUp.stripeDisputeId,
       disputeStatus: topUp.disputeStatus,
       disputeReason: topUp.disputeReason,
-      disputeAmount: topUp.disputeAmount !== null ? Number(topUp.disputeAmount) : null,
+      disputeAmount:
+        topUp.disputeAmount !== null ? Number(topUp.disputeAmount) : null,
       disputeCurrency: topUp.disputeCurrency,
       disputeCreatedAt: topUp.disputeCreatedAt
         ? topUp.disputeCreatedAt.toISOString()
@@ -3348,7 +3395,9 @@ export class PaymentsService {
       customerId: charge.customerId,
       amount: Number(charge.amount),
       appFeeAmount: Number(this.calculateAdditionalChargeAppFee(charge.amount)),
-      totalChargeAmount: Number(this.calculateAdditionalChargeTotal(charge.amount)),
+      totalChargeAmount: Number(
+        this.calculateAdditionalChargeTotal(charge.amount),
+      ),
       currency: charge.currency,
       reason: charge.reason,
       equipmentType: charge.equipmentType,
@@ -3472,7 +3521,9 @@ export class PaymentsService {
     return value.lt(0) ? new Prisma.Decimal(0) : value;
   }
 
-  private normalizeStripeDisputeReference(value?: string | null): string | null {
+  private normalizeStripeDisputeReference(
+    value?: string | null,
+  ): string | null {
     const normalized = value?.trim();
     return normalized ? normalized : null;
   }

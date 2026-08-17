@@ -1,4 +1,8 @@
-import { CustomerWalletTopUpStatus, DriverPayoutState, TripPaymentSettlementStatus } from '@prisma/client';
+import {
+  CustomerWalletTopUpStatus,
+  DriverPayoutState,
+  TripPaymentSettlementStatus,
+} from '@prisma/client';
 
 export type AdminPaymentDisputeRecordType = 'TRIP_CHARGE' | 'WALLET_TOP_UP';
 
@@ -18,9 +22,7 @@ export interface AdminPaymentDisputeSummaryDto {
 export interface AdminPaymentDisputeItemDto {
   id: string;
   recordType: AdminPaymentDisputeRecordType;
-  paymentStatus:
-    | TripPaymentSettlementStatus
-    | CustomerWalletTopUpStatus;
+  paymentStatus: TripPaymentSettlementStatus | CustomerWalletTopUpStatus;
   disputeStatus: string | null;
   stripeDisputeId: string | null;
   stripeChargeId: string | null;
@@ -36,13 +38,11 @@ export interface AdminPaymentDisputeItemDto {
   disputeEvidenceDueBy: string | null;
   requiresManualReview: boolean;
   customer: AdminPaymentDisputePartyDto;
-  trip:
-    | {
-        requestId: string;
-        driver: AdminPaymentDisputePartyDto | null;
-        driverPayoutState: DriverPayoutState;
-      }
-    | null;
+  trip: {
+    requestId: string;
+    driver: AdminPaymentDisputePartyDto | null;
+    driverPayoutState: DriverPayoutState;
+  } | null;
   walletTopUpId: string | null;
   createdAt: string;
   updatedAt: string;

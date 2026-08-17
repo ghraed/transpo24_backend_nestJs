@@ -40,7 +40,6 @@ import {
 } from './dto/admin-driver-earnings-response.dto';
 import { AdminPaymentDisputesQueryDto } from './dto/admin-payment-disputes-query.dto';
 import {
-  type AdminPaymentDisputeRecordType,
   AdminPaymentDisputeItemDto,
   AdminPaymentDisputesListResponseDto,
   AdminPaymentDisputeSummaryDto,
@@ -304,16 +303,49 @@ type DeliveryOperationsSource = {
   heldAmount: Prisma.Decimal | null;
   capturedAmount: Prisma.Decimal | null;
   service: { nameEn: string };
-  customer: { id: string; name: string; email: string; phoneNumber: string | null };
-  assignedDriver: { id: string; phone: string; user: { name: string; email: string; phoneNumber: string | null } } | null;
+  customer: {
+    id: string;
+    name: string;
+    email: string;
+    phoneNumber: string | null;
+  };
+  assignedDriver: {
+    id: string;
+    phone: string;
+    user: { name: string; email: string; phoneNumber: string | null };
+  } | null;
   offers: Array<{
-    id: string; price: Prisma.Decimal; currency: string; status: string; message: string | null;
-    estimatedPickupAt: Date | null; estimatedDeliveryAt: Date | null; estimatedDurationMinutes: number | null;
-    createdAt: Date; acceptedAt: Date | null; rejectedAt: Date | null; cancelledAt: Date | null;
-    driver: { id: string; phone: string; user: { name: string; email: string; phoneNumber: string | null } };
+    id: string;
+    price: Prisma.Decimal;
+    currency: string;
+    status: string;
+    message: string | null;
+    estimatedPickupAt: Date | null;
+    estimatedDeliveryAt: Date | null;
+    estimatedDurationMinutes: number | null;
+    createdAt: Date;
+    acceptedAt: Date | null;
+    rejectedAt: Date | null;
+    cancelledAt: Date | null;
+    driver: {
+      id: string;
+      phone: string;
+      user: { name: string; email: string; phoneNumber: string | null };
+    };
   }>;
-  photos: Array<{ id: string; url: string; originalName: string | null; createdAt: Date }>;
-  proofPhotos: Array<{ id: string; type: string; url: string; originalName: string | null; createdAt: Date }>;
+  photos: Array<{
+    id: string;
+    url: string;
+    originalName: string | null;
+    createdAt: Date;
+  }>;
+  proofPhotos: Array<{
+    id: string;
+    type: string;
+    url: string;
+    originalName: string | null;
+    createdAt: Date;
+  }>;
 };
 
 type DriverEarningAdminSource = {
@@ -631,10 +663,7 @@ export class AdminService {
     const [items, total, summary] = await Promise.all([
       this.prisma.driverEarning.findMany({
         where,
-        orderBy: [
-          { availableAt: 'asc' },
-          { createdAt: 'desc' },
-        ],
+        orderBy: [{ availableAt: 'asc' }, { createdAt: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
         select: this.driverEarningAdminSelect(),
@@ -693,9 +722,10 @@ export class AdminService {
           deliveryProofImageUrl: true,
         },
       });
-      const url = kind === 'pickup'
-        ? request?.pickupProofImageUrl
-        : request?.deliveryProofImageUrl;
+      const url =
+        kind === 'pickup'
+          ? request?.pickupProofImageUrl
+          : request?.deliveryProofImageUrl;
 
       if (!url) {
         throw new NotFoundException('Delivery proof image not found.');
@@ -777,8 +807,10 @@ export class AdminService {
 
     const latestRuns = await this.ensureLatestPaymentReconciliationRuns();
     const latestRunIds = latestRuns.map((run) => run.id);
-    const internalStream = this.mapPaymentReconciliationStreamFilter(streamFilter);
-    const internalStatus = this.mapPaymentReconciliationStatusFilter(statusFilter);
+    const internalStream =
+      this.mapPaymentReconciliationStreamFilter(streamFilter);
+    const internalStatus =
+      this.mapPaymentReconciliationStatusFilter(statusFilter);
     const items = await this.loadPaymentReconciliationRecords({
       runIds: latestRunIds,
       stream: internalStream,
@@ -796,14 +828,18 @@ export class AdminService {
       items: items.map((item) => this.mapPaymentReconciliationRecord(item)),
       total,
       summary: this.getPaymentReconciliationSummary(latestRuns),
-      latestRuns: latestRuns.map((run) => this.mapPaymentReconciliationRun(run)),
+      latestRuns: latestRuns.map((run) =>
+        this.mapPaymentReconciliationRun(run),
+      ),
     };
   }
 
   async runPaymentReconciliation(
     dto: RunPaymentReconciliationDto,
   ): Promise<AdminPaymentReconciliationRunResponseDto> {
-    const runs = await this.runPaymentReconciliationStreams(dto.stream ?? 'all');
+    const runs = await this.runPaymentReconciliationStreams(
+      dto.stream ?? 'all',
+    );
 
     return {
       runs: runs.map((run) => this.mapPaymentReconciliationRun(run)),
@@ -945,7 +981,9 @@ export class AdminService {
     const vehicle = profile.vehicles.find((item) => item.id === vehicleId);
 
     if (!vehicle) {
-      throw new NotFoundException('Vehicle submission not found for this driver.');
+      throw new NotFoundException(
+        'Vehicle submission not found for this driver.',
+      );
     }
 
     if (!this.hasRequiredVehicleDocuments(vehicle.documents)) {
@@ -1332,8 +1370,12 @@ export class AdminService {
       additionalCharges: earning.trip.additionalCharges.map((charge) => ({
         id: charge.id,
         amount: Number(charge.amount),
-        appFeeAmount: Number(this.calculateAdditionalChargeAppFee(charge.amount)),
-        totalChargeAmount: Number(this.calculateAdditionalChargeTotal(charge.amount)),
+        appFeeAmount: Number(
+          this.calculateAdditionalChargeAppFee(charge.amount),
+        ),
+        totalChargeAmount: Number(
+          this.calculateAdditionalChargeTotal(charge.amount),
+        ),
         currency: charge.currency,
         status: charge.status,
         paymentOption: this.getAdditionalChargePaymentOption({
@@ -1405,7 +1447,10 @@ export class AdminService {
       };
     }
 
-    if (earning.status === DriverEarningStatus.PAID_OUT || earning.stripeTransferId) {
+    if (
+      earning.status === DriverEarningStatus.PAID_OUT ||
+      earning.stripeTransferId
+    ) {
       return {
         canRetry: false,
         retryBlockedReason: 'Driver payout was already transferred.',
@@ -1424,8 +1469,7 @@ export class AdminService {
     if (settlement.driverPayoutState === DriverPayoutState.PENDING_TRANSFER) {
       const isStale =
         settlement.lastPayoutAttemptAt !== null &&
-        settlement.lastPayoutAttemptAt.getTime() <=
-          now - 15 * 60 * 1000;
+        settlement.lastPayoutAttemptAt.getTime() <= now - 15 * 60 * 1000;
 
       return {
         canRetry: isStale,
@@ -1439,7 +1483,8 @@ export class AdminService {
       if (earning.availableAt && earning.availableAt.getTime() > now) {
         return {
           canRetry: false,
-          retryBlockedReason: 'Driver earning is still in the 24-hour pending hold.',
+          retryBlockedReason:
+            'Driver earning is still in the 24-hour pending hold.',
         };
       }
 
@@ -1634,7 +1679,9 @@ export class AdminService {
       amount: Number(settlement.collectedAmount),
       currency: settlement.currency,
       disputeAmount:
-        settlement.disputeAmount !== null ? Number(settlement.disputeAmount) : null,
+        settlement.disputeAmount !== null
+          ? Number(settlement.disputeAmount)
+          : null,
       disputeCurrency: settlement.disputeCurrency,
       disputeReason: settlement.disputeReason,
       disputeCreatedAt: settlement.disputeCreatedAt?.toISOString() ?? null,
@@ -1679,7 +1726,8 @@ export class AdminService {
       stripePaymentIntentId: topUp.stripePaymentIntentId,
       amount: Number(topUp.amount),
       currency: topUp.currency,
-      disputeAmount: topUp.disputeAmount !== null ? Number(topUp.disputeAmount) : null,
+      disputeAmount:
+        topUp.disputeAmount !== null ? Number(topUp.disputeAmount) : null,
       disputeCurrency: topUp.disputeCurrency,
       disputeReason: topUp.disputeReason,
       disputeCreatedAt: topUp.disputeCreatedAt?.toISOString() ?? null,
@@ -1742,7 +1790,10 @@ export class AdminService {
         LIMIT 32
       `,
     );
-    const latestByStream = new Map<PaymentReconciliationStream, PaymentReconciliationRunRow>();
+    const latestByStream = new Map<
+      PaymentReconciliationStream,
+      PaymentReconciliationRunRow
+    >();
 
     for (const run of runs) {
       if (!latestByStream.has(run.stream)) {
@@ -1750,9 +1801,9 @@ export class AdminService {
       }
     }
 
-    return PAYMENT_RECONCILIATION_STREAMS.map((stream) => latestByStream.get(stream)).filter(
-      (run): run is PaymentReconciliationRunRow => Boolean(run),
-    );
+    return PAYMENT_RECONCILIATION_STREAMS.map((stream) =>
+      latestByStream.get(stream),
+    ).filter((run): run is PaymentReconciliationRunRow => Boolean(run));
   }
 
   private async runPaymentReconciliationStreams(
@@ -1831,12 +1882,14 @@ export class AdminService {
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Payment reconciliation failed.';
+        error instanceof Error
+          ? error.message
+          : 'Payment reconciliation failed.';
 
       await this.updatePaymentReconciliationRun(run.id, {
-          status: PaymentReconciliationRunStatus.FAILED,
-          finishedAt: new Date(),
-          errorMessage: message,
+        status: PaymentReconciliationRunStatus.FAILED,
+        finishedAt: new Date(),
+        errorMessage: message,
       });
 
       throw error;
@@ -1904,12 +1957,15 @@ export class AdminService {
       const topUpTransactions = topUp.walletTransactions.filter(
         (transaction) => transaction.type === PaymentTransactionType.TOP_UP,
       );
-      const actualAmount = this.sumDecimalValues(topUpTransactions.map((item) => item.amount));
+      const actualAmount = this.sumDecimalValues(
+        topUpTransactions.map((item) => item.amount),
+      );
       const currencyMismatch = topUpTransactions.some(
         (transaction) => transaction.currency !== topUp.currency,
       );
 
-      let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+      let status: PaymentReconciliationStatus =
+        PaymentReconciliationStatus.MATCHED;
       let reason: string | null = null;
 
       if (topUp.status === CustomerWalletTopUpStatus.SUCCEEDED) {
@@ -1921,10 +1977,12 @@ export class AdminService {
           reason = 'Wallet top-up succeeded without a wallet transaction.';
         } else if (currencyMismatch) {
           status = PaymentReconciliationStatus.MISMATCH;
-          reason = 'Wallet top-up transaction currency does not match the top-up currency.';
+          reason =
+            'Wallet top-up transaction currency does not match the top-up currency.';
         } else if (!this.decimalsEqual(actualAmount, topUp.amount)) {
           status = PaymentReconciliationStatus.MISMATCH;
-          reason = 'Wallet top-up transaction amount does not match the recorded top-up amount.';
+          reason =
+            'Wallet top-up transaction amount does not match the recorded top-up amount.';
         }
       } else if (
         topUp.status === CustomerWalletTopUpStatus.FAILED ||
@@ -2020,7 +2078,8 @@ export class AdminService {
 
     return holds.map((hold) => {
       const settlementAmount = hold.settlement?.collectedAmount ?? null;
-      let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+      let status: PaymentReconciliationStatus =
+        PaymentReconciliationStatus.MATCHED;
       let reason: string | null = null;
 
       if (hold.status !== PaymentStatus.PAYMENT_CAPTURED) {
@@ -2032,7 +2091,9 @@ export class AdminService {
       } else if (!hold.settlement) {
         status = PaymentReconciliationStatus.MISSING;
         reason = 'Captured payment is missing a settlement record.';
-      } else if (hold.request.paymentStatus !== PaymentStatus.PAYMENT_CAPTURED) {
+      } else if (
+        hold.request.paymentStatus !== PaymentStatus.PAYMENT_CAPTURED
+      ) {
         status = PaymentReconciliationStatus.MISMATCH;
         reason = 'Transport request payment status is not marked as captured.';
       } else if (hold.request.capturedAmount === null) {
@@ -2044,7 +2105,8 @@ export class AdminService {
         !this.decimalsEqual(hold.request.capturedAmount, hold.amount)
       ) {
         status = PaymentReconciliationStatus.MISMATCH;
-        reason = 'Captured payment totals do not match across hold, request, and settlement.';
+        reason =
+          'Captured payment totals do not match across hold, request, and settlement.';
       }
 
       return this.buildPaymentReconciliationDraft({
@@ -2131,9 +2193,10 @@ export class AdminService {
     });
 
     return settlements.map((settlement) => {
-      const refundTransactions = settlement.paymentHold.walletTransactions.filter(
-        (transaction) => transaction.type === PaymentTransactionType.REFUND,
-      );
+      const refundTransactions =
+        settlement.paymentHold.walletTransactions.filter(
+          (transaction) => transaction.type === PaymentTransactionType.REFUND,
+        );
       const walletRefundAmount = this.sumDecimalValues(
         refundTransactions.map((item) => item.amount),
       );
@@ -2145,7 +2208,8 @@ export class AdminService {
           ? settlement.refundedAmount
           : null;
 
-      let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+      let status: PaymentReconciliationStatus =
+        PaymentReconciliationStatus.MATCHED;
       let reason: string | null = null;
 
       if (settlement.refundedAmount.comparedTo(0) <= 0) {
@@ -2161,10 +2225,14 @@ export class AdminService {
           reason = 'Wallet refund is missing a wallet refund transaction.';
         } else if (hasCurrencyMismatch) {
           status = PaymentReconciliationStatus.MISMATCH;
-          reason = 'Wallet refund transaction currency does not match the settlement currency.';
-        } else if (!this.decimalsEqual(walletRefundAmount, settlement.refundedAmount)) {
+          reason =
+            'Wallet refund transaction currency does not match the settlement currency.';
+        } else if (
+          !this.decimalsEqual(walletRefundAmount, settlement.refundedAmount)
+        ) {
           status = PaymentReconciliationStatus.MISMATCH;
-          reason = 'Wallet refund transaction amount does not match the settlement refunded amount.';
+          reason =
+            'Wallet refund transaction amount does not match the settlement refunded amount.';
         }
       } else if (!settlement.lastStripeRefundId) {
         status = PaymentReconciliationStatus.MISSING;
@@ -2257,10 +2325,10 @@ export class AdminService {
       .filter((earning) =>
         Boolean(
           earning.trip.paymentSettlement &&
-            (earning.trip.paymentSettlement.driverPayoutState !==
-              DriverPayoutState.NOT_EARNED ||
-              earning.stripeTransferId ||
-              earning.status === DriverEarningStatus.PAID_OUT),
+          (earning.trip.paymentSettlement.driverPayoutState !==
+            DriverPayoutState.NOT_EARNED ||
+            earning.stripeTransferId ||
+            earning.status === DriverEarningStatus.PAID_OUT),
         ),
       )
       .map((earning) => {
@@ -2288,13 +2356,19 @@ export class AdminService {
           });
         }
 
-        let status: PaymentReconciliationStatus = PaymentReconciliationStatus.MATCHED;
+        let status: PaymentReconciliationStatus =
+          PaymentReconciliationStatus.MATCHED;
         let reason: string | null = null;
 
-        if (!this.decimalsEqual(settlement.driverShareAmount, earning.netAmount)) {
+        if (
+          !this.decimalsEqual(settlement.driverShareAmount, earning.netAmount)
+        ) {
           status = PaymentReconciliationStatus.MISMATCH;
-          reason = 'Driver earning amount does not match the settlement driver share.';
-        } else if (settlement.driverPayoutState === DriverPayoutState.PAID_OUT) {
+          reason =
+            'Driver earning amount does not match the settlement driver share.';
+        } else if (
+          settlement.driverPayoutState === DriverPayoutState.PAID_OUT
+        ) {
           if (!earning.stripeTransferId) {
             status = PaymentReconciliationStatus.MISSING;
             reason = 'Paid-out earning is missing a Stripe transfer id.';
@@ -2303,7 +2377,8 @@ export class AdminService {
             reason = 'Paid-out earning has a non-paid Stripe transfer status.';
           } else if (earning.status !== DriverEarningStatus.PAID_OUT) {
             status = PaymentReconciliationStatus.MISMATCH;
-            reason = 'Settlement is paid out but earning status is not PAID_OUT.';
+            reason =
+              'Settlement is paid out but earning status is not PAID_OUT.';
           }
         } else if (
           settlement.driverPayoutState === DriverPayoutState.TRANSFER_FAILED
@@ -2366,7 +2441,10 @@ export class AdminService {
       currency: input.currency,
       expectedAmount: input.expectedAmount,
       actualAmount: input.actualAmount,
-      deltaAmount: this.calculateDeltaAmount(input.expectedAmount, input.actualAmount),
+      deltaAmount: this.calculateDeltaAmount(
+        input.expectedAmount,
+        input.actualAmount,
+      ),
       reference: input.reference ?? null,
       externalReference: input.externalReference ?? null,
       tripId: input.tripId ?? null,
@@ -2381,7 +2459,10 @@ export class AdminService {
       driverName: input.driverName ?? null,
       driverEmail: input.driverEmail ?? null,
       reason: input.reason ?? null,
-      resolvedAt: input.status === PaymentReconciliationStatus.MATCHED ? input.updatedAt : input.resolvedAt ?? null,
+      resolvedAt:
+        input.status === PaymentReconciliationStatus.MATCHED
+          ? input.updatedAt
+          : (input.resolvedAt ?? null),
     };
   }
 
@@ -2493,20 +2574,22 @@ export class AdminService {
       transferId: record.transferId,
       refundId: record.refundId,
       captureId: record.captureId,
-      customer: record.customerId || record.customerName || record.customerEmail
-        ? {
-            id: record.customerId,
-            name: record.customerName,
-            email: record.customerEmail,
-          }
-        : null,
-      driver: record.driverId || record.driverName || record.driverEmail
-        ? {
-            id: record.driverId,
-            name: record.driverName,
-            email: record.driverEmail,
-          }
-        : null,
+      customer:
+        record.customerId || record.customerName || record.customerEmail
+          ? {
+              id: record.customerId,
+              name: record.customerName,
+              email: record.customerEmail,
+            }
+          : null,
+      driver:
+        record.driverId || record.driverName || record.driverEmail
+          ? {
+              id: record.driverId,
+              name: record.driverName,
+              email: record.driverEmail,
+            }
+          : null,
       reason: record.reason,
       jobRunId: record.runId,
       detectedAt: record.createdAt.toISOString(),
@@ -2919,11 +3002,19 @@ export class AdminService {
         { id: { contains: search, mode: 'insensitive' } },
         { pickupAddress: { contains: search, mode: 'insensitive' } },
         { dropoffAddress: { contains: search, mode: 'insensitive' } },
-        { customer: { is: { name: { contains: search, mode: 'insensitive' } } } },
-        { customer: { is: { email: { contains: search, mode: 'insensitive' } } } },
+        {
+          customer: { is: { name: { contains: search, mode: 'insensitive' } } },
+        },
+        {
+          customer: {
+            is: { email: { contains: search, mode: 'insensitive' } },
+          },
+        },
         {
           assignedDriver: {
-            is: { user: { is: { name: { contains: search, mode: 'insensitive' } } } },
+            is: {
+              user: { is: { name: { contains: search, mode: 'insensitive' } } },
+            },
           },
         },
       ];
@@ -2939,17 +3030,27 @@ export class AdminService {
         where: {
           status: {
             in: [
-              'ACCEPTED', 'DRIVER_ASSIGNED', 'DRIVER_GOING_TO_PICKUP',
-              'DRIVER_ARRIVED_PICKUP', 'ITEM_PICKED_UP', 'PICKUP_IN_PROGRESS',
-              'IN_TRANSIT', 'DRIVER_GOING_TO_DROPOFF',
+              'ACCEPTED',
+              'DRIVER_ASSIGNED',
+              'DRIVER_GOING_TO_PICKUP',
+              'DRIVER_ARRIVED_PICKUP',
+              'ITEM_PICKED_UP',
+              'PICKUP_IN_PROGRESS',
+              'IN_TRANSIT',
+              'DRIVER_GOING_TO_DROPOFF',
             ],
           },
         },
       }),
       this.prisma.transportRequest.count({
-        where: { assignedDriverId: null, status: { notIn: ['COMPLETED', 'DELIVERED', 'CANCELLED'] } },
+        where: {
+          assignedDriverId: null,
+          status: { notIn: ['COMPLETED', 'DELIVERED', 'CANCELLED'] },
+        },
       }),
-      this.prisma.transportRequest.count({ where: { status: { in: ['COMPLETED', 'DELIVERED'] } } }),
+      this.prisma.transportRequest.count({
+        where: { status: { in: ['COMPLETED', 'DELIVERED'] } },
+      }),
     ]);
 
     return { total, active, unassigned, completed };
@@ -2957,40 +3058,110 @@ export class AdminService {
 
   private deliveryOperationsSelect() {
     return {
-      id: true, status: true, createdAt: true, submittedAt: true, scheduledPickupAt: true,
-      isImmediate: true, pickupAddress: true, dropoffAddress: true, itemTitle: true,
-      itemType: true, itemDescription: true, itemBrand: true, itemModel: true, itemYear: true,
-      itemCondition: true, itemWeightKg: true, itemLengthCm: true, itemWidthCm: true,
-      itemHeightCm: true, specialInstructions: true, customerNote: true, goodsDescription: true,
-      goodsNumberOfPieces: true, goodsIsFragile: true, furnitureDescription: true,
-      furnitureApproximateItemCount: true, vehicleVin: true, vehicleBrand: true,
-      vehicleModel: true, vehicleManufactureYear: true, acceptedOfferId: true, acceptedAt: true,
-      driverArrivedPickupAt: true, itemPickedUpAt: true, driverGoingToDropoffAt: true,
-      deliveredAt: true, completedAt: true, pickupNotes: true, deliveryNotes: true,
-      pickupProofImageUrl: true, deliveryProofImageUrl: true,
-      pickupConfirmedByDriver: true, deliveryConfirmedByDriver: true, finalPrice: true,
-      currency: true, paymentStatus: true, paymentMethod: true, heldAmount: true,
+      id: true,
+      status: true,
+      createdAt: true,
+      submittedAt: true,
+      scheduledPickupAt: true,
+      isImmediate: true,
+      pickupAddress: true,
+      dropoffAddress: true,
+      itemTitle: true,
+      itemType: true,
+      itemDescription: true,
+      itemBrand: true,
+      itemModel: true,
+      itemYear: true,
+      itemCondition: true,
+      itemWeightKg: true,
+      itemLengthCm: true,
+      itemWidthCm: true,
+      itemHeightCm: true,
+      specialInstructions: true,
+      customerNote: true,
+      goodsDescription: true,
+      goodsNumberOfPieces: true,
+      goodsIsFragile: true,
+      furnitureDescription: true,
+      furnitureApproximateItemCount: true,
+      vehicleVin: true,
+      vehicleBrand: true,
+      vehicleModel: true,
+      vehicleManufactureYear: true,
+      acceptedOfferId: true,
+      acceptedAt: true,
+      driverArrivedPickupAt: true,
+      itemPickedUpAt: true,
+      driverGoingToDropoffAt: true,
+      deliveredAt: true,
+      completedAt: true,
+      pickupNotes: true,
+      deliveryNotes: true,
+      pickupProofImageUrl: true,
+      deliveryProofImageUrl: true,
+      pickupConfirmedByDriver: true,
+      deliveryConfirmedByDriver: true,
+      finalPrice: true,
+      currency: true,
+      paymentStatus: true,
+      paymentMethod: true,
+      heldAmount: true,
       capturedAmount: true,
       service: { select: { nameEn: true } },
-      customer: { select: { id: true, name: true, email: true, phoneNumber: true } },
+      customer: {
+        select: { id: true, name: true, email: true, phoneNumber: true },
+      },
       assignedDriver: {
-        select: { id: true, phone: true, user: { select: { name: true, email: true, phoneNumber: true } } },
+        select: {
+          id: true,
+          phone: true,
+          user: { select: { name: true, email: true, phoneNumber: true } },
+        },
       },
       offers: {
         orderBy: { createdAt: 'asc' as const },
         select: {
-          id: true, price: true, currency: true, status: true, message: true,
-          estimatedPickupAt: true, estimatedDeliveryAt: true, estimatedDurationMinutes: true,
-          createdAt: true, acceptedAt: true, rejectedAt: true, cancelledAt: true,
-          driver: { select: { id: true, phone: true, user: { select: { name: true, email: true, phoneNumber: true } } } },
+          id: true,
+          price: true,
+          currency: true,
+          status: true,
+          message: true,
+          estimatedPickupAt: true,
+          estimatedDeliveryAt: true,
+          estimatedDurationMinutes: true,
+          createdAt: true,
+          acceptedAt: true,
+          rejectedAt: true,
+          cancelledAt: true,
+          driver: {
+            select: {
+              id: true,
+              phone: true,
+              user: { select: { name: true, email: true, phoneNumber: true } },
+            },
+          },
         },
       },
-      photos: { orderBy: { sortOrder: 'asc' as const }, select: { id: true, url: true, originalName: true, createdAt: true } },
-      proofPhotos: { orderBy: { createdAt: 'asc' as const }, select: { id: true, type: true, url: true, originalName: true, createdAt: true } },
+      photos: {
+        orderBy: { sortOrder: 'asc' as const },
+        select: { id: true, url: true, originalName: true, createdAt: true },
+      },
+      proofPhotos: {
+        orderBy: { createdAt: 'asc' as const },
+        select: {
+          id: true,
+          type: true,
+          url: true,
+          originalName: true,
+          createdAt: true,
+        },
+      },
     };
   }
 
-  private mapDeliveryOperationsRecord(record: DeliveryOperationsSource): AdminDeliveryOperationsItemDto {
+  private mapDeliveryOperationsRecord(
+    record: DeliveryOperationsSource,
+  ): AdminDeliveryOperationsItemDto {
     return {
       id: record.id,
       status: record.status,
@@ -3000,65 +3171,154 @@ export class AdminService {
       scheduledPickupAt: record.scheduledPickupAt?.toISOString() ?? null,
       isImmediate: record.isImmediate,
       customer: this.deliveryOperationsCustomer(record.customer),
-      assignedDriver: record.assignedDriver ? this.deliveryOperationsDriver(record.assignedDriver) : null,
+      assignedDriver: record.assignedDriver
+        ? this.deliveryOperationsDriver(record.assignedDriver)
+        : null,
       acceptedOfferId: record.acceptedOfferId,
-      route: { pickupAddress: record.pickupAddress, dropoffAddress: record.dropoffAddress },
+      route: {
+        pickupAddress: record.pickupAddress,
+        dropoffAddress: record.dropoffAddress,
+      },
       item: {
         title: record.itemTitle,
         type: record.itemType,
         description: record.itemDescription,
         details: {
-          brand: record.itemBrand ?? record.vehicleBrand, model: record.itemModel ?? record.vehicleModel,
-          year: record.itemYear ?? record.vehicleManufactureYear, condition: record.itemCondition,
-          weightKg: record.itemWeightKg, dimensionsCm: [record.itemLengthCm, record.itemWidthCm, record.itemHeightCm].every((value) => value !== null) ? `${record.itemLengthCm} × ${record.itemWidthCm} × ${record.itemHeightCm}` : null,
-          vin: record.vehicleVin, goodsDescription: record.goodsDescription, pieces: record.goodsNumberOfPieces,
-          fragile: record.goodsIsFragile || null, furnitureDescription: record.furnitureDescription,
-          furnitureItemCount: record.furnitureApproximateItemCount, instructions: record.specialInstructions,
+          brand: record.itemBrand ?? record.vehicleBrand,
+          model: record.itemModel ?? record.vehicleModel,
+          year: record.itemYear ?? record.vehicleManufactureYear,
+          condition: record.itemCondition,
+          weightKg: record.itemWeightKg,
+          dimensionsCm: [
+            record.itemLengthCm,
+            record.itemWidthCm,
+            record.itemHeightCm,
+          ].every((value) => value !== null)
+            ? `${record.itemLengthCm} × ${record.itemWidthCm} × ${record.itemHeightCm}`
+            : null,
+          vin: record.vehicleVin,
+          goodsDescription: record.goodsDescription,
+          pieces: record.goodsNumberOfPieces,
+          fragile: record.goodsIsFragile || null,
+          furnitureDescription: record.furnitureDescription,
+          furnitureItemCount: record.furnitureApproximateItemCount,
+          instructions: record.specialInstructions,
           customerNote: record.customerNote,
         },
       },
-      offers: record.offers.map((offer) => this.mapDeliveryOperationsOffer(offer)),
+      offers: record.offers.map((offer) =>
+        this.mapDeliveryOperationsOffer(offer),
+      ),
       delivery: {
         acceptedAt: record.acceptedAt?.toISOString() ?? null,
-        driverArrivedPickupAt: record.driverArrivedPickupAt?.toISOString() ?? null,
+        driverArrivedPickupAt:
+          record.driverArrivedPickupAt?.toISOString() ?? null,
         itemPickedUpAt: record.itemPickedUpAt?.toISOString() ?? null,
-        driverGoingToDropoffAt: record.driverGoingToDropoffAt?.toISOString() ?? null,
+        driverGoingToDropoffAt:
+          record.driverGoingToDropoffAt?.toISOString() ?? null,
         deliveredAt: record.deliveredAt?.toISOString() ?? null,
-        completedAt: (record.completedAt ?? record.deliveredAt)?.toISOString() ?? null,
-        pickupNotes: record.pickupNotes, deliveryNotes: record.deliveryNotes,
+        completedAt:
+          (record.completedAt ?? record.deliveredAt)?.toISOString() ?? null,
+        pickupNotes: record.pickupNotes,
+        deliveryNotes: record.deliveryNotes,
         pickupConfirmedByDriver: record.pickupConfirmedByDriver,
         deliveryConfirmedByDriver: record.deliveryConfirmedByDriver,
       },
       payment: {
-        finalPrice: this.decimalLikeToNumber(record.finalPrice), currency: record.currency,
-        status: record.paymentStatus, method: record.paymentMethod,
-        heldAmount: this.decimalLikeToNumber(record.heldAmount), capturedAmount: this.decimalLikeToNumber(record.capturedAmount),
+        finalPrice: this.decimalLikeToNumber(record.finalPrice),
+        currency: record.currency,
+        status: record.paymentStatus,
+        method: record.paymentMethod,
+        heldAmount: this.decimalLikeToNumber(record.heldAmount),
+        capturedAmount: this.decimalLikeToNumber(record.capturedAmount),
       },
-      photos: record.photos.map((photo): AdminDeliveryOperationsPhotoDto => ({ id: photo.id, url: photo.url, type: null, originalName: photo.originalName, createdAt: photo.createdAt.toISOString() })),
+      photos: record.photos.map(
+        (photo): AdminDeliveryOperationsPhotoDto => ({
+          id: photo.id,
+          url: photo.url,
+          type: null,
+          originalName: photo.originalName,
+          createdAt: photo.createdAt.toISOString(),
+        }),
+      ),
       proofPhotos: [
-        ...record.proofPhotos.map((photo): AdminDeliveryOperationsPhotoDto => ({ id: photo.id, url: photo.url, type: photo.type, originalName: photo.originalName, createdAt: photo.createdAt.toISOString() })),
-        ...(record.pickupProofImageUrl ? [{ id: `legacy-pickup-${record.id}`, url: record.pickupProofImageUrl, type: 'PICKUP', originalName: null, createdAt: record.itemPickedUpAt?.toISOString() ?? record.createdAt.toISOString() }] : []),
-        ...(record.deliveryProofImageUrl ? [{ id: `legacy-delivery-${record.id}`, url: record.deliveryProofImageUrl, type: 'DELIVERY', originalName: null, createdAt: record.deliveredAt?.toISOString() ?? record.createdAt.toISOString() }] : []),
+        ...record.proofPhotos.map(
+          (photo): AdminDeliveryOperationsPhotoDto => ({
+            id: photo.id,
+            url: photo.url,
+            type: photo.type,
+            originalName: photo.originalName,
+            createdAt: photo.createdAt.toISOString(),
+          }),
+        ),
+        ...(record.pickupProofImageUrl
+          ? [
+              {
+                id: `legacy-pickup-${record.id}`,
+                url: record.pickupProofImageUrl,
+                type: 'PICKUP',
+                originalName: null,
+                createdAt:
+                  record.itemPickedUpAt?.toISOString() ??
+                  record.createdAt.toISOString(),
+              },
+            ]
+          : []),
+        ...(record.deliveryProofImageUrl
+          ? [
+              {
+                id: `legacy-delivery-${record.id}`,
+                url: record.deliveryProofImageUrl,
+                type: 'DELIVERY',
+                originalName: null,
+                createdAt:
+                  record.deliveredAt?.toISOString() ??
+                  record.createdAt.toISOString(),
+              },
+            ]
+          : []),
       ],
     };
   }
 
-  private deliveryOperationsCustomer(customer: DeliveryOperationsSource['customer']): AdminDeliveryOperationsPartyDto {
-    return { id: customer.id, name: customer.name, email: customer.email, phone: customer.phoneNumber };
-  }
-
-  private deliveryOperationsDriver(driver: NonNullable<DeliveryOperationsSource['assignedDriver']>): AdminDeliveryOperationsPartyDto {
-    return { id: driver.id, name: driver.user.name, email: driver.user.email, phone: driver.phone || driver.user.phoneNumber };
-  }
-
-  private mapDeliveryOperationsOffer(offer: DeliveryOperationsSource['offers'][number]): AdminDeliveryOperationsOfferDto {
-    const respondedAt = offer.acceptedAt ?? offer.rejectedAt ?? offer.cancelledAt;
+  private deliveryOperationsCustomer(
+    customer: DeliveryOperationsSource['customer'],
+  ): AdminDeliveryOperationsPartyDto {
     return {
-      id: offer.id, driver: this.deliveryOperationsDriver(offer.driver), price: this.decimalLikeToNumber(offer.price) ?? 0,
-      currency: offer.currency, status: offer.status, message: offer.message,
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phoneNumber,
+    };
+  }
+
+  private deliveryOperationsDriver(
+    driver: NonNullable<DeliveryOperationsSource['assignedDriver']>,
+  ): AdminDeliveryOperationsPartyDto {
+    return {
+      id: driver.id,
+      name: driver.user.name,
+      email: driver.user.email,
+      phone: driver.phone || driver.user.phoneNumber,
+    };
+  }
+
+  private mapDeliveryOperationsOffer(
+    offer: DeliveryOperationsSource['offers'][number],
+  ): AdminDeliveryOperationsOfferDto {
+    const respondedAt =
+      offer.acceptedAt ?? offer.rejectedAt ?? offer.cancelledAt;
+    return {
+      id: offer.id,
+      driver: this.deliveryOperationsDriver(offer.driver),
+      price: this.decimalLikeToNumber(offer.price) ?? 0,
+      currency: offer.currency,
+      status: offer.status,
+      message: offer.message,
       estimatedPickupAt: offer.estimatedPickupAt?.toISOString() ?? null,
       estimatedDeliveryAt: offer.estimatedDeliveryAt?.toISOString() ?? null,
-      estimatedDurationMinutes: offer.estimatedDurationMinutes, sentAt: offer.createdAt.toISOString(),
+      estimatedDurationMinutes: offer.estimatedDurationMinutes,
+      sentAt: offer.createdAt.toISOString(),
       respondedAt: respondedAt?.toISOString() ?? null,
     };
   }
@@ -3079,11 +3339,12 @@ export class AdminService {
       throw new NotFoundException('Delivery proof image not found.');
     }
 
-    const inferredMimeType = {
-      '.png': 'image/png',
-      '.webp': 'image/webp',
-      '.gif': 'image/gif',
-    }[extname(path).toLowerCase()] ?? 'image/jpeg';
+    const inferredMimeType =
+      {
+        '.png': 'image/png',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif',
+      }[extname(path).toLowerCase()] ?? 'image/jpeg';
 
     return { path, mimeType: mimeType ?? inferredMimeType };
   }
@@ -3221,7 +3482,9 @@ export class AdminService {
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
       onboardingDocuments,
-      vehicles: profile.vehicles.map((vehicle) => this.mapReviewVehicle(vehicle)),
+      vehicles: profile.vehicles.map((vehicle) =>
+        this.mapReviewVehicle(vehicle),
+      ),
       vehicle: reviewVehicle ? this.mapReviewVehicle(reviewVehicle) : null,
     };
   }

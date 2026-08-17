@@ -298,10 +298,10 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('socketDebugPing')
-  async socketDebugPing(
+  socketDebugPing(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SocketDebugPingPayload,
-  ): Promise<SocketDebugPongPayload> {
+  ): SocketDebugPongPayload {
     try {
       const user = this.getAuthenticatedSocketUser(client);
       const tripId =

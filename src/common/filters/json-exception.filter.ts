@@ -79,11 +79,8 @@ export class JsonExceptionFilter implements ExceptionFilter {
 
     return {
       statusCode,
-      message:
-        exception instanceof Error && exception.message
-          ? exception.message
-          : 'Unexpected server error.',
-      error: exception instanceof Error ? exception.name : 'Error',
+      message: 'Unexpected server error.',
+      error: 'Internal Server Error',
       timestamp: new Date().toISOString(),
       path,
     };

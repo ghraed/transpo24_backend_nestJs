@@ -16,6 +16,7 @@ import { CompleteCustomerProfileDto } from './dto/complete-customer-profile.dto'
 import { UpdateCustomerProfileDto } from './dto/update-customer-profile.dto';
 import { ContinueDriverSessionDto } from './dto/continue-driver-session.dto';
 import { CustomerAuthGuard } from './guards/customer-auth.guard';
+import { TestingOnlyGuard } from './guards/testing-only.guard';
 import type { AuthenticatedRequest } from './auth.types';
 
 @Controller('auth')
@@ -73,11 +74,13 @@ export class AuthController {
   }
 
   @Post('testing/reset-users')
+  @UseGuards(TestingOnlyGuard)
   resetUsersForTesting(): Promise<{ deletedUsers: number; keptEmail: string }> {
     return this.authService.resetUsersForTesting();
   }
 
   @Post('testing/reset-drivers')
+  @UseGuards(TestingOnlyGuard)
   resetDriversForTesting(): Promise<{
     deletedDrivers: number;
     keptEmail: string;
