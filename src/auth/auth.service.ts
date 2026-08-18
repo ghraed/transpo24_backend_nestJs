@@ -804,6 +804,14 @@ export class AuthService {
     };
   }
 
+  async logoutAdmin(user: AuthenticatedUser): Promise<{ success: true }> {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access is required.');
+    }
+
+    return { success: true };
+  }
+
   private async issueCustomerSession(
     user: {
       id: string;

@@ -388,4 +388,32 @@ describe('AuthService phone authentication', () => {
     });
     expect(logoutInput?.data.revokedAt).toBeInstanceOf(Date);
   });
+
+  it('allows an admin to log out', async () => {
+    const { service } = createHarness();
+
+    await expect(
+      service.logoutAdmin({
+        id: 'admin-1',
+        name: 'Admin',
+        email: 'admin@example.com',
+        role: UserRole.ADMIN,
+        hasDriverProfile: false,
+      }),
+    ).resolves.toEqual({ success: true });
+  });
+
+  it('rejects logout requests from non-admin users', async () => {
+    const { service } = createHarness();
+
+    await expect(
+      service.logoutAdmin({
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+        role: UserRole.CUSTOMER,
+        hasDriverProfile: false,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
 });

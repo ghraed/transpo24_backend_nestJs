@@ -16,6 +16,7 @@ import { CompleteCustomerProfileDto } from './dto/complete-customer-profile.dto'
 import { UpdateCustomerProfileDto } from './dto/update-customer-profile.dto';
 import { ContinueDriverSessionDto } from './dto/continue-driver-session.dto';
 import { CustomerAuthGuard } from './guards/customer-auth.guard';
+import { AuthenticatedUserGuard } from './guards/authenticated-user.guard';
 import { TestingOnlyGuard } from './guards/testing-only.guard';
 import type { AuthenticatedRequest } from './auth.types';
 
@@ -71,6 +72,14 @@ export class AuthController {
   @Post('admin/login')
   loginAdmin(@Body() dto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.loginAdmin(dto);
+  }
+
+  @Post('admin/logout')
+  @UseGuards(AuthenticatedUserGuard)
+  logoutAdmin(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{ success: true }> {
+    return this.authService.logoutAdmin(request.user);
   }
 
   @Post('testing/reset-users')
