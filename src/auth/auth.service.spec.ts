@@ -336,6 +336,64 @@ describe('AuthService phone authentication', () => {
     expect(response.nextStep).toBe('UPLOAD_DOCUMENTS');
   });
 
+  it('continues a trusted driver session after the normal access token expires', async () => {
+    const { service, prisma } = createHarness();
+    const driver = {
+      id: 'driver-user-trusted',
+      name: 'Trusted Driver',
+      email: 'trusted-driver@example.com',
+      role: UserRole.DRIVER,
+      deletedAt: null,
+      driverProfile: {
+        id: 'driver-profile-trusted',
+        firstName: 'Trusted',
+        lastName: 'Driver',
+        phone: '+96171251044',
+        countryCode: 'LB',
+        countryCodes: ['LB'],
+        city: 'Beirut',
+        cities: ['Beirut'],
+        status: DriverStatus.PENDING_DOCUMENTS,
+        isProfileCompleted: true,
+      },
+    };
+    prisma.user.findUnique.mockResolvedValue(driver);
+
+    const expiredAccessToken = (
+      service as unknown as {
+        createAccessToken: (
+          user: {
+            id: string;
+            name: string;
+            email: string;
+            role: UserRole;
+            hasDriverProfile: boolean;
+          },
+          ttlSeconds: number,
+        ) => string;
+      }
+    ).createAccessToken(
+      {
+        id: driver.id,
+        name: driver.name,
+        email: driver.email,
+        role: driver.role,
+        hasDriverProfile: true,
+      },
+      -1,
+    );
+
+    expect(service.getUserFromAccessToken(expiredAccessToken)).toBeNull();
+
+    await expect(
+      service.continueDriverSession(expiredAccessToken),
+    ).resolves.toMatchObject({
+      user: { id: driver.id, role: UserRole.DRIVER },
+      driver: { phone: '+96171251044' },
+      nextStep: 'UPLOAD_DOCUMENTS',
+    });
+  });
+
   it('rotates a valid refresh session', async () => {
     const { service, prisma } = createHarness();
     prisma.refreshSession.findUnique.mockResolvedValue({
