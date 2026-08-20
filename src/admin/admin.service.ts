@@ -625,12 +625,11 @@ export class AdminService {
 
   async findDriverReviews(): Promise<AdminDriverReviewResponseDto[]> {
     const profiles = await this.prisma.driverProfile.findMany({
-      where: {
-        submittedForReviewAt: {
-          not: null,
-        },
-      },
-      orderBy: [{ status: 'asc' }, { submittedForReviewAt: 'desc' }],
+      // Keep the review workspace aware of every driver from account creation.
+      // A profile only becomes actionable once it is submitted for review, but
+      // pending-profile and pending-documents drivers must remain visible so an
+      // administrator can follow their onboarding progress.
+      orderBy: [{ createdAt: 'desc' }],
       select: this.driverReviewSelect(),
     });
 
