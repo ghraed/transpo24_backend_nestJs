@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 
 import { AuthService } from './auth.service';
@@ -123,6 +123,14 @@ export class AuthController {
   @Post('logout')
   logout(@Body() dto: RefreshSessionDto): Promise<{ success: true }> {
     return this.authService.logoutCustomer(dto.refreshToken);
+  }
+
+  @Delete('account')
+  @UseGuards(AuthenticatedUserGuard)
+  deleteAccount(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{ success: true }> {
+    return this.authService.deleteAccount(request.user);
   }
 
   @UseGuards(CustomerAuthGuard)

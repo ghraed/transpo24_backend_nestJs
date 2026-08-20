@@ -13,7 +13,14 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { DriverStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  DriverStatus,
+  Prisma,
+  TransportRequestStatus,
+  UserRole,
+} from '@prisma/client';
+import { unlink } from 'node:fs/promises';
+import { join, resolve, sep } from 'node:path';
 
 import type { AuthenticatedUser } from './auth.types';
 import { hashPassword, verifyPassword } from '../common/security/password.util';
@@ -60,6 +67,18 @@ const CUSTOMER_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_DRIVER_FIRST_NAME = 'Driver';
 const DEFAULT_DRIVER_LAST_NAME = 'Account';
+const ACTIVE_ACCOUNT_DELETION_REQUEST_STATUSES: TransportRequestStatus[] = [
+  TransportRequestStatus.PENDING_QUOTES,
+  TransportRequestStatus.QUOTED,
+  TransportRequestStatus.ACCEPTED,
+  TransportRequestStatus.DRIVER_ASSIGNED,
+  TransportRequestStatus.DRIVER_GOING_TO_PICKUP,
+  TransportRequestStatus.DRIVER_ARRIVED_PICKUP,
+  TransportRequestStatus.ITEM_PICKED_UP,
+  TransportRequestStatus.PICKUP_IN_PROGRESS,
+  TransportRequestStatus.IN_TRANSIT,
+  TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
+];
 
 @Injectable()
 export class AuthService {
@@ -150,12 +169,21 @@ export class AuthService {
       }
     }
 
+    // Older soft-deleted customer records can still hold the phone-number
+    // unique key. Release it and create a fresh account instead of reviving
+    // a deleted identity.
     if (existing?.role === UserRole.CUSTOMER && existing.deletedAt) {
-      existing = await this.prisma.user.update({
+      await this.prisma.user.update({
         where: { id: existing.id },
-        data: { deletedAt: null },
-        select: this.customerSessionUserSelect,
+        data: {
+          name: 'Deleted account',
+          email: `deleted-${existing.id}@deleted.transpo24.invalid`,
+          phoneNumber: null,
+          countryCode: null,
+          isProfileCompleted: false,
+        },
       });
+      existing = null;
     }
 
     if (
@@ -335,6 +363,140 @@ export class AuthService {
       },
       data: { revokedAt: new Date(), lastUsedAt: new Date() },
     });
+    return { success: true };
+  }
+
+  /**
+   * De-identify the account while retaining only transaction records that are
+   * needed for legal, payment, dispute, and fraud-prevention obligations.
+   */
+  async deleteAccount(user: AuthenticatedUser): Promise<{ success: true }> {
+    if (user.role !== UserRole.CUSTOMER && user.role !== UserRole.DRIVER) {
+      throw new ForbiddenException(
+        'Only customer and driver accounts can be deleted here.',
+      );
+    }
+
+    const deletedAccount = await this.prisma.$transaction(async (tx) => {
+      const account = await tx.user.findFirst({
+        where: { id: user.id, role: user.role, deletedAt: null },
+        select: {
+          id: true,
+          role: true,
+          driverProfile: {
+            select: {
+              id: true,
+              profilePhotoUrl: true,
+              documents: { select: { storageKey: true } },
+            },
+          },
+        },
+      });
+
+      if (!account) {
+        throw new ForbiddenException('This account is no longer active.');
+      }
+
+      const activeRequestWhere =
+        account.role === UserRole.CUSTOMER
+          ? { customerId: account.id }
+          : {
+              assignedDriverId:
+                account.driverProfile?.id ?? '__missing_driver__',
+            };
+      const activeRequests = await tx.transportRequest.count({
+        where: {
+          ...activeRequestWhere,
+          status: { in: ACTIVE_ACCOUNT_DELETION_REQUEST_STATUSES },
+        },
+      });
+      if (activeRequests > 0) {
+        throw new BadRequestException(
+          'You cannot delete your account while you have an active transport request. Complete or cancel it first.',
+        );
+      }
+
+      const storageKeys = account.driverProfile
+        ? [
+            ...account.driverProfile.documents
+              .map((document) => document.storageKey)
+              .filter((key): key is string => Boolean(key)),
+            ...(account.driverProfile.profilePhotoUrl
+              ?.replace(/^\//, '')
+              .startsWith('uploads/')
+              ? [account.driverProfile.profilePhotoUrl.replace(/^\//, '')]
+              : []),
+          ]
+        : [];
+
+      if (account.driverProfile) {
+        await tx.driverDocument.deleteMany({
+          where: { driverId: account.driverProfile.id },
+        });
+        await tx.driverVehicle.deleteMany({
+          where: { driverId: account.driverProfile.id },
+        });
+        await tx.driverAvailability.updateMany({
+          where: { driverId: account.driverProfile.id },
+          data: { isOnline: false },
+        });
+        await tx.driverProfile.update({
+          where: { id: account.driverProfile.id },
+          data: {
+            firstName: 'Deleted',
+            lastName: 'Driver',
+            phone: `deleted-${account.driverProfile.id}`,
+            countryCode: null,
+            countryCodes: [],
+            city: null,
+            cities: [],
+            coverageAreas: [],
+            fullNameOnId: null,
+            dateOfBirth: null,
+            idOrResidencyNumber: null,
+            addressLine1: null,
+            addressLine2: null,
+            postalCode: null,
+            identityDocumentKind: null,
+            profilePhotoUrl: null,
+            preferredLanguages: [],
+            emergencyContactName: null,
+            emergencyContactPhone: null,
+            submittedForReviewAt: null,
+            status: DriverStatus.SUSPENDED,
+            isProfileCompleted: false,
+            stripeAccountId: null,
+            stripeAccountStatus: null,
+            stripeDetailsSubmitted: false,
+            stripePayoutsEnabled: false,
+          },
+        });
+      }
+
+      await Promise.all([
+        tx.pushToken.deleteMany({ where: { userId: account.id } }),
+        tx.webPushSubscription.deleteMany({ where: { userId: account.id } }),
+        tx.refreshSession.deleteMany({ where: { userId: account.id } }),
+      ]);
+
+      await tx.user.update({
+        where: { id: account.id },
+        data: {
+          name: 'Deleted account',
+          email: `deleted-${account.id}@deleted.transpo24.invalid`,
+          passwordHash: hashPassword(randomBytes(32).toString('base64url')),
+          phoneNumber: null,
+          countryCode: null,
+          stripeCustomerId: null,
+          isProfileCompleted: false,
+          deletedAt: new Date(),
+        },
+      });
+
+      return { storageKeys };
+    });
+
+    await this.deleteLocalUploads(deletedAccount.storageKeys);
     return { success: true };
   }
 
@@ -809,6 +971,7 @@ export class AuthService {
       throw new ForbiddenException('Admin access is required.');
     }
 
+    await Promise.resolve();
     return { success: true };
   }
 
@@ -982,6 +1145,23 @@ export class AuthService {
     return randomBytes(48).toString('base64url');
   }
 
+  private async deleteLocalUploads(storageKeys: string[]): Promise<void> {
+    const uploadsRoot = resolve(process.cwd(), 'uploads');
+    await Promise.all(
+      storageKeys.map(async (storageKey) => {
+        const normalized = storageKey.replace(/^\/+/, '');
+        const path = resolve(process.cwd(), normalized);
+        if (
+          !normalized.startsWith('uploads/') ||
+          !(path === uploadsRoot || path.startsWith(`${uploadsRoot}${sep}`))
+        ) {
+          return;
+        }
+        await unlink(join(process.cwd(), normalized)).catch(() => undefined);
+      }),
+    );
+  }
+
   private hashRefreshToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
@@ -1019,6 +1199,14 @@ export class AuthService {
 
   getUserFromAccessToken(token: string): AuthenticatedUser | null {
     return this.getUserFromSignedAccessToken(token, false);
+  }
+
+  async isUserActive(user: AuthenticatedUser): Promise<boolean> {
+    const account = await this.prisma.user.findFirst({
+      where: { id: user.id, role: user.role, deletedAt: null },
+      select: { id: true },
+    });
+    return Boolean(account);
   }
 
   private getUserFromSignedAccessToken(

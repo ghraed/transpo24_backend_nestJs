@@ -14,7 +14,7 @@ import { AuthService } from '../auth.service';
 export class CustomerAuthGuard implements CanActivate {
   constructor(private readonly authService: AuthService) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const authHeader = request.headers.authorization;
 
@@ -29,6 +29,10 @@ export class CustomerAuthGuard implements CanActivate {
 
     if (!user) {
       throw new UnauthorizedException('Invalid or expired token.');
+    }
+
+    if (!(await this.authService.isUserActive(user))) {
+      throw new UnauthorizedException('This account is no longer active.');
     }
 
     if (user.role !== UserRole.CUSTOMER) {

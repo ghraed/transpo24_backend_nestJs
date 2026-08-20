@@ -209,7 +209,7 @@ describe('AuthService phone authentication', () => {
     expect(response.isNewUser).toBe(true);
   });
 
-  it('reactivates a deleted customer after successful phone verification', async () => {
+  it('creates a fresh customer account instead of reactivating a deleted one', async () => {
     const { service, prisma, twilio } = createHarness();
     const deletedCustomer = {
       ...customer,
@@ -217,7 +217,8 @@ describe('AuthService phone authentication', () => {
     };
     twilio.verifyCode.mockResolvedValue('approved');
     prisma.user.findUnique.mockResolvedValue(deletedCustomer);
-    prisma.user.update.mockResolvedValue(customer);
+    prisma.user.update.mockResolvedValue({});
+    prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
       { phoneNumber: customer.phoneNumber, code: '123456' },
@@ -226,10 +227,15 @@ describe('AuthService phone authentication', () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: customer.id },
-      data: { deletedAt: null },
-      select: expect.any(Object),
+      data: {
+        name: 'Deleted account',
+        email: `deleted-${customer.id}@deleted.transpo24.invalid`,
+        phoneNumber: null,
+        countryCode: null,
+        isProfileCompleted: false,
+      },
     });
-    expect(response.isNewUser).toBe(false);
+    expect(response.isNewUser).toBe(true);
   });
 
   it('keeps a newly registered driver in the onboarding flow', async () => {

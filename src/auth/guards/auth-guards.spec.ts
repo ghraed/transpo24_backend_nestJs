@@ -47,7 +47,10 @@ const users: Record<'customer' | 'driver' | 'admin', AuthenticatedUser> = {
 };
 
 describe('HTTP authentication guards', () => {
-  const authService = { getUserFromAccessToken: jest.fn() };
+  const authService = {
+    getUserFromAccessToken: jest.fn(),
+    isUserActive: jest.fn().mockResolvedValue(true),
+  };
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -55,67 +58,70 @@ describe('HTTP authentication guards', () => {
     ['authenticated', () => new AuthenticatedUserGuard(authService as never)],
     ['customer', () => new CustomerAuthGuard(authService as never)],
     ['driver', () => new DriverAuthGuard(authService as never)],
-  ])('rejects a missing bearer token in the %s guard', (_name, factory) => {
-    expect(() => factory().canActivate(createContext().context)).toThrow(
-      UnauthorizedException,
-    );
-    expect(authService.getUserFromAccessToken).not.toHaveBeenCalled();
-  });
+  ])(
+    'rejects a missing bearer token in the %s guard',
+    async (_name, factory) => {
+      await expect(
+        factory().canActivate(createContext().context),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(authService.getUserFromAccessToken).not.toHaveBeenCalled();
+    },
+  );
 
-  it('rejects an invalid token', () => {
+  it('rejects an invalid token', async () => {
     authService.getUserFromAccessToken.mockReturnValue(null);
     const { context } = createContext('Bearer invalid');
 
-    expect(() =>
+    await expect(
       new AuthenticatedUserGuard(authService as never).canActivate(context),
-    ).toThrow(UnauthorizedException);
+    ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('attaches an authenticated user to the request', () => {
+  it('attaches an authenticated user to the request', async () => {
     authService.getUserFromAccessToken.mockReturnValue(users.customer);
     const { context, request } = createContext('Bearer valid');
 
-    expect(
+    await expect(
       new AuthenticatedUserGuard(authService as never).canActivate(context),
-    ).toBe(true);
+    ).resolves.toBe(true);
     expect(request.user).toBe(users.customer);
   });
 
-  it('allows only customers through the customer guard', () => {
+  it('allows only customers through the customer guard', async () => {
     const guard = new CustomerAuthGuard(authService as never);
     authService.getUserFromAccessToken.mockReturnValue(users.customer);
-    expect(guard.canActivate(createContext('Bearer customer').context)).toBe(
-      true,
-    );
+    await expect(
+      guard.canActivate(createContext('Bearer customer').context),
+    ).resolves.toBe(true);
 
     authService.getUserFromAccessToken.mockReturnValue(users.driver);
-    expect(() =>
+    await expect(
       guard.canActivate(createContext('Bearer driver').context),
-    ).toThrow(ForbiddenException);
+    ).rejects.toThrow(ForbiddenException);
   });
 
-  it('allows only a driver role with a driver profile', () => {
+  it('allows only a driver role with a driver profile', async () => {
     const guard = new DriverAuthGuard(authService as never);
     authService.getUserFromAccessToken.mockReturnValue(users.driver);
-    expect(guard.canActivate(createContext('Bearer driver').context)).toBe(
-      true,
-    );
+    await expect(
+      guard.canActivate(createContext('Bearer driver').context),
+    ).resolves.toBe(true);
 
     authService.getUserFromAccessToken.mockReturnValue({
       ...users.customer,
       hasDriverProfile: true,
     });
-    expect(() =>
+    await expect(
       guard.canActivate(createContext('Bearer customer-driver').context),
-    ).toThrow(ForbiddenException);
+    ).rejects.toThrow(ForbiddenException);
 
     authService.getUserFromAccessToken.mockReturnValue({
       ...users.driver,
       hasDriverProfile: false,
     });
-    expect(() =>
+    await expect(
       guard.canActivate(createContext('Bearer incomplete-driver').context),
-    ).toThrow(ForbiddenException);
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('allows only admins through the admin role guard', () => {
