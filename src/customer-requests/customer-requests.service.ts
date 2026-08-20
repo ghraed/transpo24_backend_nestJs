@@ -3525,6 +3525,8 @@ export class CustomerRequestsService {
       paymentMethod: hold.paymentMethod,
       provider: hold.provider as PaymentSummaryDto['provider'],
       status: hold.status,
+      stripeMode:
+        hold.provider === 'STRIPE' ? this.paymentsService.getStripeMode() : null,
       stripePaymentIntentId: hold.stripePaymentIntentId,
       stripeClientSecret: hold.stripeClientSecret,
       stripeChargeId: hold.stripeChargeId,

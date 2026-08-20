@@ -293,6 +293,10 @@ export class PaymentsService {
     private readonly driverPayoutQueueService?: DriverPayoutQueueService,
   ) {}
 
+  getStripeMode(): 'test' | 'live' | null {
+    return this.stripeService.mode;
+  }
+
   async createHoldForAcceptedOffer(
     tx: Prisma.TransactionClient,
     input: CreateHoldInput,
@@ -3218,6 +3222,8 @@ export class PaymentsService {
       paymentMethod: hold.paymentMethod,
       provider: hold.provider,
       status: hold.status,
+      stripeMode:
+        hold.provider === PaymentProvider.STRIPE ? this.stripeService.mode : null,
       stripePaymentIntentId: hold.stripePaymentIntentId,
       stripeClientSecret: hold.stripeClientSecret,
       stripeChargeId: hold.stripeChargeId,

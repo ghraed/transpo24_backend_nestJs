@@ -40,6 +40,13 @@ export type StripeCardPaymentMethodSummary = {
 export class StripeService {
   private stripeClient: InstanceType<typeof Stripe> | null = null;
 
+  get mode(): 'test' | 'live' | null {
+    const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
+    if (secretKey?.startsWith('sk_test_')) return 'test';
+    if (secretKey?.startsWith('sk_live_')) return 'live';
+    return null;
+  }
+
   private getClient(): InstanceType<typeof Stripe> {
     if (this.stripeClient) {
       return this.stripeClient;

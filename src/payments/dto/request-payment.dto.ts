@@ -29,6 +29,8 @@ export interface PaymentSummaryDto {
   paymentMethod: PaymentMethod;
   provider: PaymentProvider;
   status: PaymentStatus;
+  /** The Stripe environment that issued this payment intent. */
+  stripeMode: 'test' | 'live' | null;
   stripePaymentIntentId: string | null;
   stripeClientSecret: string | null;
   stripeChargeId: string | null;
