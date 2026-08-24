@@ -8,6 +8,7 @@ import {
 import {
   ChatMessageSenderRole,
   ChatMessageType,
+  ChatReportReason,
   ChatRoomStatus,
   Prisma,
   PushApp,
@@ -18,8 +19,10 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
+  ChatBlockResponseDto,
   ChatMessageReadResponseDto,
   ChatMessageResponseDto,
+  ChatReportResponseDto,
   ChatRoomMessagesResponseDto,
   ChatRoomSummaryDto,
 } from './chat.types';
@@ -255,6 +258,8 @@ export class ChatService {
       );
     }
 
+    await this.assertMessagingNotBlocked(access);
+
     const created = await this.prisma.chatMessage.create({
       data: {
         chatRoomId: access.room.id,
@@ -317,6 +322,114 @@ export class ChatService {
       readCount: updated.count,
       readAt: readAt.toISOString(),
     };
+  }
+
+  async createReport(input: {
+    user: AuthenticatedUser;
+    roomId: string;
+    messageId?: string;
+    reason: ChatReportReason;
+    details?: string;
+  }): Promise<ChatReportResponseDto> {
+    const access = await this.getAccessContextByRoom(input.user, input.roomId);
+    const messageId = input.messageId?.trim() || null;
+    const details = input.details?.trim() || null;
+
+    if (input.reason === ChatReportReason.OTHER && !details) {
+      throw new BadRequestException(
+        'Please add details when selecting the other report reason.',
+      );
+    }
+
+    if (messageId) {
+      const reportedMessage = await this.prisma.chatMessage.findFirst({
+        where: {
+          id: messageId,
+          chatRoomId: access.room.id,
+          senderRole:
+            access.senderRole === ChatMessageSenderRole.CLIENT
+              ? ChatMessageSenderRole.DRIVER
+              : ChatMessageSenderRole.CLIENT,
+        },
+        select: { id: true },
+      });
+
+      if (!reportedMessage) {
+        throw new BadRequestException(
+          'The selected message cannot be reported from this chat.',
+        );
+      }
+    }
+
+    const report = await this.prisma.chatReport.create({
+      data: {
+        chatRoomId: access.room.id,
+        messageId,
+        reporterUserId: access.actor.user.id,
+        reportedUserId: access.recipientUserId,
+        reason: input.reason,
+        details,
+      },
+      select: {
+        id: true,
+        chatRoomId: true,
+        messageId: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return {
+      id: report.id,
+      roomId: report.chatRoomId,
+      messageId: report.messageId,
+      reason: report.reason,
+      status: report.status,
+      createdAt: report.createdAt.toISOString(),
+    };
+  }
+
+  async blockParticipant(input: {
+    user: AuthenticatedUser;
+    roomId: string;
+  }): Promise<ChatBlockResponseDto> {
+    const access = await this.getAccessContextByRoom(input.user, input.roomId);
+
+    await this.prisma.chatBlock.upsert({
+      where: {
+        chatRoomId_blockerUserId_blockedUserId: {
+          chatRoomId: access.room.id,
+          blockerUserId: access.actor.user.id,
+          blockedUserId: access.recipientUserId,
+        },
+      },
+      update: {},
+      create: {
+        chatRoomId: access.room.id,
+        blockerUserId: access.actor.user.id,
+        blockedUserId: access.recipientUserId,
+      },
+    });
+
+    return this.getBlockState(access);
+  }
+
+  async unblockParticipant(input: {
+    user: AuthenticatedUser;
+    roomId: string;
+  }): Promise<ChatBlockResponseDto> {
+    const access = await this.getAccessContextByRoom(input.user, input.roomId);
+
+    await this.prisma.chatBlock.deleteMany({
+      where: {
+        chatRoomId: access.room.id,
+        blockerUserId: access.actor.user.id,
+        blockedUserId: access.recipientUserId,
+      },
+    });
+
+    return this.getBlockState(access);
   }
 
   async assertCanAccessRoom(input: {
@@ -409,6 +522,81 @@ export class ChatService {
     );
   }
 
+  private async assertMessagingNotBlocked(
+    access: ChatAccessContext,
+  ): Promise<void> {
+    const block = await this.prisma.chatBlock.findFirst({
+      where: {
+        chatRoomId: access.room.id,
+        OR: [
+          {
+            blockerUserId: access.actor.user.id,
+            blockedUserId: access.recipientUserId,
+          },
+          {
+            blockerUserId: access.recipientUserId,
+            blockedUserId: access.actor.user.id,
+          },
+        ],
+      },
+      select: { blockerUserId: true },
+    });
+
+    if (block) {
+      throw new ForbiddenException(
+        block.blockerUserId === access.actor.user.id
+          ? 'Unblock this participant before sending a message.'
+          : 'Messaging is unavailable for this conversation.',
+      );
+    }
+  }
+
+  private async getBlockState(
+    access: ChatAccessContext,
+  ): Promise<ChatBlockResponseDto> {
+    return this.getBlockStateForParticipants({
+      roomId: access.room.id,
+      roomStatus: access.room.status,
+      currentUserId: access.actor.user.id,
+      otherUserId: access.recipientUserId,
+    });
+  }
+
+  private async getBlockStateForParticipants(input: {
+    roomId: string;
+    roomStatus: ChatRoomStatus;
+    currentUserId: string;
+    otherUserId: string;
+  }): Promise<ChatBlockResponseDto> {
+    const blocks = await this.prisma.chatBlock.findMany({
+      where: { chatRoomId: input.roomId },
+      select: {
+        blockerUserId: true,
+        blockedUserId: true,
+      },
+    });
+    const isBlockedByCurrentUser = blocks.some(
+      (block) =>
+        block.blockerUserId === input.currentUserId &&
+        block.blockedUserId === input.otherUserId,
+    );
+    const isBlockedByOtherUser = blocks.some(
+      (block) =>
+        block.blockerUserId === input.otherUserId &&
+        block.blockedUserId === input.currentUserId,
+    );
+
+    return {
+      roomId: input.roomId,
+      isBlockedByCurrentUser,
+      isBlockedByOtherUser,
+      canSendMessages:
+        input.roomStatus === ChatRoomStatus.ACTIVE &&
+        !isBlockedByCurrentUser &&
+        !isBlockedByOtherUser,
+    };
+  }
+
   private async resolveActor(
     user: AuthenticatedUser,
   ): Promise<ChatActorContext> {
@@ -456,6 +644,20 @@ export class ChatService {
             : ChatMessageSenderRole.CLIENT,
       },
     });
+    const currentUserId =
+      currentRole === ChatMessageSenderRole.CLIENT
+        ? room.clientId
+        : room.driver.userId;
+    const otherUserId =
+      currentRole === ChatMessageSenderRole.CLIENT
+        ? room.driver.userId
+        : room.clientId;
+    const blockState = await this.getBlockStateForParticipants({
+      roomId: room.id,
+      roomStatus: room.status,
+      currentUserId,
+      otherUserId,
+    });
 
     return {
       id: room.id,
@@ -470,6 +672,9 @@ export class ChatService {
         ? this.toChatMessageResponse(room.messages[0])
         : null,
       unreadCount,
+      isBlockedByCurrentUser: blockState.isBlockedByCurrentUser,
+      isBlockedByOtherUser: blockState.isBlockedByOtherUser,
+      canSendMessages: blockState.canSendMessages,
     };
   }
 

@@ -1,6 +1,8 @@
 import {
   ChatMessageSenderRole,
   ChatMessageType,
+  ChatReportReason,
+  ChatReportStatus,
   ChatRoomStatus,
   PushApp,
   UserRole,
@@ -44,9 +46,19 @@ describe('ChatService', () => {
       },
       chatMessage: {
         create: jest.fn(),
+        findFirst: jest.fn(),
         findMany: jest.fn(),
         count: jest.fn(),
         updateMany: jest.fn(),
+      },
+      chatBlock: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        upsert: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      chatReport: {
+        create: jest.fn(),
       },
       $transaction: jest.fn(),
     };
@@ -172,6 +184,55 @@ describe('ChatService', () => {
         roomId: 'room-1',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('stops either participant from messaging after a block', async () => {
+    const { prisma, service } = createService();
+    prisma.chatRoom.findUnique.mockResolvedValue(roomRecord);
+    prisma.chatBlock.findFirst.mockResolvedValue({
+      blockerUserId: 'customer-user-1',
+    });
+
+    await expect(
+      service.sendTextMessage({
+        user: customerUser,
+        roomId: 'room-1',
+        body: 'Hello',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.chatMessage.create).not.toHaveBeenCalled();
+  });
+
+  it('reports a message from the other participant for moderation', async () => {
+    const { prisma, service } = createService();
+    prisma.chatRoom.findUnique.mockResolvedValue(roomRecord);
+    prisma.chatMessage.findFirst.mockResolvedValue({ id: 'message-1' });
+    prisma.chatReport.create.mockResolvedValue({
+      id: 'report-1',
+      chatRoomId: 'room-1',
+      messageId: 'message-1',
+      reason: ChatReportReason.HARASSMENT,
+      status: ChatReportStatus.PENDING,
+      createdAt: new Date('2026-07-09T12:06:00.000Z'),
+    });
+
+    const report = await service.createReport({
+      user: customerUser,
+      roomId: 'room-1',
+      messageId: 'message-1',
+      reason: ChatReportReason.HARASSMENT,
+      details: 'Repeated insults',
+    });
+
+    expect(report.status).toBe(ChatReportStatus.PENDING);
+    expect(prisma.chatMessage.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'message-1',
+        chatRoomId: 'room-1',
+        senderRole: ChatMessageSenderRole.DRIVER,
+      },
+      select: { id: true },
+    });
   });
 
   it('allows reading but blocks sending when the room is closed', async () => {

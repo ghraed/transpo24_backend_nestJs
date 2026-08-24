@@ -37,6 +37,12 @@ import { RunPaymentReconciliationDto } from './dto/run-payment-reconciliation.dt
 import { createReadStream } from 'node:fs';
 import { AdminDeliveryOperationsQueryDto } from './dto/admin-delivery-operations-query.dto';
 import { AdminDeliveryOperationsListResponseDto } from './dto/admin-delivery-operations-response.dto';
+import {
+  AdminChatReportItemDto,
+  AdminChatReportsListResponseDto,
+  AdminChatReportsQueryDto,
+  UpdateAdminChatReportDto,
+} from './dto/admin-chat-reports.dto';
 
 @Controller('admin')
 @UseGuards(AuthenticatedUserGuard, AdminRoleGuard)
@@ -46,6 +52,22 @@ export class AdminController {
   @Get('users')
   findAll(): Promise<AdminUserResponseDto[]> {
     return this.adminService.findAll();
+  }
+
+  @Get('chat-reports')
+  findChatReports(
+    @Query() query: AdminChatReportsQueryDto,
+  ): Promise<AdminChatReportsListResponseDto> {
+    return this.adminService.findChatReports(query);
+  }
+
+  @Put('chat-reports/:id')
+  updateChatReport(
+    @Param('id') id: string,
+    @Body() dto: UpdateAdminChatReportDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<AdminChatReportItemDto> {
+    return this.adminService.updateChatReport(id, dto, user.id);
   }
 
   @Get('users/:id')

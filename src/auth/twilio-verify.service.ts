@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { timingSafeEqual } from 'node:crypto';
 import twilio, { type Twilio } from 'twilio';
 
 import { maskPhoneNumber } from './phone-number.util';
@@ -19,6 +20,8 @@ export class TwilioVerifyService {
   private readonly logger = new Logger(TwilioVerifyService.name);
   private readonly client: Twilio;
   private readonly verifyServiceSid: string;
+  private readonly playReviewPhoneNumber: string | null;
+  private readonly playReviewOtpCode: string | null;
 
   constructor(config: ConfigService) {
     const accountSid = config.getOrThrow<string>('TWILIO_ACCOUNT_SID');
@@ -26,10 +29,24 @@ export class TwilioVerifyService {
     this.verifyServiceSid = config.getOrThrow<string>(
       'TWILIO_VERIFY_SERVICE_SID',
     );
+    this.playReviewPhoneNumber =
+      config.get<string>('PLAY_REVIEW_PHONE_NUMBER')?.trim() || null;
+    this.playReviewOtpCode =
+      config.get<string>('PLAY_REVIEW_OTP_CODE')?.trim() || null;
     this.client = twilio(accountSid, authToken);
   }
 
   async sendCode(phoneNumber: string): Promise<void> {
+    if (this.isPlayReviewPhoneNumber(phoneNumber)) {
+      this.logger.log(
+        JSON.stringify({
+          event: 'play_review_verification_requested',
+          phone: maskPhoneNumber(phoneNumber),
+        }),
+      );
+      return;
+    }
+
     try {
       const verification = await this.client.verify.v2
         .services(this.verifyServiceSid)
@@ -64,6 +81,10 @@ export class TwilioVerifyService {
     phoneNumber: string,
     code: string,
   ): Promise<VerificationResult> {
+    if (this.isPlayReviewPhoneNumber(phoneNumber)) {
+      return this.isPlayReviewCode(code) ? 'approved' : 'invalid';
+    }
+
     try {
       const check = await this.client.verify.v2
         .services(this.verifyServiceSid)
@@ -86,6 +107,28 @@ export class TwilioVerifyService {
         'Unable to verify the code right now.',
       );
     }
+  }
+
+  private isPlayReviewPhoneNumber(phoneNumber: string): boolean {
+    return Boolean(
+      this.playReviewPhoneNumber &&
+      this.playReviewOtpCode &&
+      phoneNumber === this.playReviewPhoneNumber,
+    );
+  }
+
+  private isPlayReviewCode(code: string): boolean {
+    if (
+      !this.playReviewOtpCode ||
+      code.length !== this.playReviewOtpCode.length
+    ) {
+      return false;
+    }
+
+    return timingSafeEqual(
+      Buffer.from(code),
+      Buffer.from(this.playReviewOtpCode),
+    );
   }
 
   private logTwilioFailure(

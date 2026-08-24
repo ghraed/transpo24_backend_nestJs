@@ -35,6 +35,20 @@ TWILIO_AUTH_TOKEN=
 TWILIO_VERIFY_SERVICE_SID=
 ```
 
+For Google Play review, the app-access form must contain reusable credentials because a reviewer
+may not be able to receive an SMS. Configure one dedicated review phone number and six-digit code
+on the API, then enter the same values in Play Console under **App content → App access**:
+
+```env
+PLAY_REVIEW_PHONE_NUMBER=+<dedicated E.164 number>
+PLAY_REVIEW_OTP_CODE=<six-digit secret>
+```
+
+Both variables are optional but must be set together. They only bypass Twilio for the exact review
+phone number, are never returned by the API, and the code is compared in constant time. Use a
+dedicated non-admin customer account, ensure it has representative data for review, do not commit
+the values, and rotate or remove them after the review is complete.
+
 Never use `EXPO_PUBLIC_` for these values and never commit real credentials. The API refuses to start if the required Twilio values are missing.
 
 Twilio trial accounts can send Verify OTPs only to recipient numbers verified in the Twilio Console. Twilio Verify selects the SMS sender automatically; do not set a fixed `from` number or include a purchased phone number in the Verify API request. Check the current [Twilio Verify SMS guide](https://www.twilio.com/docs/verify/sms) and [Verify API prerequisites](https://www.twilio.com/docs/verify/api/verification) before deployment.

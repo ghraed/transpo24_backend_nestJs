@@ -22,6 +22,41 @@ describe('validateEnvironment', () => {
     expect(validateEnvironment(configured)).toBe(configured);
   });
 
+  it('accepts paired Google Play reviewer credentials', () => {
+    const reviewConfigured = {
+      ...configured,
+      PLAY_REVIEW_PHONE_NUMBER: '+41791234567',
+      PLAY_REVIEW_OTP_CODE: '583104',
+    };
+
+    expect(validateEnvironment(reviewConfigured)).toBe(reviewConfigured);
+  });
+
+  it('rejects incomplete or malformed Google Play reviewer credentials', () => {
+    expect(() =>
+      validateEnvironment({
+        ...configured,
+        PLAY_REVIEW_PHONE_NUMBER: '+41791234567',
+      }),
+    ).toThrow('must be configured together');
+
+    expect(() =>
+      validateEnvironment({
+        ...configured,
+        PLAY_REVIEW_PHONE_NUMBER: '0791234567',
+        PLAY_REVIEW_OTP_CODE: '123456',
+      }),
+    ).toThrow('E.164');
+
+    expect(() =>
+      validateEnvironment({
+        ...configured,
+        PLAY_REVIEW_PHONE_NUMBER: '+41791234567',
+        PLAY_REVIEW_OTP_CODE: '1234',
+      }),
+    ).toThrow('exactly six digits');
+  });
+
   it('requires the database configuration', () => {
     const withoutDatabase: Record<string, unknown> = { ...configured };
     delete withoutDatabase.DATABASE_URL;

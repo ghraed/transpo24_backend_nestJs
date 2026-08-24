@@ -19,4 +19,14 @@ describe('AppController', () => {
       expect(appController.getHello()).toBe('Hello World!');
     });
   });
+
+  describe('account deletion page', () => {
+    it('allows a user to request deletion without the app', () => {
+      const page = appController.getAccountDeletionPage();
+
+      expect(page).toContain('mailto:info@transpo24.com');
+      expect(page).toContain('within 30 days');
+      expect(page).toContain('up to seven years');
+    });
+  });
 });

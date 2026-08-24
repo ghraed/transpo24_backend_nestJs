@@ -3223,7 +3223,9 @@ export class PaymentsService {
       provider: hold.provider,
       status: hold.status,
       stripeMode:
-        hold.provider === PaymentProvider.STRIPE ? this.stripeService.mode : null,
+        hold.provider === PaymentProvider.STRIPE
+          ? this.stripeService.mode
+          : null,
       stripePaymentIntentId: hold.stripePaymentIntentId,
       stripeClientSecret: hold.stripeClientSecret,
       stripeChargeId: hold.stripeChargeId,

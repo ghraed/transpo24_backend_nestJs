@@ -37,6 +37,29 @@ export function validateEnvironment(
     );
   }
 
+  const playReviewPhoneNumber = environment.PLAY_REVIEW_PHONE_NUMBER;
+  const playReviewOtpCode = environment.PLAY_REVIEW_OTP_CODE;
+  const hasPlayReviewPhoneNumber = !isMissing(playReviewPhoneNumber);
+  const hasPlayReviewOtpCode = !isMissing(playReviewOtpCode);
+
+  if (hasPlayReviewPhoneNumber !== hasPlayReviewOtpCode) {
+    throw new Error(
+      'PLAY_REVIEW_PHONE_NUMBER and PLAY_REVIEW_OTP_CODE must be configured together.',
+    );
+  }
+  if (
+    hasPlayReviewPhoneNumber &&
+    !/^\+[1-9]\d{7,14}$/.test(String(playReviewPhoneNumber).trim())
+  ) {
+    throw new Error('PLAY_REVIEW_PHONE_NUMBER must use E.164 format.');
+  }
+  if (
+    hasPlayReviewOtpCode &&
+    !/^\d{6}$/.test(String(playReviewOtpCode).trim())
+  ) {
+    throw new Error('PLAY_REVIEW_OTP_CODE must contain exactly six digits.');
+  }
+
   if (isProduction) {
     const accessTokenSecret = String(environment.ACCESS_TOKEN_SECRET);
     if (

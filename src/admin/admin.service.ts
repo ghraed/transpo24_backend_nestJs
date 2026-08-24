@@ -11,6 +11,8 @@ import { existsSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import {
   AdditionalChargeStatus,
+  ChatMessageSenderRole,
+  ChatReportStatus,
   CustomerWalletTopUpStatus,
   DocumentStatus,
   DriverDocumentType,
@@ -72,6 +74,12 @@ import {
   AdminDeliveryOperationsPhotoDto,
   AdminDeliveryOperationsSummaryDto,
 } from './dto/admin-delivery-operations-response.dto';
+import {
+  AdminChatReportItemDto,
+  AdminChatReportsListResponseDto,
+  AdminChatReportsQueryDto,
+  UpdateAdminChatReportDto,
+} from './dto/admin-chat-reports.dto';
 
 const DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES: DriverDocumentType[] = [
   DriverDocumentType.PERSONAL_SELFIE,
@@ -487,6 +495,168 @@ export class AdminService {
     });
 
     return users.map((user) => this.mapToResponse(user));
+  }
+
+  async findChatReports(
+    query: AdminChatReportsQueryDto,
+  ): Promise<AdminChatReportsListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where: Prisma.ChatReportWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.reason ? { reason: query.reason } : {}),
+    };
+    const [reports, total, pendingCount] = await this.prisma.$transaction([
+      this.prisma.chatReport.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          reporter: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phoneNumber: true,
+              role: true,
+            },
+          },
+          reportedUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phoneNumber: true,
+              role: true,
+            },
+          },
+          chatRoom: {
+            select: { id: true, transportRequestId: true },
+          },
+          message: {
+            select: {
+              id: true,
+              senderRole: true,
+              body: true,
+              createdAt: true,
+            },
+          },
+        },
+      }),
+      this.prisma.chatReport.count({ where }),
+      this.prisma.chatReport.count({
+        where: { status: ChatReportStatus.PENDING },
+      }),
+    ]);
+
+    return {
+      items: reports.map((report) => this.mapChatReport(report)),
+      total,
+      pendingCount,
+      page,
+      limit,
+    };
+  }
+
+  async updateChatReport(
+    id: string,
+    dto: UpdateAdminChatReportDto,
+    adminUserId: string,
+  ): Promise<AdminChatReportItemDto> {
+    const existing = await this.prisma.chatReport.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Chat report not found.');
+    }
+
+    const resolutionNote = dto.resolutionNote?.trim() || null;
+    const resolved = dto.status !== ChatReportStatus.PENDING;
+    const report = await this.prisma.chatReport.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        resolutionNote,
+        resolvedById: resolved ? adminUserId : null,
+        resolvedAt: resolved ? new Date() : null,
+      },
+      include: {
+        reporter: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phoneNumber: true,
+            role: true,
+          },
+        },
+        reportedUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phoneNumber: true,
+            role: true,
+          },
+        },
+        chatRoom: { select: { id: true, transportRequestId: true } },
+        message: {
+          select: {
+            id: true,
+            senderRole: true,
+            body: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    return this.mapChatReport(report);
+  }
+
+  private mapChatReport(report: {
+    id: string;
+    reason: AdminChatReportItemDto['reason'];
+    details: string | null;
+    status: AdminChatReportItemDto['status'];
+    resolutionNote: string | null;
+    resolvedById: string | null;
+    resolvedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    reporter: AdminChatReportItemDto['reporter'];
+    reportedUser: AdminChatReportItemDto['reportedUser'];
+    chatRoom: { id: string; transportRequestId: string };
+    message: {
+      id: string;
+      senderRole: ChatMessageSenderRole;
+      body: string | null;
+      createdAt: Date;
+    } | null;
+  }): AdminChatReportItemDto {
+    return {
+      id: report.id,
+      reason: report.reason,
+      details: report.details,
+      status: report.status,
+      resolutionNote: report.resolutionNote,
+      resolvedById: report.resolvedById,
+      resolvedAt: report.resolvedAt?.toISOString() ?? null,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+      transportRequestId: report.chatRoom.transportRequestId,
+      roomId: report.chatRoom.id,
+      reporter: report.reporter,
+      reportedUser: report.reportedUser,
+      message: report.message
+        ? {
+            ...report.message,
+            createdAt: report.message.createdAt.toISOString(),
+          }
+        : null,
+    };
   }
 
   async findById(id: string): Promise<AdminUserResponseDto> {

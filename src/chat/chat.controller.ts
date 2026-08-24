@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -15,10 +16,13 @@ import { AuthenticatedUserGuard } from '../auth/guards/authenticated-user.guard'
 import { TripsGateway } from '../trips/trips.gateway';
 import { ChatService } from './chat.service';
 import { ChatRoomMessagesQueryDto } from './dto/chat-room-messages-query.dto';
+import { CreateChatReportDto } from './dto/create-chat-report.dto';
 import { SendChatMessageDto } from './dto/send-chat-message.dto';
 import type {
+  ChatBlockResponseDto,
   ChatMessageReadResponseDto,
   ChatMessageResponseDto,
+  ChatReportResponseDto,
   ChatRoomMessagesResponseDto,
   ChatRoomSummaryDto,
 } from './chat.types';
@@ -91,5 +95,42 @@ export class ChatController {
 
     this.tripsGateway.emitChatMessageRead(result);
     return result;
+  }
+
+  @Post('rooms/:roomId/reports')
+  createReport(
+    @Req() request: AuthenticatedRequest,
+    @Param('roomId') roomId: string,
+    @Body() dto: CreateChatReportDto,
+  ): Promise<ChatReportResponseDto> {
+    return this.chatService.createReport({
+      user: request.user,
+      roomId,
+      messageId: dto.messageId,
+      reason: dto.reason,
+      details: dto.details,
+    });
+  }
+
+  @Post('rooms/:roomId/block')
+  blockParticipant(
+    @Req() request: AuthenticatedRequest,
+    @Param('roomId') roomId: string,
+  ): Promise<ChatBlockResponseDto> {
+    return this.chatService.blockParticipant({
+      user: request.user,
+      roomId,
+    });
+  }
+
+  @Delete('rooms/:roomId/block')
+  unblockParticipant(
+    @Req() request: AuthenticatedRequest,
+    @Param('roomId') roomId: string,
+  ): Promise<ChatBlockResponseDto> {
+    return this.chatService.unblockParticipant({
+      user: request.user,
+      roomId,
+    });
   }
 }

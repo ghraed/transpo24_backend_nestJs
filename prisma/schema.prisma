@@ -346,6 +346,23 @@ enum ChatMessageType {
   SYSTEM
 }
 
+enum ChatReportReason {
+  HARASSMENT
+  HATE_SPEECH
+  SEXUAL_CONTENT
+  THREATS_OR_VIOLENCE
+  SPAM_OR_SCAM
+  PERSONAL_INFORMATION
+  OTHER
+}
+
+enum ChatReportStatus {
+  PENDING
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
+
 model User {
   id            String             @id @default(cuid())
   name          String
@@ -372,6 +389,10 @@ model User {
   webPushSubscriptions WebPushSubscription[]
   paymentReconciliationRecords PaymentReconciliationRecord[]
   chatRooms     ChatRoom[]           @relation("ChatRoomClient")
+  chatBlocksCreated ChatBlock[]       @relation("ChatBlockBlocker")
+  chatBlocksReceived ChatBlock[]      @relation("ChatBlockBlockedUser")
+  chatReportsCreated ChatReport[]     @relation("ChatReportReporter")
+  chatReportsReceived ChatReport[]    @relation("ChatReportReportedUser")
   refreshSessions RefreshSession[]
 
   @@index([deletedAt])
@@ -896,6 +917,8 @@ model ChatRoom {
   driver           DriverProfile    @relation("ChatRoomDriver", fields: [driverId], references: [id], onDelete: Cascade)
   acceptedOffer    DriverOffer      @relation(fields: [acceptedOfferId], references: [id], onDelete: Cascade)
   messages         ChatMessage[]
+  blocks           ChatBlock[]
+  reports          ChatReport[]
 
   @@index([transportRequestId])
   @@index([clientId])
@@ -917,10 +940,56 @@ model ChatMessage {
   readAt        DateTime?
 
   chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  reports  ChatReport[]
 
   @@index([chatRoomId])
   @@index([createdAt])
   @@map("chat_messages")
+}
+
+model ChatBlock {
+  id            String   @id @default(cuid())
+  chatRoomId    String
+  blockerUserId String
+  blockedUserId String
+  createdAt     DateTime @default(now())
+
+  chatRoom    ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  blocker     User     @relation("ChatBlockBlocker", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blockedUser User     @relation("ChatBlockBlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([chatRoomId, blockerUserId, blockedUserId])
+  @@index([blockerUserId, createdAt])
+  @@index([blockedUserId, createdAt])
+  @@map("chat_blocks")
+}
+
+model ChatReport {
+  id             String           @id @default(cuid())
+  chatRoomId     String
+  messageId      String?
+  reporterUserId String
+  reportedUserId String
+  reason         ChatReportReason
+  details        String?
+  status         ChatReportStatus @default(PENDING)
+  resolutionNote String?
+  resolvedById   String?
+  resolvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  chatRoom     ChatRoom    @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  message      ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  reporter     User        @relation("ChatReportReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  reportedUser User        @relation("ChatReportReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([chatRoomId, createdAt])
+  @@index([reporterUserId, createdAt])
+  @@index([reportedUserId, createdAt])
+  @@index([messageId])
+  @@map("chat_reports")
 }
 
 model DriverEarning {
