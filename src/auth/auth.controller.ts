@@ -97,6 +97,12 @@ export class AuthController {
     return this.authService.resetDriversForTesting();
   }
 
+  @Post('testing/customer-login')
+  @UseGuards(TestingOnlyGuard)
+  loginTemporaryTestCustomer(): Promise<PhoneAuthResponseDto> {
+    return this.authService.loginTemporaryTestCustomer();
+  }
+
   @Post('phone/send-code')
   sendPhoneCode(
     @Body() dto: SendPhoneCodeDto,

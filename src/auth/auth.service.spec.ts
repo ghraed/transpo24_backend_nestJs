@@ -87,6 +87,18 @@ describe('AuthService phone authentication', () => {
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
+  it('logs the temporary test customer in without SMS verification', async () => {
+    const { service, prisma, twilio } = createHarness();
+    const testCustomer = { ...customer, phoneNumber: '+96171251044' };
+    prisma.user.findUnique.mockResolvedValue(testCustomer);
+
+    const response = await service.loginTemporaryTestCustomer();
+
+    expect(response.user.phoneNumber).toBe('+96171251044');
+    expect(response.isNewUser).toBe(false);
+    expect(twilio.verifyCode).not.toHaveBeenCalled();
+  });
+
   it('creates a new customer only after Twilio approval', async () => {
     const { service, prisma, twilio } = createHarness();
     let createInput:

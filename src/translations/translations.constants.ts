@@ -4,6 +4,7 @@ export const SUPPORTED_TRANSLATION_LANGUAGES = [
   'fr',
   'de',
   'es',
+  'it',
 ] as const;
 
 export const MAX_TRANSLATION_TEXT_LENGTH = 1000;

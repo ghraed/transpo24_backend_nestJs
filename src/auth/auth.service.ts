@@ -11,6 +11,7 @@ import {
   ConflictException,
   Injectable,
   ForbiddenException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import {
@@ -67,6 +68,7 @@ const CUSTOMER_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_DRIVER_FIRST_NAME = 'Driver';
 const DEFAULT_DRIVER_LAST_NAME = 'Account';
+const TEMPORARY_TEST_CUSTOMER_PHONE_NUMBER = '+96171251044';
 const ACTIVE_ACCOUNT_DELETION_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.PENDING_QUOTES,
   TransportRequestStatus.QUOTED,
@@ -230,6 +232,24 @@ export class AuthService {
     }
 
     return this.issueCustomerSession(user, isNewUser);
+  }
+
+  async loginTemporaryTestCustomer(): Promise<PhoneAuthResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { phoneNumber: TEMPORARY_TEST_CUSTOMER_PHONE_NUMBER },
+      select: this.customerSessionUserSelect,
+    });
+
+    if (
+      !user ||
+      user.role !== UserRole.CUSTOMER ||
+      user.deletedAt ||
+      !user.phoneNumber
+    ) {
+      throw new NotFoundException('Temporary test customer not found.');
+    }
+
+    return this.issueCustomerSession(user, false);
   }
 
   async verifyDriverPhoneCode(

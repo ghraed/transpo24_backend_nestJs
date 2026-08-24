@@ -22,9 +22,9 @@ function hashPassword(password) {
 
 const services = [
   { key: ServiceKey.VEHICLE_TRANSPORT, nameEn: 'Vehicle Transport', nameAr: 'نقل السيارات', descriptionEn: 'Transport vehicles safely and efficiently.', descriptionAr: 'نقل المركبات بأمان وكفاءة.', icon: 'car', isActive: true, sortOrder: 1 },
-  { key: ServiceKey.MOTORCYCLE_TRANSPORT, nameEn: 'Motorcycle Transport', nameAr: 'نقل الدراجات النارية', descriptionEn: 'Specialized transport for motorcycles.', descriptionAr: 'خدمة نقل مخصصة للدراجات النارية.', icon: 'motorcycle', isActive: true, sortOrder: 2 },
+  { key: ServiceKey.MOTORCYCLE_TRANSPORT, nameEn: 'Motorcycle & Bicycle', nameAr: 'نقل الدراجات النارية والهوائية', descriptionEn: 'Specialized transport for motorcycles and bicycles.', descriptionAr: 'خدمة نقل مخصصة للدراجات النارية والهوائية.', icon: 'motorcycle', isActive: true, sortOrder: 2 },
   { key: ServiceKey.GOODS_TRANSPORT, nameEn: 'Goods Transport', nameAr: 'نقل البضائع', descriptionEn: 'Reliable delivery for goods and packages.', descriptionAr: 'توصيل موثوق للبضائع والطرود.', icon: 'box', isActive: true, sortOrder: 3 },
-  { key: ServiceKey.FURNITURE_TRANSPORT, nameEn: 'Furniture Transport', nameAr: 'نقل الأثاث', descriptionEn: 'Professional moving service for furniture.', descriptionAr: 'خدمة نقل احترافية للأثاث.', icon: 'sofa', isActive: true, sortOrder: 4 },
+  { key: ServiceKey.FURNITURE_TRANSPORT, nameEn: 'House Moving', nameAr: 'نقل المنازل', descriptionEn: 'Professional house-moving service.', descriptionAr: 'خدمة نقل منازل احترافية.', icon: 'sofa', isActive: true, sortOrder: 4 },
 ];
 
 const vehicleCatalog = [
