@@ -11,8 +11,8 @@ describe('TripsService', () => {
     );
 
     expect(amounts.grossAmount.toNumber()).toBe(250);
-    expect(amounts.platformFeeAmount.toNumber()).toBe(25);
-    expect(amounts.netAmount.toNumber()).toBe(225);
+    expect(amounts.platformFeeAmount.toNumber()).toBe(37.5);
+    expect(amounts.netAmount.toNumber()).toBe(212.5);
   });
 
   it('keeps additional expenses out of the platform fee calculation', () => {
@@ -22,8 +22,8 @@ describe('TripsService', () => {
     );
 
     expect(amounts.grossAmount.toNumber()).toBe(110);
-    expect(amounts.platformFeeAmount.toNumber()).toBe(10);
-    expect(amounts.netAmount.toNumber()).toBe(100);
+    expect(amounts.platformFeeAmount.toNumber()).toBe(15);
+    expect(amounts.netAmount.toNumber()).toBe(95);
   });
 
   it('schedules driver payout availability 24 hours after delivery', () => {
