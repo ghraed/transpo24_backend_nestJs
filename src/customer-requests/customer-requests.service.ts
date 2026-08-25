@@ -2783,6 +2783,11 @@ export class CustomerRequestsService {
             nameEn: true,
           },
         },
+        assignedDriver: {
+          select: {
+            userId: true,
+          },
+        },
       },
     });
 
@@ -2839,10 +2844,22 @@ export class CustomerRequestsService {
       }
 
       this.tripsGateway.emitRequestDriverSelected(input.customerId, response);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit finalized payment events for request ${result.updatedRequest.id}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
 
+    const selectedDriverUserId = acceptedRequest?.assignedDriver?.userId;
+    if (!selectedDriverUserId) {
+      this.logger.error(
+        `Cannot notify selected driver for request ${result.updatedRequest.id}: assigned driver user was not found.`,
+      );
+    } else {
       void this.notificationsService
         .notifyDriverSelected({
-          driverId: result.updatedRequest.assignedDriverId,
+          driverUserId: selectedDriverUserId,
           requestId: result.updatedRequest.id,
           serviceType: acceptedRequest?.service?.nameEn ?? null,
         })
@@ -2851,11 +2868,6 @@ export class CustomerRequestsService {
             `Failed to notify selected driver for request ${result.updatedRequest.id}: ${notificationError instanceof Error ? notificationError.message : 'Unexpected error'}`,
           );
         });
-    } catch (error) {
-      this.logger.error(
-        `Failed to emit finalized payment events for request ${result.updatedRequest.id}.`,
-        error instanceof Error ? error.stack : undefined,
-      );
     }
 
     return response;

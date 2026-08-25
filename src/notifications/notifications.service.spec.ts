@@ -117,6 +117,38 @@ describe('NotificationsService', () => {
     });
   });
 
+  it('sends selected-driver notifications to the driver user account', async () => {
+    const prisma = {
+      pushToken: {
+        findMany: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    };
+
+    const service = createService(prisma);
+    const sendToUsersSpy = jest
+      .spyOn(service, 'sendToUsers')
+      .mockResolvedValue(undefined);
+
+    await service.notifyDriverSelected({
+      driverUserId: 'driver-user-1',
+      requestId: 'request-1',
+      serviceType: 'Vehicle transport',
+    });
+
+    expect(sendToUsersSpy).toHaveBeenCalledWith({
+      userIds: ['driver-user-1'],
+      app: PushApp.DRIVER,
+      title: 'Customer selected you',
+      body: 'You were selected for Vehicle transport.',
+      type: 'DRIVER_SELECTED',
+      data: {
+        requestId: 'request-1',
+        serviceType: 'Vehicle transport',
+      },
+    });
+  });
+
   it('builds the correct payload for approved drivers', async () => {
     const prisma = {
       pushToken: {

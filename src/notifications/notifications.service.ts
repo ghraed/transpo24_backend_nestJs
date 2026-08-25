@@ -183,14 +183,14 @@ export class NotificationsService {
   }
 
   async notifyDriverSelected(input: {
-    driverId: string;
+    driverUserId: string;
     requestId: string;
     serviceType?: string | null;
   }): Promise<void> {
     const serviceLabel = input.serviceType?.trim() || 'transport request';
 
     await this.sendToUsers({
-      userIds: [input.driverId],
+      userIds: [input.driverUserId],
       app: PushApp.DRIVER,
       title: 'Customer selected you',
       body: `You were selected for ${serviceLabel}.`,
