@@ -24,7 +24,11 @@ describe('AppController', () => {
     it('allows a user to request deletion without the app', () => {
       const page = appController.getAccountDeletionPage();
 
-      expect(page).toContain('mailto:info@transpo24.com');
+      expect(page).toContain('mailto:info@transpo24.ch');
+      expect(page).toContain('from any email address you can access');
+      expect(page).toContain('Profile → Delete account');
+      expect(page).not.toContain('associated with your account');
+      expect(page).not.toContain('info@transpo24.com');
       expect(page).toContain('within 30 days');
       expect(page).toContain('up to seven years');
     });
