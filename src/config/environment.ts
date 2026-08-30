@@ -5,7 +5,7 @@ const REQUIRED_KEYS = [
   'TWILIO_VERIFY_SERVICE_SID',
 ] as const;
 
-const REQUIRED_PRODUCTION_KEYS = [
+const REQUIRED_DEPLOYMENT_KEYS = [
   'ACCESS_TOKEN_SECRET',
   'CORS_ORIGINS',
   'STRIPE_SECRET_KEY',
@@ -26,8 +26,10 @@ export function validateEnvironment(
   environment: Record<string, unknown>,
 ): Record<string, unknown> {
   const isProduction = environment.NODE_ENV === 'production';
-  const requiredKeys = isProduction
-    ? [...REQUIRED_KEYS, ...REQUIRED_PRODUCTION_KEYS]
+  const isStaging = environment.NODE_ENV === 'staging';
+  const isDeployedEnvironment = isProduction || isStaging;
+  const requiredKeys = isDeployedEnvironment
+    ? [...REQUIRED_KEYS, ...REQUIRED_DEPLOYMENT_KEYS]
     : REQUIRED_KEYS;
   const missing = requiredKeys.filter((key) => isMissing(environment[key]));
 
@@ -60,7 +62,7 @@ export function validateEnvironment(
     throw new Error('PLAY_REVIEW_OTP_CODE must contain exactly six digits.');
   }
 
-  if (isProduction) {
+  if (isDeployedEnvironment) {
     const accessTokenSecret = String(environment.ACCESS_TOKEN_SECRET);
     if (
       accessTokenSecret.length < 32 ||
@@ -92,9 +94,14 @@ export function validateEnvironment(
     }
 
     const stripeSecretKey = String(environment.STRIPE_SECRET_KEY);
-    if (!stripeSecretKey.startsWith('sk_live_')) {
+    if (isProduction && !stripeSecretKey.startsWith('sk_live_')) {
       throw new Error(
         'STRIPE_SECRET_KEY must be a Stripe live-mode secret in production.',
+      );
+    }
+    if (isStaging && !stripeSecretKey.startsWith('sk_test_')) {
+      throw new Error(
+        'STRIPE_SECRET_KEY must be a Stripe test-mode secret in staging.',
       );
     }
 
