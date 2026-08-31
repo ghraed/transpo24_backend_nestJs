@@ -223,6 +223,7 @@ type DriverPayoutContext = {
   availableAt: Date | null;
   paidOutAt: Date | null;
   netAmount: Prisma.Decimal;
+  stripeChargeId: string | null;
   stripeTransferId: string | null;
   stripeTransferStatus: string | null;
   destinationAccountId: string | null;
@@ -1915,11 +1916,13 @@ export class PaymentsService {
         currency: context.currency.toLowerCase(),
         destination: context.destinationAccountId,
         transferGroup: `trip_${context.tripId}`,
+        idempotencyKey: `driver_payout_${context.earningId}`,
+        sourceTransaction: context.stripeChargeId,
         metadata: {
           tripId: context.tripId,
           driverEarningId: context.earningId,
           driverId: context.driverId,
-          source: input.requestedBy,
+          source: 'trip_completion',
         },
       });
 
@@ -2007,6 +2010,11 @@ export class PaymentsService {
                 payoutAttemptCount: true,
                 status: true,
                 requiresManualReview: true,
+                paymentHold: {
+                  select: {
+                    stripeChargeId: true,
+                  },
+                },
               },
             },
           },
@@ -2030,6 +2038,7 @@ export class PaymentsService {
       availableAt: earning.availableAt,
       paidOutAt: earning.paidOutAt,
       netAmount: earning.netAmount,
+      stripeChargeId: earning.trip.paymentSettlement.paymentHold.stripeChargeId,
       stripeTransferId: earning.stripeTransferId,
       stripeTransferStatus: earning.stripeTransferStatus,
       destinationAccountId: earning.driver.stripeAccountId,
@@ -2868,6 +2877,8 @@ export class PaymentsService {
         customerId: stripeCustomerId,
         amount: this.toStripeMinorUnit(input.amount),
         currency: input.currency.toLowerCase(),
+        idempotencyKey: `trip_payment_${input.requestId}_${input.acceptedOfferId}`,
+        transferGroup: `trip_${input.requestId}`,
         stripePaymentMethodId: input.stripePaymentMethodId,
         metadata: {
           requestId: input.requestId,
@@ -2878,75 +2889,66 @@ export class PaymentsService {
       },
     );
 
-    try {
-      const status = this.mapStripeIntentStatus(paymentIntent);
-      const hold = await tx.paymentHold.create({
-        data: {
-          customerId: input.customerId,
-          requestId: input.requestId,
-          acceptedOfferId: input.acceptedOfferId,
-          driverId: input.driverId,
-          amount: input.amount,
-          currency: input.currency,
-          paymentMethod: input.paymentMethod,
-          provider: PaymentProvider.STRIPE,
-          status,
-          stripePaymentMethodId: input.stripePaymentMethodId?.trim() || null,
-          stripePaymentIntentId: paymentIntent.id,
-          stripeClientSecret: paymentIntent.client_secret,
-          stripeChargeId: this.getStripeChargeId(paymentIntent),
-        },
-        select: PAYMENT_HOLD_SELECT,
-      });
+    const status = this.mapStripeIntentStatus(paymentIntent);
+    const hold = await tx.paymentHold.create({
+      data: {
+        customerId: input.customerId,
+        requestId: input.requestId,
+        acceptedOfferId: input.acceptedOfferId,
+        driverId: input.driverId,
+        amount: input.amount,
+        currency: input.currency,
+        paymentMethod: input.paymentMethod,
+        provider: PaymentProvider.STRIPE,
+        status,
+        stripePaymentMethodId: input.stripePaymentMethodId?.trim() || null,
+        stripePaymentIntentId: paymentIntent.id,
+        stripeClientSecret: paymentIntent.client_secret,
+        stripeChargeId: this.getStripeChargeId(paymentIntent),
+      },
+      select: PAYMENT_HOLD_SELECT,
+    });
 
-      await tx.transportRequest.update({
-        where: { id: input.requestId },
-        data: {
-          paymentStatus: status,
-          paymentMethod: input.paymentMethod,
-          heldAmount:
-            status === PaymentStatus.PAYMENT_CAPTURED
-              ? new Prisma.Decimal(0)
-              : input.amount,
-          capturedAmount:
-            status === PaymentStatus.PAYMENT_CAPTURED
-              ? input.amount
-              : new Prisma.Decimal(0),
-          paymentHoldId: hold.id,
-          stripePaymentIntentId: paymentIntent.id,
-        },
-      });
-
-      await this.createTripPaymentSettlement(tx, hold, {
-        collectedAmount:
+    await tx.transportRequest.update({
+      where: { id: input.requestId },
+      data: {
+        paymentStatus: status,
+        paymentMethod: input.paymentMethod,
+        heldAmount:
+          status === PaymentStatus.PAYMENT_CAPTURED
+            ? new Prisma.Decimal(0)
+            : input.amount,
+        capturedAmount:
           status === PaymentStatus.PAYMENT_CAPTURED
             ? input.amount
             : new Prisma.Decimal(0),
-        refundableAmount:
-          status === PaymentStatus.PAYMENT_CAPTURED
-            ? input.amount
-            : new Prisma.Decimal(0),
-        refundedAmount: new Prisma.Decimal(0),
-        retainedAmount: new Prisma.Decimal(0),
-        driverShareAmount: new Prisma.Decimal(0),
-        platformShareAmount: new Prisma.Decimal(0),
-        status:
-          status === PaymentStatus.PAYMENT_CAPTURED
-            ? TripPaymentSettlementStatus.COLLECTED
-            : TripPaymentSettlementStatus.REFUND_PENDING,
-        driverPayoutState: DriverPayoutState.NOT_EARNED,
-        requiresManualReview: false,
-      });
+        paymentHoldId: hold.id,
+        stripePaymentIntentId: paymentIntent.id,
+      },
+    });
 
-      return this.toPaymentSummaryDto(hold);
-    } catch (error) {
-      try {
-        await this.stripeService.cancelPaymentIntent(paymentIntent.id);
-      } catch {
-        // Best-effort compensation for an orphaned external hold.
-      }
-      throw error;
-    }
+    await this.createTripPaymentSettlement(tx, hold, {
+      collectedAmount:
+        status === PaymentStatus.PAYMENT_CAPTURED
+          ? input.amount
+          : new Prisma.Decimal(0),
+      refundableAmount:
+        status === PaymentStatus.PAYMENT_CAPTURED
+          ? input.amount
+          : new Prisma.Decimal(0),
+      refundedAmount: new Prisma.Decimal(0),
+      retainedAmount: new Prisma.Decimal(0),
+      driverShareAmount: new Prisma.Decimal(0),
+      platformShareAmount: new Prisma.Decimal(0),
+      status:
+        status === PaymentStatus.PAYMENT_CAPTURED
+          ? TripPaymentSettlementStatus.COLLECTED
+          : TripPaymentSettlementStatus.REFUND_PENDING,
+      driverPayoutState: DriverPayoutState.NOT_EARNED,
+      requiresManualReview: false,
+    });
+
+    return this.toPaymentSummaryDto(hold);
   }
 
   private async releaseWalletReservation(

@@ -25,6 +25,8 @@ type CreateImmediateCaptureIntentInput = {
   amount: number;
   currency: string;
   metadata: Record<string, string>;
+  idempotencyKey: string;
+  transferGroup: string;
   stripePaymentMethodId?: string;
 };
 
@@ -127,30 +129,38 @@ export class StripeService {
 
     if (stripePaymentMethodId) {
       return this.runStripe(() =>
-        client.paymentIntents.create({
-          amount: input.amount,
-          currency: input.currency,
-          customer: input.customerId,
-          payment_method: stripePaymentMethodId,
-          payment_method_types: ['card'],
-          confirm: true,
-          confirmation_method: 'automatic',
-          metadata: input.metadata,
-        }),
+        client.paymentIntents.create(
+          {
+            amount: input.amount,
+            currency: input.currency,
+            customer: input.customerId,
+            payment_method: stripePaymentMethodId,
+            payment_method_types: ['card'],
+            confirm: true,
+            confirmation_method: 'automatic',
+            transfer_group: input.transferGroup,
+            metadata: input.metadata,
+          },
+          { idempotencyKey: input.idempotencyKey },
+        ),
       );
     }
 
     return this.runStripe(() =>
-      client.paymentIntents.create({
-        amount: input.amount,
-        currency: input.currency,
-        customer: input.customerId,
-        automatic_payment_methods: {
-          enabled: true,
-          allow_redirects: 'never',
+      client.paymentIntents.create(
+        {
+          amount: input.amount,
+          currency: input.currency,
+          customer: input.customerId,
+          automatic_payment_methods: {
+            enabled: true,
+            allow_redirects: 'never',
+          },
+          transfer_group: input.transferGroup,
+          metadata: input.metadata,
         },
-        metadata: input.metadata,
-      }),
+        { idempotencyKey: input.idempotencyKey },
+      ),
     );
   }
 
@@ -364,16 +374,24 @@ export class StripeService {
     currency: string;
     destination: string;
     transferGroup: string;
+    idempotencyKey: string;
+    sourceTransaction?: string | null;
     metadata?: Record<string, string>;
   }) {
     return this.runStripe(() =>
-      this.getClient().transfers.create({
-        amount: input.amount,
-        currency: input.currency,
-        destination: input.destination,
-        transfer_group: input.transferGroup,
-        ...(input.metadata ? { metadata: input.metadata } : {}),
-      }),
+      this.getClient().transfers.create(
+        {
+          amount: input.amount,
+          currency: input.currency,
+          destination: input.destination,
+          transfer_group: input.transferGroup,
+          ...(input.sourceTransaction
+            ? { source_transaction: input.sourceTransaction }
+            : {}),
+          ...(input.metadata ? { metadata: input.metadata } : {}),
+        },
+        { idempotencyKey: input.idempotencyKey },
+      ),
     );
   }
 

@@ -28,6 +28,8 @@ describe('StripeService', () => {
       customerId: 'cus_test',
       amount: 15000,
       currency: 'usd',
+      idempotencyKey: 'trip_payment_req_1_offer_1',
+      transferGroup: 'trip_req_1',
       stripePaymentMethodId: 'pm_card_mastercard',
       metadata: {
         requestId: 'req_1',
@@ -40,6 +42,10 @@ describe('StripeService', () => {
         payment_method: 'pm_card_mastercard',
         payment_method_types: ['card'],
         confirm: true,
+        transfer_group: 'trip_req_1',
+      }),
+      expect.objectContaining({
+        idempotencyKey: 'trip_payment_req_1_offer_1',
       }),
     );
     expect(create).not.toHaveBeenCalledWith(
@@ -133,6 +139,49 @@ describe('StripeService', () => {
     );
   });
 
+  it('creates an idempotent transfer linked to the source charge', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'tr_test' });
+    const service = new StripeService();
+
+    (
+      service as unknown as {
+        getClient(): {
+          transfers: {
+            create: typeof create;
+          };
+        };
+      }
+    ).getClient = () => ({
+      transfers: {
+        create,
+      },
+    });
+
+    await service.createTransfer({
+      amount: 8500,
+      currency: 'chf',
+      destination: 'acct_driver',
+      transferGroup: 'trip_req_1',
+      idempotencyKey: 'driver_payout_earning_1',
+      sourceTransaction: 'ch_trip_1',
+      metadata: {
+        tripId: 'req_1',
+      },
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 8500,
+        destination: 'acct_driver',
+        source_transaction: 'ch_trip_1',
+        transfer_group: 'trip_req_1',
+      }),
+      expect.objectContaining({
+        idempotencyKey: 'driver_payout_earning_1',
+      }),
+    );
+  });
+
   it('maps Stripe invalid request failures to BadRequestException', async () => {
     const create = jest.fn().mockRejectedValue({
       type: 'StripeInvalidRequestError',
@@ -159,6 +208,8 @@ describe('StripeService', () => {
         customerId: 'cus_test',
         amount: 15000,
         currency: 'usd',
+        idempotencyKey: 'trip_payment_req_1_offer_1',
+        transferGroup: 'trip_req_1',
         stripePaymentMethodId: 'pm_missing',
         metadata: {
           requestId: 'req_1',
