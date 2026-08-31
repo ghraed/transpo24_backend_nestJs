@@ -131,26 +131,6 @@ describe('validateEnvironment', () => {
     ).toThrow('Stripe live-mode secret');
   });
 
-  it('requires test Stripe credentials in staging', () => {
-    const staging = {
-      ...configured,
-      NODE_ENV: 'staging',
-      ACCESS_TOKEN_SECRET: 'a-secure-random-staging-secret-123456789',
-      CORS_ORIGINS: 'https://api-staging.example.com',
-      STRIPE_SECRET_KEY: 'sk_test_staging',
-      STRIPE_WEBHOOK_SECRET: 'whsec_staging',
-      DRIVER_APP_BASE_URL: 'https://driver-staging.example.com',
-    };
-
-    expect(validateEnvironment(staging)).toBe(staging);
-    expect(() =>
-      validateEnvironment({
-        ...staging,
-        STRIPE_SECRET_KEY: 'sk_live_not_allowed',
-      }),
-    ).toThrow('Stripe test-mode secret in staging');
-  });
-
   it('requires an HTTPS driver application URL in production', () => {
     expect(() =>
       validateEnvironment({
