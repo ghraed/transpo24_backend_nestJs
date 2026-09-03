@@ -1,146 +1,92 @@
-import {
-  BadRequestException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 
+import { VinDecoderService } from './vin-decoders/vin-decoder.service';
+import { NormalizedVinData } from './vin-decoders/vin-decoder.types';
 import { VehiclesService } from './vehicles.service';
 
 describe('VehiclesService', () => {
-  const originalFetch = global.fetch;
-
+  const prisma = {
+    vehicleBrand: { findFirst: jest.fn() },
+    vehicleModel: { findFirst: jest.fn() },
+    vehicleSeries: { findFirst: jest.fn() },
+  };
+  const vinDecoder = { decode: jest.fn() };
   const createService = () =>
-    new VehiclesService({
-      vehicleBrand: { findFirst: jest.fn() },
-      vehicleModel: { findFirst: jest.fn() },
-      vehicleSeries: { findFirst: jest.fn() },
-    } as never);
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-    jest.restoreAllMocks();
-    delete process.env.VEHICLE_DATABASES_API_KEY;
-    delete process.env.VEHICLE_DATABASES_BASE_URL;
-    delete process.env.VEHICLE_DATABASES_TIMEOUT_MS;
-  });
-
-  it('rejects VINs that are not exactly 17 characters', async () => {
-    const service = createService();
-
-    await expect(service.decodeVin('abc123')).rejects.toBeInstanceOf(
-      BadRequestException,
+    new VehiclesService(
+      prisma as never,
+      vinDecoder as unknown as VinDecoderService,
     );
-  });
 
-  it('rejects VINs containing I, O, or Q', async () => {
-    const service = createService();
+  beforeEach(() => jest.clearAllMocks());
 
-    await expect(service.decodeVin('1HGCM82633A00435I')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-  });
+  it('normalizes the VIN and preserves the mobile response fields', async () => {
+    const decoded: NormalizedVinData = {
+      vin: '1HGCM82633A004352',
+      make: 'HONDA',
+      model: 'Accord',
+      year: '2003',
+      trim: 'EX',
+      vehicleType: 'Passenger Car',
+      bodyClass: 'Sedan',
+      manufacturer: 'Honda',
+      plantCountry: null,
+      engineCylinders: '4',
+      displacementL: '2.4',
+      fuelTypePrimary: 'Petrol',
+      transmissionStyle: 'Automatic',
+      driveType: 'FWD',
+      doors: '4',
+      series: 'Accord VII',
+      estimatedWeightKg: 1450,
+      source: 'swisscarinfo',
+    };
+    vinDecoder.decode.mockResolvedValue({ kind: 'found', data: decoded });
 
-  it('normalizes a successful Vehicle Databases basic VIN decode response', async () => {
-    const service = createService();
-    process.env.VEHICLE_DATABASES_API_KEY = 'test-key';
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: 'success',
-        data: {
-          intro: { vin: '1HGCM82633A004352' },
-          basic: {
-            make: 'HONDA',
-            model: 'Accord',
-            year: '2003',
-            trim: 'EX',
-            vehicle_type: 'PASSENGER CAR',
-            body_type: 'Sedan/Saloon',
-            doors: '4',
-          },
-          engine: {
-            cylinders: '4',
-            engine_size: '2.4',
-          },
-          manufacturer: {
-            manufacturer: 'HONDA OF AMERICA MFG., INC.',
-            country: 'UNITED STATES (USA)',
-          },
-          transmission: {
-            transmission_style: 'Automatic',
-          },
-          drivetrain: {
-            drive_type: '4x2',
-          },
-          fuel: {
-            fuel_type: 'Gasoline',
-          },
-          dimensions: {
-            gvwr: 'Class 1C: 4,001 - 5,000 lb (1,814 - 2,268 kg)',
-          },
-        },
-      }),
-    });
-    global.fetch = fetchMock as typeof global.fetch;
-
-    const result = await service.decodeVin('1hgcm82633a004352');
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.vehicledatabases.com/vin-decode/1HGCM82633A004352',
-      expect.objectContaining({
-        headers: { 'x-authkey': 'test-key' },
-        signal: expect.any(AbortSignal),
-      }),
-    );
-    expect(result).toEqual({
+    await expect(
+      createService().decodeVin(' 1hgcm82633a004352 '),
+    ).resolves.toEqual({
       success: true,
-      source: 'VEHICLE_DATABASES',
+      source: 'VIN_API',
       requiresManualSelection: false,
       message: undefined,
       data: {
-        vin: '1HGCM82633A004352',
-        brand: 'HONDA',
-        model: 'Accord',
-        variant: 'EX',
-        series: 'EX',
+        vin: decoded.vin,
+        brand: decoded.make,
+        model: decoded.model,
+        series: decoded.series,
+        variant: decoded.trim,
         manufactureYear: 2003,
-        estimatedWeightKg: 2268,
-        bodyType: 'Sedan/Saloon',
-        make: 'HONDA',
-        year: '2003',
-        trim: 'EX',
-        vehicleType: 'PASSENGER CAR',
-        bodyClass: 'Sedan/Saloon',
-        manufacturer: 'HONDA OF AMERICA MFG., INC.',
-        plantCountry: 'UNITED STATES (USA)',
-        engineCylinders: '4',
-        displacementL: '2.4',
-        fuelTypePrimary: 'Gasoline',
-        transmissionStyle: 'Automatic',
-        driveType: '4x2',
-        doors: '4',
+        estimatedWeightKg: decoded.estimatedWeightKg,
+        bodyType: decoded.bodyClass,
+        make: decoded.make,
+        year: decoded.year,
+        trim: decoded.trim,
+        vehicleType: decoded.vehicleType,
+        bodyClass: decoded.bodyClass,
+        manufacturer: decoded.manufacturer,
+        plantCountry: decoded.plantCountry,
+        engineCylinders: decoded.engineCylinders,
+        displacementL: decoded.displacementL,
+        fuelTypePrimary: decoded.fuelTypePrimary,
+        transmissionStyle: decoded.transmissionStyle,
+        driveType: decoded.driveType,
+        doors: decoded.doors,
         errorCode: null,
         errorText: null,
-        source: 'VEHICLE_DATABASES',
+        source: decoded.source,
       },
     });
+    expect(vinDecoder.decode).toHaveBeenCalledWith('1HGCM82633A004352');
   });
 
-  it('returns the existing controlled fallback when Vehicle Databases has no useful vehicle details', async () => {
-    const service = createService();
-    process.env.VEHICLE_DATABASES_API_KEY = 'test-key';
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: 'error',
-        code: 400,
-        message: 'Record(s) were not found for this vehicle.',
-        data: null,
-      }),
-    }) as typeof global.fetch;
+  it('returns the existing controlled vehicle-not-found response', async () => {
+    vinDecoder.decode.mockResolvedValue({ kind: 'not-found' });
 
-    await expect(service.decodeVin('1HGCM82633A004352')).resolves.toEqual({
+    await expect(
+      createService().decodeVin('1HGCM82633A004352'),
+    ).resolves.toEqual({
       success: false,
-      source: 'VEHICLE_DATABASES',
+      source: 'VIN_API',
       requiresManualSelection: true,
       message:
         'Vehicle details could not be fetched from the VIN. Please select vehicle details manually.',
@@ -148,24 +94,15 @@ describe('VehiclesService', () => {
     });
   });
 
-  it('throws ServiceUnavailableException when the provider is unavailable', async () => {
-    const service = createService();
-    process.env.VEHICLE_DATABASES_API_KEY = 'test-key';
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-    }) as typeof global.fetch;
-
-    await expect(service.decodeVin('1HGCM82633A004352')).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-  });
-
-  it('throws ServiceUnavailableException when the Vehicle Databases API key is missing', async () => {
+  it('rejects an invalid VIN before either provider can be called', async () => {
     const service = createService();
 
-    await expect(service.decodeVin('1HGCM82633A004352')).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+    await expect(service.decodeVin('abc123')).rejects.toBeInstanceOf(
+      BadRequestException,
     );
+    await expect(service.decodeVin('1HGCM82633A00435I')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(vinDecoder.decode).not.toHaveBeenCalled();
   });
 });

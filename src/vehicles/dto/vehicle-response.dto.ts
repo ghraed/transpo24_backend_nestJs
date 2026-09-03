@@ -52,12 +52,12 @@ export class VehicleVinDecodeDataDto {
   doors?: string | null;
   errorCode?: string | null;
   errorText?: string | null;
-  source?: 'VEHICLE_DATABASES';
+  source?: 'swisscarinfo' | 'oneautoapi';
 }
 
 export class VehicleVinDecodeResponseDto {
   success!: boolean;
-  source!: 'VIN_API' | 'VEHICLE_DATABASES';
+  source!: 'VIN_API';
   requiresManualSelection!: boolean;
   message?: string;
   data!: VehicleVinDecodeDataDto | null;

@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -13,95 +8,17 @@ import {
   VehicleCatalogYearDto,
   VehicleVinDecodeResponseDto,
 } from './dto/vehicle-response.dto';
+import { VinDecoderService } from './vin-decoders/vin-decoder.service';
 
-const DEFAULT_VEHICLE_DATABASES_BASE_URL = 'https://api.vehicledatabases.com';
-const DEFAULT_VEHICLE_DATABASES_TIMEOUT_MS = 10000;
 const FALLBACK_MESSAGE =
   'Vehicle details could not be fetched from the VIN. Please select vehicle details manually.';
 
-interface VehicleDatabasesBasicVinDecodeSection {
-  vin?: string | null;
-  make?: string | null;
-  model?: string | null;
-  year?: string | null;
-  trim?: string | null;
-  body_type?: string | null;
-  vehicle_type?: string | null;
-  doors?: string | null;
-}
-
-interface VehicleDatabasesEngineSection {
-  cylinders?: string | null;
-  engine_size?: string | null;
-  engine_capacity?: string | null;
-}
-
-interface VehicleDatabasesManufacturerSection {
-  manufacturer?: string | null;
-  country?: string | null;
-}
-
-interface VehicleDatabasesTransmissionSection {
-  transmission_style?: string | null;
-}
-
-interface VehicleDatabasesDrivetrainSection {
-  drive_type?: string | null;
-}
-
-interface VehicleDatabasesFuelSection {
-  fuel_type?: string | null;
-}
-
-interface VehicleDatabasesDimensionsSection {
-  gvwr?: string | null;
-}
-
-interface VehicleDatabasesBasicVinDecodeData {
-  intro?: VehicleDatabasesBasicVinDecodeSection | null;
-  basic?: VehicleDatabasesBasicVinDecodeSection | null;
-  engine?: VehicleDatabasesEngineSection | null;
-  manufacturer?: VehicleDatabasesManufacturerSection | null;
-  transmission?: VehicleDatabasesTransmissionSection | null;
-  drivetrain?: VehicleDatabasesDrivetrainSection | null;
-  fuel?: VehicleDatabasesFuelSection | null;
-  dimensions?: VehicleDatabasesDimensionsSection | null;
-}
-
-interface VehicleDatabasesBasicVinDecodeResponse {
-  status?: string;
-  data?: VehicleDatabasesBasicVinDecodeData | null;
-  code?: number | string | null;
-  message?: string | null;
-}
-
-interface DecodedVinResult {
-  vin: string;
-  make: string | null;
-  model: string | null;
-  year: string | null;
-  trim: string | null;
-  vehicleType: string | null;
-  bodyClass: string | null;
-  manufacturer: string | null;
-  plantCountry: string | null;
-  engineCylinders: string | null;
-  displacementL: string | null;
-  fuelTypePrimary: string | null;
-  transmissionStyle: string | null;
-  driveType: string | null;
-  doors: string | null;
-  series: string | null;
-  errorCode: string | null;
-  errorText: string | null;
-  source: 'VEHICLE_DATABASES';
-}
-
 @Injectable()
 export class VehiclesService {
-  private readonly logger = new Logger(VehiclesService.name);
-
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly vinDecoder: VinDecoderService,
+  ) {}
 
   async listBrands(): Promise<VehicleCatalogBrandDto[]> {
     return this.prisma.vehicleBrand.findMany({
@@ -171,100 +88,56 @@ export class VehiclesService {
 
   async decodeVin(rawVin: string): Promise<VehicleVinDecodeResponseDto> {
     const vin = this.sanitizeVin(rawVin);
-    const apiKey = process.env.VEHICLE_DATABASES_API_KEY?.trim();
+    const result = await this.vinDecoder.decode(vin);
+    if (result.kind === 'not-found') return this.fallback();
 
-    if (!apiKey) {
-      this.logger.error('Vehicle Databases API key is not configured.');
-      throw new ServiceUnavailableException(
-        'VIN decoding service is temporarily unavailable.',
-      );
-    }
+    const decoded = result.data;
+    const manufactureYear = this.toNumber(decoded.year);
+    const estimatedWeightKg =
+      decoded.estimatedWeightKg ??
+      (await this.estimateWeightFromCatalog({
+        brand: decoded.make,
+        model: decoded.model,
+        series: decoded.series,
+        manufactureYear,
+      }));
+    const requiresManualSelection =
+      !decoded.make || !decoded.model || !manufactureYear;
+    const variant = decoded.trim ?? decoded.series;
+    const bodyType = decoded.bodyClass;
 
-    try {
-      const response = await fetch(this.buildDecodeVinEndpoint(vin), {
-        headers: { 'x-authkey': apiKey },
-        signal: AbortSignal.timeout(this.getVehicleDatabasesTimeoutMs()),
-      });
-
-      if (response.status === 400) return this.fallback();
-
-      if (!response.ok) {
-        this.logger.warn(
-          `Vehicle Databases returned HTTP ${response.status} for VIN decode.`,
-        );
-        throw new ServiceUnavailableException(
-          'VIN decoding service is temporarily unavailable.',
-        );
-      }
-      const body =
-        (await response.json()) as VehicleDatabasesBasicVinDecodeResponse;
-      const decoded = this.normalizeVehicleDatabasesResult(vin, body);
-      const manufactureYear = this.toNumber(decoded.year);
-      let estimatedWeightKg: number | null = this.extractWeightKgFromDimensions(
-        body.data?.dimensions,
-      );
-      if (!estimatedWeightKg)
-        estimatedWeightKg = await this.estimateWeightFromCatalog({
-          brand: decoded.make,
-          model: decoded.model,
-          series: decoded.series,
-          manufactureYear,
-        });
-      const hasUseful = Boolean(
-        decoded.make ||
-        decoded.model ||
-        manufactureYear ||
-        estimatedWeightKg ||
-        decoded.bodyClass,
-      );
-      if (!hasUseful) return this.fallback();
-      const requiresManualSelection =
-        !decoded.make || !decoded.model || !manufactureYear;
-      const variant = decoded.trim ?? decoded.series;
-      const bodyType = decoded.bodyClass;
-      return {
-        success: !requiresManualSelection,
-        source: 'VEHICLE_DATABASES',
-        requiresManualSelection,
-        message: requiresManualSelection ? FALLBACK_MESSAGE : undefined,
-        data: {
-          vin,
-          brand: decoded.make,
-          model: decoded.model,
-          series: decoded.series,
-          variant,
-          manufactureYear,
-          estimatedWeightKg,
-          bodyType,
-          make: decoded.make,
-          year: decoded.year,
-          trim: decoded.trim,
-          vehicleType: decoded.vehicleType,
-          bodyClass: decoded.bodyClass,
-          manufacturer: decoded.manufacturer,
-          plantCountry: decoded.plantCountry,
-          engineCylinders: decoded.engineCylinders,
-          displacementL: decoded.displacementL,
-          fuelTypePrimary: decoded.fuelTypePrimary,
-          transmissionStyle: decoded.transmissionStyle,
-          driveType: decoded.driveType,
-          doors: decoded.doors,
-          errorCode: decoded.errorCode,
-          errorText: decoded.errorText,
-          source: decoded.source,
-        },
-      };
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      if (error instanceof ServiceUnavailableException) throw error;
-      this.logger.error(
-        `Vehicle Databases VIN decode failed for ${this.maskVin(vin)}.`,
-        error instanceof Error ? error.stack : undefined,
-      );
-      throw new ServiceUnavailableException(
-        'VIN decoding service is temporarily unavailable.',
-      );
-    }
+    return {
+      success: !requiresManualSelection,
+      source: 'VIN_API',
+      requiresManualSelection,
+      message: requiresManualSelection ? FALLBACK_MESSAGE : undefined,
+      data: {
+        vin: decoded.vin || vin,
+        brand: decoded.make,
+        model: decoded.model,
+        series: decoded.series,
+        variant,
+        manufactureYear,
+        estimatedWeightKg,
+        bodyType,
+        make: decoded.make,
+        year: decoded.year,
+        trim: decoded.trim,
+        vehicleType: decoded.vehicleType,
+        bodyClass: decoded.bodyClass,
+        manufacturer: decoded.manufacturer,
+        plantCountry: decoded.plantCountry,
+        engineCylinders: decoded.engineCylinders,
+        displacementL: decoded.displacementL,
+        fuelTypePrimary: decoded.fuelTypePrimary,
+        transmissionStyle: decoded.transmissionStyle,
+        driveType: decoded.driveType,
+        doors: decoded.doors,
+        errorCode: null,
+        errorText: null,
+        source: decoded.source,
+      },
+    };
   }
 
   private sanitizeVin(rawVin: string): string {
@@ -282,118 +155,10 @@ export class VehiclesService {
     return vin;
   }
 
-  private buildDecodeVinEndpoint(vin: string): string {
-    const baseUrl =
-      process.env.VEHICLE_DATABASES_BASE_URL?.trim().replace(/\/+$/, '') ||
-      DEFAULT_VEHICLE_DATABASES_BASE_URL;
-    return `${baseUrl}/vin-decode/${encodeURIComponent(vin)}`;
-  }
-
-  private getVehicleDatabasesTimeoutMs(): number {
-    const rawTimeout = process.env.VEHICLE_DATABASES_TIMEOUT_MS?.trim();
-    const parsedTimeout = rawTimeout ? Number(rawTimeout) : NaN;
-    if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0)
-      return DEFAULT_VEHICLE_DATABASES_TIMEOUT_MS;
-    return parsedTimeout;
-  }
-
-  private normalizeVehicleDatabasesResult(
-    vin: string,
-    response?: VehicleDatabasesBasicVinDecodeResponse,
-  ): DecodedVinResult {
-    const basic = response?.data?.basic;
-    const intro = response?.data?.intro;
-    const engine = response?.data?.engine;
-    const manufacturer = response?.data?.manufacturer;
-    const transmission = response?.data?.transmission;
-    const drivetrain = response?.data?.drivetrain;
-    const fuel = response?.data?.fuel;
-
-    return {
-      vin: this.normalizeText(intro?.vin) ?? vin,
-      make: this.normalizeText(basic?.make),
-      model: this.normalizeText(basic?.model),
-      year: this.normalizeText(basic?.year),
-      trim: this.normalizeText(basic?.trim),
-      vehicleType: this.normalizeText(basic?.vehicle_type),
-      bodyClass: this.normalizeText(basic?.body_type),
-      manufacturer: this.normalizeText(manufacturer?.manufacturer),
-      plantCountry: this.normalizeText(manufacturer?.country),
-      engineCylinders: this.normalizeText(engine?.cylinders),
-      displacementL: this.normalizeDisplacementL(engine),
-      fuelTypePrimary: this.normalizeText(fuel?.fuel_type),
-      transmissionStyle: this.normalizeText(transmission?.transmission_style),
-      driveType: this.normalizeText(drivetrain?.drive_type),
-      doors: this.normalizeText(basic?.doors),
-      series: this.normalizeText(basic?.trim),
-      errorCode: this.normalizeText(
-        response?.status && response.status !== 'success'
-          ? String(response.code ?? '')
-          : null,
-      ),
-      errorText:
-        this.normalizeText(
-          response?.status && response.status !== 'success'
-            ? response.message
-            : null,
-        ) ?? null,
-      source: 'VEHICLE_DATABASES',
-    };
-  }
-
-  private normalizeText(value: string | null | undefined): string | null {
-    const normalized = value?.trim();
-    if (
-      !normalized ||
-      normalized.toLowerCase() === 'null' ||
-      normalized.toLowerCase() === 'not applicable'
-    )
-      return null;
-    return normalized;
-  }
-
-  private normalizeDisplacementL(
-    engine?: VehicleDatabasesEngineSection | null,
-  ): string | null {
-    const engineSize = this.normalizeText(engine?.engine_size);
-    if (engineSize) return engineSize;
-
-    const engineCapacity = this.normalizeText(engine?.engine_capacity);
-    if (!engineCapacity) return null;
-
-    const parsedCapacity = Number(engineCapacity);
-    if (!Number.isFinite(parsedCapacity) || parsedCapacity <= 0)
-      return engineCapacity;
-
-    if (parsedCapacity >= 50) return (parsedCapacity / 1000).toFixed(1);
-    return String(parsedCapacity);
-  }
-
   private toNumber(value: string | null): number | null {
     if (!value) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  private extractWeightKgFromDimensions(
-    dimensions?: VehicleDatabasesDimensionsSection | null,
-  ): number | null {
-    const gvwr = this.normalizeText(dimensions?.gvwr);
-    if (!gvwr) return null;
-
-    const metricMatch = gvwr.match(/\(([\d,]+(?:\.\d+)?)\s*kg/i);
-    if (metricMatch) {
-      const metricValue = Number(metricMatch[1].replace(/,/g, ''));
-      if (Number.isFinite(metricValue) && metricValue > 0)
-        return Math.round(metricValue);
-    }
-
-    const poundsMatch = gvwr.match(/([\d,]+(?:\.\d+)?)\s*lb/i);
-    if (!poundsMatch) return null;
-
-    const poundsValue = Number(poundsMatch[1].replace(/,/g, ''));
-    if (!Number.isFinite(poundsValue) || poundsValue <= 0) return null;
-    return Math.round(poundsValue * 0.453592);
   }
 
   private async estimateWeightFromCatalog(input: {
@@ -431,15 +196,10 @@ export class VehiclesService {
   private fallback(): VehicleVinDecodeResponseDto {
     return {
       success: false,
-      source: 'VEHICLE_DATABASES',
+      source: 'VIN_API',
       requiresManualSelection: true,
       message: FALLBACK_MESSAGE,
       data: null,
     };
-  }
-
-  private maskVin(vin: string): string {
-    if (vin.length <= 6) return vin;
-    return `${vin.slice(0, 3)}********${vin.slice(-3)}`;
   }
 }

@@ -155,6 +155,31 @@ TRANSLATION_RATE_LIMIT_WINDOW_SECONDS=60
 TRANSLATION_RATE_LIMIT_MAX_REQUESTS=30
 ```
 
+## VIN decoding providers
+
+The authenticated `GET /vehicles/decode-vin/:vin` endpoint first searches
+SwissCarInfo and calls One Auto API only after SwissCarInfo returns an explicit
+not-found or empty result. Authentication, quota, timeout, network, malformed
+response, and server failures from SwissCarInfo are returned as controlled
+service errors and do not spend One Auto API credits.
+
+Configure these backend-only variables:
+
+```env
+SWISSCARINFO_API_KEY=
+SWISSCARINFO_API_URL=https://api.swisscarinfo.ch/v3/search
+SWISSCARINFO_TIMEOUT_MS=10000
+ONEAUTOAPI_API_KEY=
+ONEAUTOAPI_API_URL=https://api.oneautoapi.com/oneauto/vindecodebasic/us/v2
+ONEAUTOAPI_TIMEOUT_MS=10000
+```
+
+[SwissCarInfo](https://swisscarinfo.ch/en/api) requires API access and a key
+from the account API dashboard. [One Auto API](https://swagger.oneautoapi.com/)
+requires the VIN Decode (US) method to be enabled and an API key whose
+service/IP restrictions allow the API deployment. Keep both keys on the API
+server; do not use an `EXPO_PUBLIC_` variable for either one.
+
 ## Database
 
 Apply the schema changes:
