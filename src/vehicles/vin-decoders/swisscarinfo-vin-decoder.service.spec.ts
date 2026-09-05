@@ -56,7 +56,8 @@ describe('SwissCarInfoVinDecoder', () => {
         make: 'BMW',
         model: 'X5 M60i xDrive',
         year: '2024',
-        trim: '31EU',
+        trim: 'EAE500MA',
+        variant: '31EU',
         vehicleType: 'Passenger car',
         bodyClass: 'Estate',
         manufacturer: 'Bayerische Motoren Werke AG',
@@ -69,6 +70,23 @@ describe('SwissCarInfoVinDecoder', () => {
         doors: '4',
         series: 'G5X',
         estimatedWeightKg: 2420,
+        grossWeightKg: null,
+        payloadKg: null,
+        enginePowerKw: null,
+        enginePowerHp: null,
+        engineTorqueNm: null,
+        lengthMm: null,
+        widthMm: null,
+        heightMm: null,
+        wheelbaseMm: null,
+        seats: null,
+        maxSpeedKmh: null,
+        brakedTowingKg: null,
+        unbrakedTowingKg: null,
+        co2CombinedGKm: null,
+        fuelConsumptionCombinedL100Km: null,
+        euroStandard: null,
+        color: null,
         source: 'swisscarinfo',
       },
     });
@@ -93,9 +111,50 @@ describe('SwissCarInfoVinDecoder', () => {
             identification: {
               make: 'PEUGEOT',
               commercial_name: '307 2.0i',
+              type: 'T5RFJ',
+              variant: '3CRFJC',
+              version: 'Premium',
+              date_of_manufacture: '2006-04-12',
+              vin_prefix: 'VF33CRFJC........',
+              vehicle_category_label: 'Passenger car',
             },
-            engine: { displacement_cc: 1997 },
+            manufacturer: { name: 'Peugeot SA', country: 'France' },
+            engine: {
+              cylinders: 4,
+              displacement_cc: 1997,
+              power_kw: 103,
+              power_hp: 140,
+              max_torque_nm: 200,
+            },
             fuel: { type_label: 'Petrol' },
+            dimensions: {
+              length_mm: 4212,
+              width_mm: 1762,
+              height_mm: 1530,
+              wheelbase_mm: 2608,
+            },
+            masses: {
+              curb_weight_kg: 1421,
+              gross_weight_kg: 1780,
+              payload_kg: 359,
+            },
+            towing: { braked_kg: 1500, unbraked_kg: 680 },
+            transmission: {
+              gearbox_detail_label: 'Automatic 4-speed',
+              drive_type_label: 'Front-wheel drive',
+              max_speed_kmh: 200,
+            },
+            body: {
+              type_label: 'Sedan',
+              doors: 4,
+              seats: 5,
+              color_label: 'Blue',
+            },
+            emissions: { euro_standard_short: 'Euro 4' },
+            consumption_wltp: {
+              co2_combined_gkm: 184,
+              fuel_combined_l100km: 7.7,
+            },
           },
         ],
       }),
@@ -110,11 +169,146 @@ describe('SwissCarInfoVinDecoder', () => {
         data: expect.objectContaining({
           make: 'PEUGEOT',
           model: '307 2.0i',
+          year: '2006',
+          trim: 'Premium',
+          variant: '3CRFJC',
+          series: 'T5RFJ',
+          vehicleType: 'Passenger car',
+          bodyClass: 'Sedan',
+          manufacturer: 'Peugeot SA',
+          plantCountry: 'France',
+          engineCylinders: '4',
           displacementL: '1.997',
           fuelTypePrimary: 'Petrol',
+          transmissionStyle: 'Automatic 4-speed',
+          driveType: 'Front-wheel drive',
+          doors: '4',
+          estimatedWeightKg: 1421,
+          grossWeightKg: 1780,
+          payloadKg: 359,
+          enginePowerKw: 103,
+          enginePowerHp: 140,
+          engineTorqueNm: 200,
+          lengthMm: 4212,
+          widthMm: 1762,
+          heightMm: 1530,
+          wheelbaseMm: 2608,
+          seats: 5,
+          maxSpeedKmh: 200,
+          brakedTowingKg: 1500,
+          unbrakedTowingKg: 680,
+          co2CombinedGKm: 184,
+          fuelConsumptionCombinedL100Km: 7.7,
+          euroStandard: 'Euro 4',
+          color: 'Blue',
         }),
       }),
     );
+  });
+
+  it('rejects ambiguous manufacturer-only VIN matches', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: [
+          {
+            identification: {
+              make: 'FORD',
+              commercial_name: 'Fiesta 1.4 16V',
+              vin_prefix: 'WF0..............',
+            },
+          },
+        ],
+      }),
+    }) as typeof global.fetch;
+
+    await expect(
+      new SwissCarInfoVinDecoder().decode('WF0WXXTACWKJ75955'),
+    ).resolves.toEqual({ kind: 'not-found' });
+  });
+
+  it('rejects equally specific VIN masks instead of guessing a variant', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: [
+          {
+            identification: {
+              make: 'FORD',
+              commercial_name: 'Transit Courier',
+              variant: 'FIRST',
+              vin_prefix: 'WF0WXXTACWK......',
+            },
+          },
+          {
+            identification: {
+              make: 'FORD',
+              commercial_name: 'Transit Courier',
+              variant: 'SECOND',
+              vin_prefix: 'WF0WXXTACWK......',
+            },
+          },
+        ],
+      }),
+    }) as typeof global.fetch;
+
+    await expect(
+      new SwissCarInfoVinDecoder().decode('WF0WXXTACWKJ75955'),
+    ).resolves.toEqual({ kind: 'not-found' });
+  });
+
+  it('uses a matching Swiss registration record and its first-registration year', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: [
+          {
+            identification: {
+              make: 'FORD',
+              commercial_name: 'Transit Courier',
+              type: 'JN8',
+              variant: 'XWCA1WX',
+              vin_prefix: 'WF0WXXTACWK......',
+            },
+            plate: { first_registration: '2019-12-30' },
+            masses: { curb_weight_kg: 1394, gross_weight_kg: 1840 },
+            body: { type_label: 'Fourgon', seats: 2 },
+            engine: { displacement_cc: 1499, power_kw: 55.2 },
+          },
+        ],
+      }),
+    });
+    global.fetch = fetchMock as typeof global.fetch;
+
+    const result = await new SwissCarInfoVinDecoder().decodeRegistrationNumber(
+      'WF0WXXTACWKJ75955',
+      '671912676',
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        kind: 'found',
+        data: expect.objectContaining({
+          make: 'FORD',
+          model: 'Transit Courier',
+          year: '2019',
+          series: 'JN8',
+          variant: 'XWCA1WX',
+          estimatedWeightKg: 1394,
+          grossWeightKg: 1840,
+          bodyClass: 'Fourgon',
+          seats: 2,
+          displacementL: '1.499',
+          enginePowerKw: 55.2,
+        }),
+      }),
+    );
+    const requestedUrl = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(requestedUrl.searchParams.get('q')).toBe('671912676');
+    expect(requestedUrl.searchParams.get('type')).toBe('matricule');
   });
 
   it('returns not-found only for empty or explicit no-result responses', async () => {

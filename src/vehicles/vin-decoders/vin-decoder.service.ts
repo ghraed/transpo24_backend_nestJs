@@ -11,7 +11,23 @@ export class VinDecoderService {
     private readonly oneAutoApi: OneAutoApiVinDecoder,
   ) {}
 
-  async decode(vin: string): Promise<ProviderVinDecodeResult> {
+  async decode(
+    vin: string,
+    options: { swissRegistrationNumber?: string } = {},
+  ): Promise<ProviderVinDecodeResult> {
+    if (options.swissRegistrationNumber) {
+      this.swissCarInfo.assertConfigured();
+      const registrationResult =
+        await this.swissCarInfo.decodeRegistrationNumber(
+          vin,
+          options.swissRegistrationNumber,
+        );
+      if (registrationResult.kind === 'found') return registrationResult;
+
+      this.oneAutoApi.assertConfigured();
+      return this.oneAutoApi.decode(vin);
+    }
+
     // Validate the complete fallback chain before spending either provider's
     // credits, so a partially configured deployment fails deterministically.
     this.swissCarInfo.assertConfigured();

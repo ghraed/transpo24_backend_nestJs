@@ -86,9 +86,17 @@ export class VehiclesService {
     return years;
   }
 
-  async decodeVin(rawVin: string): Promise<VehicleVinDecodeResponseDto> {
+  async decodeVin(
+    rawVin: string,
+    rawSwissRegistrationNumber?: string,
+  ): Promise<VehicleVinDecodeResponseDto> {
     const vin = this.sanitizeVin(rawVin);
-    const result = await this.vinDecoder.decode(vin);
+    const swissRegistrationNumber = this.sanitizeSwissRegistrationNumber(
+      rawSwissRegistrationNumber,
+    );
+    const result = await this.vinDecoder.decode(vin, {
+      swissRegistrationNumber,
+    });
     if (result.kind === 'not-found') return this.fallback();
 
     const decoded = result.data;
@@ -103,7 +111,7 @@ export class VehiclesService {
       }));
     const requiresManualSelection =
       !decoded.make || !decoded.model || !manufactureYear;
-    const variant = decoded.trim ?? decoded.series;
+    const variant = decoded.variant ?? decoded.trim ?? decoded.series;
     const bodyType = decoded.bodyClass;
 
     return {
@@ -123,6 +131,7 @@ export class VehiclesService {
         make: decoded.make,
         year: decoded.year,
         trim: decoded.trim,
+        variantCode: decoded.variant,
         vehicleType: decoded.vehicleType,
         bodyClass: decoded.bodyClass,
         manufacturer: decoded.manufacturer,
@@ -133,6 +142,23 @@ export class VehiclesService {
         transmissionStyle: decoded.transmissionStyle,
         driveType: decoded.driveType,
         doors: decoded.doors,
+        grossWeightKg: decoded.grossWeightKg,
+        payloadKg: decoded.payloadKg,
+        enginePowerKw: decoded.enginePowerKw,
+        enginePowerHp: decoded.enginePowerHp,
+        engineTorqueNm: decoded.engineTorqueNm,
+        lengthMm: decoded.lengthMm,
+        widthMm: decoded.widthMm,
+        heightMm: decoded.heightMm,
+        wheelbaseMm: decoded.wheelbaseMm,
+        seats: decoded.seats,
+        maxSpeedKmh: decoded.maxSpeedKmh,
+        brakedTowingKg: decoded.brakedTowingKg,
+        unbrakedTowingKg: decoded.unbrakedTowingKg,
+        co2CombinedGKm: decoded.co2CombinedGKm,
+        fuelConsumptionCombinedL100Km: decoded.fuelConsumptionCombinedL100Km,
+        euroStandard: decoded.euroStandard,
+        color: decoded.color,
         errorCode: null,
         errorText: null,
         source: decoded.source,
@@ -153,6 +179,25 @@ export class VehiclesService {
         'VIN cannot contain the letters I, O, or Q.',
       );
     return vin;
+  }
+
+  private sanitizeSwissRegistrationNumber(
+    rawValue?: string,
+  ): string | undefined {
+    const value = rawValue?.trim();
+    if (!value) return undefined;
+    if (!/^[\d.\s-]+$/.test(value)) {
+      throw new BadRequestException(
+        'Swiss registration number must contain only digits and separators.',
+      );
+    }
+    const digits = value.replace(/\D/g, '');
+    if (digits.length !== 9) {
+      throw new BadRequestException(
+        'Swiss registration number must contain exactly 9 digits.',
+      );
+    }
+    return digits;
   }
 
   private toNumber(value: string | null): number | null {

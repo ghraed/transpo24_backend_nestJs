@@ -26,6 +26,7 @@ describe('VehiclesService', () => {
       model: 'Accord',
       year: '2003',
       trim: 'EX',
+      variant: 'CM5',
       vehicleType: 'Passenger Car',
       bodyClass: 'Sedan',
       manufacturer: 'Honda',
@@ -38,6 +39,23 @@ describe('VehiclesService', () => {
       doors: '4',
       series: 'Accord VII',
       estimatedWeightKg: 1450,
+      grossWeightKg: 1950,
+      payloadKg: 500,
+      enginePowerKw: 118,
+      enginePowerHp: 160,
+      engineTorqueNm: 220,
+      lengthMm: 4813,
+      widthMm: 1816,
+      heightMm: 1455,
+      wheelbaseMm: 2740,
+      seats: 5,
+      maxSpeedKmh: 210,
+      brakedTowingKg: 1500,
+      unbrakedTowingKg: 500,
+      co2CombinedGKm: 190,
+      fuelConsumptionCombinedL100Km: 8.2,
+      euroStandard: 'Euro 4',
+      color: 'Black',
       source: 'swisscarinfo',
     };
     vinDecoder.decode.mockResolvedValue({ kind: 'found', data: decoded });
@@ -54,13 +72,14 @@ describe('VehiclesService', () => {
         brand: decoded.make,
         model: decoded.model,
         series: decoded.series,
-        variant: decoded.trim,
+        variant: decoded.variant,
         manufactureYear: 2003,
         estimatedWeightKg: decoded.estimatedWeightKg,
         bodyType: decoded.bodyClass,
         make: decoded.make,
         year: decoded.year,
         trim: decoded.trim,
+        variantCode: decoded.variant,
         vehicleType: decoded.vehicleType,
         bodyClass: decoded.bodyClass,
         manufacturer: decoded.manufacturer,
@@ -71,12 +90,31 @@ describe('VehiclesService', () => {
         transmissionStyle: decoded.transmissionStyle,
         driveType: decoded.driveType,
         doors: decoded.doors,
+        grossWeightKg: decoded.grossWeightKg,
+        payloadKg: decoded.payloadKg,
+        enginePowerKw: decoded.enginePowerKw,
+        enginePowerHp: decoded.enginePowerHp,
+        engineTorqueNm: decoded.engineTorqueNm,
+        lengthMm: decoded.lengthMm,
+        widthMm: decoded.widthMm,
+        heightMm: decoded.heightMm,
+        wheelbaseMm: decoded.wheelbaseMm,
+        seats: decoded.seats,
+        maxSpeedKmh: decoded.maxSpeedKmh,
+        brakedTowingKg: decoded.brakedTowingKg,
+        unbrakedTowingKg: decoded.unbrakedTowingKg,
+        co2CombinedGKm: decoded.co2CombinedGKm,
+        fuelConsumptionCombinedL100Km: decoded.fuelConsumptionCombinedL100Km,
+        euroStandard: decoded.euroStandard,
+        color: decoded.color,
         errorCode: null,
         errorText: null,
         source: decoded.source,
       },
     });
-    expect(vinDecoder.decode).toHaveBeenCalledWith('1HGCM82633A004352');
+    expect(vinDecoder.decode).toHaveBeenCalledWith('1HGCM82633A004352', {
+      swissRegistrationNumber: undefined,
+    });
   });
 
   it('returns the existing controlled vehicle-not-found response', async () => {
@@ -104,5 +142,18 @@ describe('VehiclesService', () => {
       BadRequestException,
     );
     expect(vinDecoder.decode).not.toHaveBeenCalled();
+  });
+
+  it('normalizes and validates an optional Swiss registration number', async () => {
+    vinDecoder.decode.mockResolvedValue({ kind: 'not-found' });
+
+    await createService().decodeVin('1HGCM82633A004352', '671.912.676');
+    expect(vinDecoder.decode).toHaveBeenCalledWith('1HGCM82633A004352', {
+      swissRegistrationNumber: '671912676',
+    });
+
+    await expect(
+      createService().decodeVin('1HGCM82633A004352', '12345'),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

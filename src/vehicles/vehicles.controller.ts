@@ -28,8 +28,11 @@ export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
   @Get('decode-vin/:vin')
-  decodeVin(@Param('vin') vin: string): Promise<VehicleVinDecodeResponseDto> {
-    return this.vehiclesService.decodeVin(vin);
+  decodeVin(
+    @Param('vin') vin: string,
+    @Query('swissRegistrationNumber') swissRegistrationNumber?: string,
+  ): Promise<VehicleVinDecodeResponseDto> {
+    return this.vehiclesService.decodeVin(vin, swissRegistrationNumber);
   }
 
   @Get('catalog/brands')

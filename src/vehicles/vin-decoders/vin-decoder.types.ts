@@ -6,6 +6,7 @@ export interface NormalizedVinData {
   model: string | null;
   year: string | null;
   trim: string | null;
+  variant: string | null;
   vehicleType: string | null;
   bodyClass: string | null;
   manufacturer: string | null;
@@ -18,6 +19,23 @@ export interface NormalizedVinData {
   doors: string | null;
   series: string | null;
   estimatedWeightKg: number | null;
+  grossWeightKg: number | null;
+  payloadKg: number | null;
+  enginePowerKw: number | null;
+  enginePowerHp: number | null;
+  engineTorqueNm: number | null;
+  lengthMm: number | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  wheelbaseMm: number | null;
+  seats: number | null;
+  maxSpeedKmh: number | null;
+  brakedTowingKg: number | null;
+  unbrakedTowingKg: number | null;
+  co2CombinedGKm: number | null;
+  fuelConsumptionCombinedL100Km: number | null;
+  euroStandard: string | null;
+  color: string | null;
   source: VinDecodeProvider;
 }
 

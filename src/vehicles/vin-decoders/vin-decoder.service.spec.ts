@@ -5,7 +5,11 @@ import { SwissCarInfoVinDecoder } from './swisscarinfo-vin-decoder.service';
 import { VinDecoderService } from './vin-decoder.service';
 
 describe('VinDecoderService', () => {
-  const swiss = { assertConfigured: jest.fn(), decode: jest.fn() };
+  const swiss = {
+    assertConfigured: jest.fn(),
+    decode: jest.fn(),
+    decodeRegistrationNumber: jest.fn(),
+  };
   const oneAuto = { assertConfigured: jest.fn(), decode: jest.fn() };
   const createService = () =>
     new VinDecoderService(
@@ -31,6 +35,23 @@ describe('VinDecoderService', () => {
 
     await expect(createService().decode('VIN')).resolves.toBe(fallbackResult);
     expect(oneAuto.decode).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses Swiss registration lookup without calling either VIN lookup', async () => {
+    const result = { kind: 'found', data: { source: 'swisscarinfo' } };
+    swiss.decodeRegistrationNumber.mockResolvedValue(result);
+
+    await expect(
+      createService().decode('VIN', {
+        swissRegistrationNumber: '671912676',
+      }),
+    ).resolves.toBe(result);
+    expect(swiss.decodeRegistrationNumber).toHaveBeenCalledWith(
+      'VIN',
+      '671912676',
+    );
+    expect(swiss.decode).not.toHaveBeenCalled();
+    expect(oneAuto.decode).not.toHaveBeenCalled();
   });
 
   it('returns not-found when neither provider finds the VIN', async () => {
