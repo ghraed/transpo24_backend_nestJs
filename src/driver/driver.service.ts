@@ -1580,13 +1580,35 @@ export class DriverService {
       );
     }
 
-    if (!availability.isOnline) {
-      return { alerts: [] };
-    }
-
     const requests = await this.prisma.transportRequest.findMany({
       where: {
-        status: TransportRequestStatus.PENDING_QUOTES,
+        status: {
+          in: [
+            TransportRequestStatus.PENDING_QUOTES,
+            TransportRequestStatus.QUOTED,
+          ],
+        },
+        assignedDriverId: null,
+        acceptedOfferId: null,
+        // Opening the offer form accepts the alert, not the job.
+        driverAlerts: {
+          none: {
+            driverId: profile.id,
+            status: {
+              in: [
+                DriverRequestAlertStatus.IGNORED,
+                DriverRequestAlertStatus.EXPIRED,
+              ],
+            },
+          },
+          ...(!availability.isOnline ? { some: { driverId: profile.id } } : {}),
+        },
+        offers: {
+          none: {
+            driverId: profile.id,
+            status: { not: DriverOfferStatus.PENDING },
+          },
+        },
         pickupLatitude: { not: null },
         pickupLongitude: { not: null },
         dropoffLatitude: { not: null },
@@ -1597,7 +1619,6 @@ export class DriverService {
       },
       select: DRIVER_REQUEST_DETAILS_SELECT,
       orderBy: { submittedAt: 'desc' },
-      take: 50,
     });
 
     const vehicles = await this.getApprovedDriverVehicles(profile.id);
@@ -1610,15 +1631,15 @@ export class DriverService {
       if (
         existingAlert &&
         (existingAlert.status === DriverRequestAlertStatus.IGNORED ||
-          existingAlert.status === DriverRequestAlertStatus.ACCEPTED ||
           existingAlert.status === DriverRequestAlertStatus.EXPIRED)
       ) {
         continue;
       }
 
       if (
-        !request.service ||
-        !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
+        !existingAlert &&
+        (!request.service ||
+          !this.hasCompatibleDriverVehicleForRequest(request, vehicles))
       ) {
         continue;
       }
@@ -1630,6 +1651,7 @@ export class DriverService {
         request.pickupLongitude,
       );
       if (
+        !existingAlert &&
         distanceKm !== null &&
         availability.serviceRadiusKm > 0 &&
         distanceKm > availability.serviceRadiusKm
@@ -1783,7 +1805,10 @@ export class DriverService {
       select: { id: true, status: true },
     });
     if (!request) throw new NotFoundException('Request not found.');
-    if (request.status !== TransportRequestStatus.PENDING_QUOTES) {
+    if (
+      request.status !== TransportRequestStatus.PENDING_QUOTES &&
+      request.status !== TransportRequestStatus.QUOTED
+    ) {
       throw new BadRequestException(
         'Request is no longer available for quotes.',
       );
@@ -1841,7 +1866,10 @@ export class DriverService {
       select: { id: true, status: true },
     });
     if (!request) throw new NotFoundException('Request not found.');
-    if (request.status !== TransportRequestStatus.PENDING_QUOTES) {
+    if (
+      request.status !== TransportRequestStatus.PENDING_QUOTES &&
+      request.status !== TransportRequestStatus.QUOTED
+    ) {
       throw new BadRequestException(
         'Request is no longer available for quotes.',
       );
