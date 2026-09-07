@@ -90,10 +90,11 @@ export class VehiclesService {
     rawVin: string,
     rawSwissRegistrationNumber?: string,
   ): Promise<VehicleVinDecodeResponseDto> {
-    const vin = this.sanitizeVin(rawVin);
     const swissRegistrationNumber = this.sanitizeSwissRegistrationNumber(
       rawSwissRegistrationNumber,
     );
+    const vin =
+      swissRegistrationNumber && !rawVin.trim() ? '' : this.sanitizeVin(rawVin);
     const result = await this.vinDecoder.decode(vin, {
       swissRegistrationNumber,
     });

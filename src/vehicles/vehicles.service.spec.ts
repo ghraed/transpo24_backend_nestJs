@@ -132,6 +132,14 @@ describe('VehiclesService', () => {
     });
   });
 
+  it('looks up a Swiss registration without requiring a VIN', async () => {
+    vinDecoder.decode.mockResolvedValue({ kind: 'not-found' });
+    await createService().decodeVin('', '671.912.676');
+    expect(vinDecoder.decode).toHaveBeenCalledWith('', {
+      swissRegistrationNumber: '671912676',
+    });
+  });
+
   it('rejects an invalid VIN before either provider can be called', async () => {
     const service = createService();
 

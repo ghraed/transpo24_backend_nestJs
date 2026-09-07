@@ -22,7 +22,8 @@ export class VinDecoderService {
           vin,
           options.swissRegistrationNumber,
         );
-      if (registrationResult.kind === 'found') return registrationResult;
+      if (registrationResult.kind === 'found' || !vin)
+        return registrationResult;
 
       this.oneAutoApi.assertConfigured();
       return this.oneAutoApi.decode(vin);

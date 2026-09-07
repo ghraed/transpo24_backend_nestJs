@@ -519,6 +519,9 @@ type RequestDetailsSource = {
   vehicleBodyType: string | null;
   vehicleCondition: VehicleCondition | null;
   vehicleConditionNotes: string | null;
+  vehicleMobility?: string | null;
+  vehicleIssues?: string[];
+  vehicleTransmission?: string | null;
   itemCondition: string | null;
   itemWeightKg: number | null;
   itemLengthCm: number | null;
@@ -577,6 +580,9 @@ type AcceptedJobRequestSource = {
   vehicleBodyType: string | null;
   vehicleCondition: VehicleCondition | null;
   vehicleConditionNotes: string | null;
+  vehicleMobility?: string | null;
+  vehicleIssues?: string[];
+  vehicleTransmission?: string | null;
   itemCondition: string | null;
   itemWeightKg: number | null;
   itemLengthCm: number | null;
@@ -727,6 +733,9 @@ const DRIVER_REQUEST_DETAILS_SELECT = {
   vehicleBodyType: true,
   vehicleCondition: true,
   vehicleConditionNotes: true,
+  vehicleMobility: true,
+  vehicleIssues: true,
+  vehicleTransmission: true,
   itemCondition: true,
   itemWeightKg: true,
   itemLengthCm: true,
@@ -2599,6 +2608,9 @@ export class DriverService {
         vehicleBodyType: true,
         vehicleCondition: true,
         vehicleConditionNotes: true,
+        vehicleMobility: true,
+        vehicleIssues: true,
+        vehicleTransmission: true,
         itemCondition: true,
         itemWeightKg: true,
         itemLengthCm: true,
@@ -2680,6 +2692,9 @@ export class DriverService {
         vehicleBodyType: true,
         vehicleCondition: true,
         vehicleConditionNotes: true,
+        vehicleMobility: true,
+        vehicleIssues: true,
+        vehicleTransmission: true,
         itemCondition: true,
         itemWeightKg: true,
         itemLengthCm: true,
@@ -4444,6 +4459,9 @@ export class DriverService {
         bodyType: request.vehicleBodyType,
         condition: request.vehicleCondition,
         conditionNotes: request.vehicleConditionNotes,
+        mobility: request.vehicleMobility ?? null,
+        issues: request.vehicleIssues ?? [],
+        transmission: request.vehicleTransmission ?? null,
       },
       distanceKm,
       createdAt: alert.createdAt.toISOString(),
@@ -5678,6 +5696,9 @@ export class DriverService {
         bodyType: request.vehicleBodyType,
         condition: request.vehicleCondition,
         conditionNotes: request.vehicleConditionNotes,
+        mobility: request.vehicleMobility ?? null,
+        issues: request.vehicleIssues ?? [],
+        transmission: request.vehicleTransmission ?? null,
       },
       acceptedOffer: this.toDriverOfferResponse(request.acceptedOffer),
       nextStep: 'GO_TO_PICKUP',

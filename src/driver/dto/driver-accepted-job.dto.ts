@@ -43,6 +43,9 @@ export interface DriverAcceptedJobSummaryDto {
     bodyType: string | null;
     condition: VehicleCondition | null;
     conditionNotes: string | null;
+    mobility?: string | null;
+    issues?: string[];
+    transmission?: string | null;
   };
   acceptedOffer: DriverOfferResponseDto;
   nextStep: 'GO_TO_PICKUP';

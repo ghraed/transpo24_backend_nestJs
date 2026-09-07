@@ -27,6 +27,13 @@ import { VehiclesService } from './vehicles.service';
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
+  @Get('decode-registration/:registration')
+  decodeRegistration(
+    @Param('registration') registration: string,
+  ): Promise<VehicleVinDecodeResponseDto> {
+    return this.vehiclesService.decodeVin('', registration);
+  }
+
   @Get('decode-vin/:vin')
   decodeVin(
     @Param('vin') vin: string,

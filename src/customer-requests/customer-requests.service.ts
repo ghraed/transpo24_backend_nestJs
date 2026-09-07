@@ -66,6 +66,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 
 interface CreateCustomerRequestInput {
+  clientDraftId?: string;
   customerId: string;
   serviceId: string;
   vehicleVin?: string;
@@ -79,6 +80,9 @@ interface CreateCustomerRequestInput {
   vehicleDataSource?: string;
   vehicleCondition?: VehicleCondition;
   vehicleConditionNotes?: string;
+  vehicleMobility?: string;
+  vehicleIssues?: string[];
+  vehicleTransmission?: string;
 }
 
 interface UpdatePickupLocationInput {
@@ -104,9 +108,9 @@ interface UpdateScheduleAndItemDetailsInput {
   requestId: string;
   isImmediate: boolean;
   scheduledPickupAt?: Date;
-  itemTitle: string;
+  itemTitle?: string;
   itemDescription?: string;
-  itemType: ItemType;
+  itemType?: ItemType;
   itemBrand?: string;
   itemModel?: string;
   itemYear?: number;
@@ -121,6 +125,9 @@ interface UpdateScheduleAndItemDetailsInput {
   vehicleDataSource?: string;
   vehicleCondition?: VehicleCondition;
   vehicleConditionNotes?: string;
+  vehicleMobility?: string;
+  vehicleIssues?: string[];
+  vehicleTransmission?: string;
   itemCondition?: ItemCondition;
   itemWeightKg?: number;
   itemLengthCm?: number;
@@ -342,6 +349,9 @@ type TransportRequestResponseSource = {
   vehicleDataSource: string | null;
   vehicleCondition: VehicleCondition | null;
   vehicleConditionNotes: string | null;
+  vehicleMobility?: string | null;
+  vehicleIssues?: string[];
+  vehicleTransmission?: string | null;
   motorcycleType: MotorcycleType | null;
   motorcycleChassisNumber: string | null;
   motorcycleCondition: MotorcycleCondition | null;
@@ -556,6 +566,9 @@ type DriverRequestAlertSummaryPayload = {
     bodyType: string | null;
     condition: VehicleCondition | null;
     conditionNotes: string | null;
+    mobility?: string | null;
+    issues?: string[];
+    transmission?: string | null;
   };
   distanceKm: number | null;
   createdAt: string;
@@ -600,6 +613,9 @@ const REQUEST_SELECT = {
   vehicleDataSource: true,
   vehicleCondition: true,
   vehicleConditionNotes: true,
+  vehicleMobility: true,
+  vehicleIssues: true,
+  vehicleTransmission: true,
   motorcycleType: true,
   motorcycleChassisNumber: true,
   motorcycleCondition: true,
@@ -838,31 +854,50 @@ export class CustomerRequestsService {
       vehicleCondition: input.vehicleCondition,
     });
 
-    const request = await this.prisma.transportRequest.create({
-      data: {
-        customerId: input.customerId,
-        serviceId: input.serviceId,
-        status: TransportRequestStatus.DRAFT,
-        vehicleVin: input.vehicleVin?.trim().toUpperCase() || null,
-        vehicleBrand: input.vehicleBrand?.trim() || null,
-        vehicleModel: input.vehicleModel?.trim() || null,
-        vehicleSeries: input.vehicleSeries?.trim() || null,
-        vehicleVariant: input.vehicleVariant?.trim() || null,
-        vehicleManufactureYear: input.vehicleManufactureYear ?? null,
-        vehicleEstimatedWeightKg: input.vehicleEstimatedWeightKg ?? null,
-        vehicleBodyType: input.vehicleBodyType?.trim() || null,
-        vehicleDataSource: input.vehicleDataSource?.trim() || null,
-        vehicleCondition:
-          service.key === ServiceKey.VEHICLE_TRANSPORT
-            ? (input.vehicleCondition ?? null)
-            : null,
-        vehicleConditionNotes:
-          service.key === ServiceKey.VEHICLE_TRANSPORT
-            ? input.vehicleConditionNotes?.trim() || null
-            : null,
-      },
-      select: REQUEST_SELECT,
-    });
+    const data: Prisma.TransportRequestUncheckedCreateInput = {
+      clientDraftId: input.clientDraftId ?? null,
+      customerId: input.customerId,
+      serviceId: input.serviceId,
+      status: TransportRequestStatus.DRAFT,
+      vehicleVin: input.vehicleVin?.trim().toUpperCase() || null,
+      vehicleBrand: input.vehicleBrand?.trim() || null,
+      vehicleModel: input.vehicleModel?.trim() || null,
+      vehicleSeries: input.vehicleSeries?.trim() || null,
+      vehicleVariant: input.vehicleVariant?.trim() || null,
+      vehicleManufactureYear: input.vehicleManufactureYear ?? null,
+      vehicleEstimatedWeightKg: input.vehicleEstimatedWeightKg ?? null,
+      vehicleBodyType: input.vehicleBodyType?.trim() || null,
+      vehicleDataSource: input.vehicleDataSource?.trim() || null,
+      vehicleMobility: input.vehicleMobility ?? null,
+      vehicleIssues: input.vehicleIssues ?? [],
+      vehicleTransmission: input.vehicleTransmission?.trim() || null,
+      vehicleCondition:
+        service.key === ServiceKey.VEHICLE_TRANSPORT
+          ? (input.vehicleCondition ?? null)
+          : null,
+      vehicleConditionNotes:
+        service.key === ServiceKey.VEHICLE_TRANSPORT
+          ? input.vehicleConditionNotes?.trim() || null
+          : null,
+    };
+    const request = input.clientDraftId
+      ? await this.prisma.transportRequest.upsert({
+          where: {
+            customerId_clientDraftId: {
+              customerId: input.customerId,
+              clientDraftId: input.clientDraftId,
+            },
+          },
+          create: data,
+          update: {},
+          select: REQUEST_SELECT,
+        })
+      : await this.prisma.transportRequest.create({
+          data,
+          select: REQUEST_SELECT,
+        });
+    if (request.serviceId !== input.serviceId)
+      throw new BadRequestException('A draft cannot change service.');
 
     return this.toResponseDto(request);
   }
@@ -1397,8 +1432,39 @@ export class CustomerRequestsService {
       throw new BadRequestException('scheduledPickupAt cannot be in the past.');
     }
 
-    if (!input.itemTitle.trim()) {
-      throw new BadRequestException('itemTitle is required.');
+    const isVehicle =
+      existingRequest.service.key === ServiceKey.VEHICLE_TRANSPORT;
+    if (isVehicle && input.itemType && input.itemType !== ItemType.VEHICLE) {
+      throw new BadRequestException(
+        'Vehicle requests cannot change item type.',
+      );
+    }
+    if (!isVehicle && (!input.itemTitle?.trim() || !input.itemType)) {
+      throw new BadRequestException('Item title and type are required.');
+    }
+    if (
+      !isVehicle &&
+      (input.vehicleMobility ||
+        input.vehicleIssues?.length ||
+        input.vehicleTransmission)
+    ) {
+      throw new BadRequestException(
+        'Vehicle details are not valid for this service.',
+      );
+    }
+    const vehicleTitle =
+      [input.vehicleBrand, input.vehicleModel]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || 'Vehicle transport';
+    if (
+      isVehicle &&
+      (!input.vehicleBrand?.trim() ||
+        !input.vehicleModel?.trim() ||
+        !input.vehicleManufactureYear ||
+        !input.vehicleEstimatedWeightKg)
+    ) {
+      throw new BadRequestException('Vehicle data is incomplete.');
     }
 
     const currentYear = new Date().getFullYear();
@@ -1431,6 +1497,7 @@ export class CustomerRequestsService {
     }
 
     if (
+      !isVehicle &&
       input.requiresLoadingHelp &&
       (!input.loadingWorkersCount || input.loadingWorkersCount <= 0)
     ) {
@@ -1455,12 +1522,18 @@ export class CustomerRequestsService {
         scheduledPickupAt: input.isImmediate
           ? null
           : (input.scheduledPickupAt ?? null),
-        itemTitle: input.itemTitle.trim(),
+        itemTitle: isVehicle ? vehicleTitle : input.itemTitle!.trim(),
         itemDescription: input.itemDescription?.trim() || null,
-        itemType: input.itemType,
-        itemBrand: input.itemBrand?.trim() || null,
-        itemModel: input.itemModel?.trim() || null,
-        itemYear: input.itemYear ?? null,
+        itemType: isVehicle ? ItemType.VEHICLE : input.itemType,
+        itemBrand: isVehicle
+          ? input.vehicleBrand?.trim() || null
+          : input.itemBrand?.trim() || null,
+        itemModel: isVehicle
+          ? input.vehicleModel?.trim() || null
+          : input.itemModel?.trim() || null,
+        itemYear: isVehicle
+          ? (input.vehicleManufactureYear ?? null)
+          : (input.itemYear ?? null),
         vehicleVin: input.vehicleVin?.trim().toUpperCase() || null,
         vehicleBrand: input.vehicleBrand?.trim() || null,
         vehicleModel: input.vehicleModel?.trim() || null,
@@ -1470,6 +1543,9 @@ export class CustomerRequestsService {
         vehicleEstimatedWeightKg: input.vehicleEstimatedWeightKg ?? null,
         vehicleBodyType: input.vehicleBodyType?.trim() || null,
         vehicleDataSource: input.vehicleDataSource?.trim() || null,
+        vehicleMobility: input.vehicleMobility ?? null,
+        vehicleIssues: input.vehicleIssues ?? [],
+        vehicleTransmission: input.vehicleTransmission?.trim() || null,
         vehicleCondition:
           existingRequest.service.key === ServiceKey.VEHICLE_TRANSPORT
             ? (input.vehicleCondition ?? null)
@@ -1479,12 +1555,14 @@ export class CustomerRequestsService {
             ? input.vehicleConditionNotes?.trim() || null
             : null,
         itemCondition: input.itemCondition ?? null,
-        itemWeightKg: input.itemWeightKg ?? null,
-        itemLengthCm: input.itemLengthCm ?? null,
-        itemWidthCm: input.itemWidthCm ?? null,
-        itemHeightCm: input.itemHeightCm ?? null,
-        requiresLoadingHelp: input.requiresLoadingHelp,
-        loadingWorkersCount: normalizedLoadingWorkersCount,
+        itemWeightKg: isVehicle
+          ? (input.vehicleEstimatedWeightKg ?? null)
+          : (input.itemWeightKg ?? null),
+        itemLengthCm: isVehicle ? null : (input.itemLengthCm ?? null),
+        itemWidthCm: isVehicle ? null : (input.itemWidthCm ?? null),
+        itemHeightCm: isVehicle ? null : (input.itemHeightCm ?? null),
+        requiresLoadingHelp: isVehicle ? false : input.requiresLoadingHelp,
+        loadingWorkersCount: isVehicle ? null : normalizedLoadingWorkersCount,
         specialInstructions: input.specialInstructions?.trim() || null,
       },
       select: REQUEST_SELECT,
@@ -3288,6 +3366,9 @@ export class CustomerRequestsService {
         dataSource: request.vehicleDataSource,
         condition: request.vehicleCondition,
         conditionNotes: request.vehicleConditionNotes,
+        mobility: request.vehicleMobility ?? null,
+        issues: request.vehicleIssues ?? [],
+        transmission: request.vehicleTransmission ?? null,
       },
       motorcycleDetails,
       goodsDetails,
@@ -4051,6 +4132,9 @@ export class CustomerRequestsService {
         bodyType: request.vehicleBodyType,
         condition: request.vehicleCondition,
         conditionNotes: request.vehicleConditionNotes,
+        mobility: request.vehicleMobility ?? null,
+        issues: request.vehicleIssues ?? [],
+        transmission: request.vehicleTransmission ?? null,
       },
       distanceKm,
       createdAt: alert.createdAt.toISOString(),

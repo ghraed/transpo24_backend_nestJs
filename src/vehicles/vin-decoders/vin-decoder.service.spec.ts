@@ -54,6 +54,14 @@ describe('VinDecoderService', () => {
     expect(oneAuto.decode).not.toHaveBeenCalled();
   });
 
+  it('does not call a VIN provider when a registration-only lookup misses', async () => {
+    swiss.decodeRegistrationNumber.mockResolvedValue({ kind: 'not-found' });
+    await expect(
+      createService().decode('', { swissRegistrationNumber: '671912676' }),
+    ).resolves.toEqual({ kind: 'not-found' });
+    expect(oneAuto.decode).not.toHaveBeenCalled();
+  });
+
   it('returns not-found when neither provider finds the VIN', async () => {
     swiss.decode.mockResolvedValue({ kind: 'not-found' });
     oneAuto.decode.mockResolvedValue({ kind: 'not-found' });

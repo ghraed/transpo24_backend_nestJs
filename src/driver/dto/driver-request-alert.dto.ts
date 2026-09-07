@@ -51,6 +51,9 @@ export interface DriverRequestAlertSummaryDto {
     bodyType: string | null;
     condition: VehicleCondition | null;
     conditionNotes: string | null;
+    mobility?: string | null;
+    issues?: string[];
+    transmission?: string | null;
   };
   distanceKm: number | null;
   createdAt: string;

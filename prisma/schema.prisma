@@ -557,6 +557,10 @@ model TransportRequest {
   vehicleDataSource   String?
   vehicleCondition    VehicleCondition?
   vehicleConditionNotes String?
+  clientDraftId        String?
+  vehicleMobility      String?
+  vehicleIssues        String[] @default([])
+  vehicleTransmission  String?
   motorcycleType      MotorcycleType?
   motorcycleChassisNumber String?
   motorcycleCondition MotorcycleCondition?
@@ -630,6 +634,7 @@ model TransportRequest {
   @@index([serviceId])
   @@index([assignedDriverId, status])
   @@index([paymentStatus])
+  @@unique([customerId, clientDraftId])
   @@map("transport_requests")
 }
 

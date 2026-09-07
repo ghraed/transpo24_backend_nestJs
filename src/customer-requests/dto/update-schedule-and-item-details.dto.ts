@@ -8,6 +8,10 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsIn,
+  IsArray,
+  ArrayUnique,
+  ArrayMaxSize,
   Max,
   MaxLength,
   Min,
@@ -22,18 +26,20 @@ export class UpdateScheduleAndItemDetailsDto {
   @IsDateString()
   scheduledPickupAt?: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(120)
-  itemTitle!: string;
+  itemTitle?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   itemDescription?: string;
 
+  @IsOptional()
   @IsEnum(ItemType)
-  itemType!: ItemType;
+  itemType?: ItemType;
 
   @IsOptional()
   @IsString()
@@ -99,6 +105,34 @@ export class UpdateScheduleAndItemDetailsDto {
   @IsString()
   @MaxLength(30)
   vehicleDataSource?: string;
+
+  @IsOptional()
+  @IsIn(['RUNNING', 'ROLLABLE', 'NOT_ROLLABLE'])
+  vehicleMobility?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(8)
+  @IsIn(
+    [
+      'DEAD_BATTERY',
+      'WINCH',
+      'ACCIDENT',
+      'CRANE',
+      'MISSING_WHEELS',
+      'NO_KEY',
+      'STEERING_LOCKED',
+      'BRAKES_LOCKED',
+    ],
+    { each: true },
+  )
+  vehicleIssues?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  vehicleTransmission?: string;
 
   @IsOptional()
   @IsEnum(VehicleCondition)

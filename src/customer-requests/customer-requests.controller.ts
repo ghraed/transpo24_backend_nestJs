@@ -80,6 +80,7 @@ export class CustomerRequestsController {
     return this.customerRequestsService.createDraftRequest({
       customerId: request.user.id,
       serviceId: dto.serviceId,
+      clientDraftId: dto.clientDraftId,
       vehicleVin: dto.vehicleVin,
       vehicleBrand: dto.vehicleBrand,
       vehicleModel: dto.vehicleModel,
@@ -89,6 +90,9 @@ export class CustomerRequestsController {
       vehicleEstimatedWeightKg: dto.vehicleEstimatedWeightKg,
       vehicleBodyType: dto.vehicleBodyType,
       vehicleDataSource: dto.vehicleDataSource,
+      vehicleMobility: dto.vehicleMobility,
+      vehicleIssues: dto.vehicleIssues,
+      vehicleTransmission: dto.vehicleTransmission,
       vehicleCondition: dto.vehicleCondition,
       vehicleConditionNotes: dto.vehicleConditionNotes,
     });
@@ -301,6 +305,9 @@ export class CustomerRequestsController {
       vehicleEstimatedWeightKg: dto.vehicleEstimatedWeightKg,
       vehicleBodyType: dto.vehicleBodyType,
       vehicleDataSource: dto.vehicleDataSource,
+      vehicleMobility: dto.vehicleMobility,
+      vehicleIssues: dto.vehicleIssues,
+      vehicleTransmission: dto.vehicleTransmission,
       vehicleCondition: dto.vehicleCondition,
       vehicleConditionNotes: dto.vehicleConditionNotes,
       itemCondition: dto.itemCondition,

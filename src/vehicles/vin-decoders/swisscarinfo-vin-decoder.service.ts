@@ -187,7 +187,10 @@ export class SwissCarInfoVinDecoder {
       const candidates = records
         .map((record) => ({
           record,
-          specificity: this.getVinMatchSpecificity(vin, record),
+          specificity:
+            type === 'matricule' && !vin
+              ? MIN_SPECIFIC_VIN_CHARACTERS
+              : this.getVinMatchSpecificity(vin, record),
         }))
         .filter(({ specificity }) => specificity >= MIN_SPECIFIC_VIN_CHARACTERS)
         .sort((a, b) => b.specificity - a.specificity);
@@ -196,7 +199,7 @@ export class SwissCarInfoVinDecoder {
       const bestCandidates = candidates.filter(
         ({ specificity }) => specificity === bestSpecificity,
       );
-      if (type === 'vin' && bestCandidates.length !== 1) {
+      if (bestCandidates.length !== 1) {
         return { kind: 'not-found' };
       }
 

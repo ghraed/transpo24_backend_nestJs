@@ -58,6 +58,9 @@ export class CustomerRequestResponseDto {
     dataSource: string | null;
     condition: VehicleCondition | null;
     conditionNotes: string | null;
+    mobility?: string | null;
+    issues?: string[];
+    transmission?: string | null;
   };
   motorcycleDetails?: {
     type: MotorcycleType | null;

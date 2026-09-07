@@ -18,6 +18,28 @@ describe('SwissCarInfoVinDecoder', () => {
     delete process.env.SWISSCARINFO_TIMEOUT_MS;
   });
 
+  it('uses a unique registration result even when no VIN was supplied', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: [
+          {
+            make: 'VW',
+            commercial_name: 'Touran',
+            vehicle_identification_number: 'WVWZZZ1TZDW123456',
+          },
+        ],
+      }),
+    });
+    await expect(
+      new SwissCarInfoVinDecoder().decodeRegistrationNumber('', '671912676'),
+    ).resolves.toMatchObject({
+      kind: 'found',
+      data: { make: 'VW', model: 'Touran' },
+    });
+  });
+
   it('maps the documented VIN payload into every supported app field', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
