@@ -1,4 +1,3 @@
-import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PhoneAuthRateLimitService } from './phone-auth-rate-limit.service';
@@ -12,6 +11,6 @@ describe('PhoneAuthRateLimitService', () => {
 
     await expect(
       service.assertCanSend('+96170123456', '127.0.0.1'),
-    ).rejects.toMatchObject<HttpException>({ status: 429 });
+    ).rejects.toMatchObject({ status: 429 });
   });
 });

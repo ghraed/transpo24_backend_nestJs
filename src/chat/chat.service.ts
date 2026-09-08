@@ -1,3 +1,4 @@
+import { validateFile, IncomingFile } from '../request-files/file-validation';
 import {
   BadRequestException,
   ForbiddenException,
@@ -286,6 +287,72 @@ export class ChatService {
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: normalizedBody,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Failed to send chat notification for room ${access.room.id}: ${error instanceof Error ? error.message : 'Unexpected error'}`,
+        );
+      });
+
+    return this.toChatMessageResponse(created);
+  }
+
+  async sendAttachment(input: {
+    user: AuthenticatedUser;
+    roomId: string;
+    file?: IncomingFile;
+  }): Promise<ChatMessageResponseDto> {
+    const access = await this.getAccessContextByRoom(input.user, input.roomId);
+    if (access.room.status !== ChatRoomStatus.ACTIVE)
+      throw new BadRequestException(
+        'This chat room is closed for new messages.',
+      );
+    await this.assertMessagingNotBlocked(access);
+    const currentRequest = await this.prisma.transportRequest.findUnique({
+      where: { id: access.room.transportRequestId },
+      select: { assignedDriverId: true, acceptedOfferId: true },
+    });
+    if (
+      currentRequest?.assignedDriverId !== access.room.driverId ||
+      currentRequest.acceptedOfferId !== access.room.acceptedOfferId
+    )
+      throw new ForbiddenException(
+        'This driver is no longer assigned to the request.',
+      );
+    const validated = validateFile(input.file);
+    const created = await this.prisma.$transaction(async (tx) => {
+      const file = await tx.requestFile.create({
+        data: {
+          ...validated,
+          requestId: access.room.transportRequestId,
+          uploadedById: input.user.id,
+          category: 'CHAT',
+        },
+        select: { id: true },
+      });
+      const message = await tx.chatMessage.create({
+        data: {
+          chatRoomId: access.room.id,
+          senderId: access.senderId,
+          senderRole: access.senderRole,
+          type: ChatMessageType.FILE,
+          body: validated.fileName,
+          attachmentUrl: `/request-files/${file.id}/content`,
+        },
+      });
+      await tx.chatRoom.update({
+        where: { id: access.room.id },
+        data: { updatedAt: message.createdAt },
+      });
+      return message;
+    });
+    void this.notificationsService
+      .notifyChatMessage({
+        recipientUserId: access.recipientUserId,
+        recipientApp: access.recipientApp,
+        chatRoomId: access.room.id,
+        transportRequestId: access.room.transportRequestId,
+        body: validated.fileName,
       })
       .catch((error: unknown) => {
         this.logger.error(

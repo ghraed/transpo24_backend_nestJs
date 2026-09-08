@@ -341,6 +341,7 @@ enum ChatMessageSenderRole {
 }
 
 enum ChatMessageType {
+  FILE
   TEXT
   IMAGE
   SYSTEM
@@ -618,6 +619,8 @@ model TransportRequest {
   service        Service                 @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   acceptedOffer  DriverOffer?            @relation("AcceptedOfferForRequest", fields: [acceptedOfferId], references: [id], onDelete: SetNull)
   assignedDriver DriverProfile?          @relation("AssignedDriverForRequest", fields: [assignedDriverId], references: [id], onDelete: SetNull)
+  vehicleDocumentPromptOfferId String?
+  requestFiles RequestFile[]
   photos         TransportRequestPhoto[]
   proofPhotos    TransportRequestProofPhoto[]
   driverAlerts   DriverRequestAlert[]
@@ -1297,4 +1300,20 @@ model VehicleSeries {
   @@unique([modelId, slug])
   @@index([modelId, isActive])
   @@map("vehicle_series")
+}
+
+model RequestFile {
+  id String @id @default(cuid())
+  requestId String
+  uploadedById String
+  category String
+  documentType String?
+  fileName String
+  mimeType String
+  size Int
+  data Bytes
+  createdAt DateTime @default(now())
+  request TransportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  @@index([requestId, category])
+  @@map("request_files")
 }

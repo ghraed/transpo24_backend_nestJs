@@ -23,7 +23,8 @@
     "test:ci": "npm run lint:check && npm run test:cov -- --runInBand && npm run test:e2e && npm run build && npm run prisma:validate",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "prisma:seed": "node prisma/seed.js",
-    "prisma:validate": "prisma validate"
+    "prisma:validate": "prisma validate",
+    "test:documents:integration": "npm run build && node scripts/test-request-documents.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",

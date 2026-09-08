@@ -108,7 +108,9 @@ describe('AuthService phone authentication', () => {
     prisma.driverProfile.findUnique.mockResolvedValue(null);
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.user.create.mockImplementation((input: unknown) => {
-      createInput = input as { data: { role: UserRole } };
+      createInput = input as {
+        data: { role: UserRole; isProfileCompleted: boolean };
+      };
       return Promise.resolve(customer);
     });
 

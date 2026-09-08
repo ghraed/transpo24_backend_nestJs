@@ -1,3 +1,8 @@
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  type IncomingFile,
+  MAX_FILE_SIZE,
+} from '../request-files/file-validation';
 import {
   Body,
   Controller,
@@ -9,6 +14,8 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 
 import type { AuthenticatedRequest } from '../auth/auth.types';
@@ -79,6 +86,26 @@ export class ChatController {
       body: dto.body,
     });
 
+    this.tripsGateway.emitChatMessageCreated(created);
+    return created;
+  }
+
+  @Post('rooms/:roomId/attachments')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_FILE_SIZE, files: 1, fields: 0 },
+    }),
+  )
+  async sendAttachment(
+    @Req() request: AuthenticatedRequest,
+    @Param('roomId') roomId: string,
+    @UploadedFile() file: IncomingFile,
+  ): Promise<ChatMessageResponseDto> {
+    const created = await this.chatService.sendAttachment({
+      user: request.user,
+      roomId,
+      file,
+    });
     this.tripsGateway.emitChatMessageCreated(created);
     return created;
   }

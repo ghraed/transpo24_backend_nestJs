@@ -36,6 +36,15 @@ describe('ChatService', () => {
 
   const createService = () => {
     const prisma = {
+      transportRequest: {
+        findUnique: jest.fn().mockResolvedValue({
+          assignedDriverId: 'driver-profile-1',
+          acceptedOfferId: 'offer-1',
+        }),
+      },
+      requestFile: {
+        create: jest.fn().mockResolvedValue({ id: 'private-file' }),
+      },
       driverProfile: {
         findUnique: jest.fn(),
       },
@@ -284,5 +293,79 @@ describe('ChatService', () => {
       }),
     );
     expect(result.readAt).toEqual(expect.any(String));
+  });
+  describe('private attachments', () => {
+    const file = {
+      buffer: Buffer.from('%PDF-1.7\nattachment'),
+      originalname: 'extra.pdf',
+      mimetype: 'application/pdf',
+      size: 20,
+    };
+    it('creates a private file and a FILE message in the same transaction', async () => {
+      const { service, prisma } = createService();
+      prisma.chatRoom.findUnique.mockResolvedValue(roomRecord);
+      prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
+      prisma.chatMessage.create.mockResolvedValue({
+        id: 'm',
+        chatRoomId: 'room-1',
+        senderId: customerUser.id,
+        senderRole: ChatMessageSenderRole.CLIENT,
+        type: ChatMessageType.FILE,
+        body: 'extra.pdf',
+        attachmentUrl: '/request-files/private-file/content',
+        createdAt: new Date(),
+        readAt: null,
+      });
+      const message = await service.sendAttachment({
+        user: customerUser,
+        roomId: 'room-1',
+        file,
+      });
+      expect(message.type).toBe('FILE');
+      expect(message.attachmentUrl).toBe('/request-files/private-file/content');
+      expect(prisma.requestFile.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            category: 'CHAT',
+            requestId: 'request-1',
+            uploadedById: customerUser.id,
+          }),
+        }),
+      );
+    });
+    it('rejects blocked chat attachments before storing files', async () => {
+      const { service, prisma } = createService();
+      prisma.chatRoom.findUnique.mockResolvedValue(roomRecord);
+      prisma.chatBlock.findFirst.mockResolvedValue({
+        blockerUserId: customerUser.id,
+      });
+      await expect(
+        service.sendAttachment({ user: customerUser, roomId: 'room-1', file }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.requestFile.create).not.toHaveBeenCalled();
+    });
+    it('rejects closed chat attachments', async () => {
+      const { service, prisma } = createService();
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        ...roomRecord,
+        status: ChatRoomStatus.CLOSED,
+      });
+      await expect(
+        service.sendAttachment({ user: customerUser, roomId: 'room-1', file }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.requestFile.create).not.toHaveBeenCalled();
+    });
+    it('rejects files in a room belonging to a formerly selected driver', async () => {
+      const { service, prisma } = createService();
+      prisma.chatRoom.findUnique.mockResolvedValue(roomRecord);
+      prisma.transportRequest.findUnique.mockResolvedValue({
+        assignedDriverId: 'different-driver',
+        acceptedOfferId: 'different-offer',
+      });
+      await expect(
+        service.sendAttachment({ user: customerUser, roomId: 'room-1', file }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.requestFile.create).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { RequestFilesModule } from './request-files/request-files.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
@@ -27,6 +28,7 @@ import { validateEnvironment } from './config/environment';
     AdminModule,
     AuthModule,
     ChatModule,
+    RequestFilesModule,
     ServicesModule,
     CustomerRequestsModule,
     DriverModule,

@@ -120,7 +120,7 @@ describe('TranslationService', () => {
       service.translate({
         text: 'Driver is on the way',
         sourceLanguage: 'en',
-        targetLanguage: 'it',
+        targetLanguage: 'ja',
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
