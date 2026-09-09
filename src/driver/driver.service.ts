@@ -1590,25 +1590,11 @@ export class DriverService {
         },
         assignedDriverId: null,
         acceptedOfferId: null,
-        // Opening the offer form accepts the alert, not the job.
-        driverAlerts: {
-          none: {
-            driverId: profile.id,
-            status: {
-              in: [
-                DriverRequestAlertStatus.IGNORED,
-                DriverRequestAlertStatus.EXPIRED,
-              ],
-            },
-          },
-          ...(!availability.isOnline ? { some: { driverId: profile.id } } : {}),
-        },
-        offers: {
-          none: {
-            driverId: profile.id,
-            status: { not: DriverOfferStatus.PENDING },
-          },
-        },
+        // Seen, dismissed, and previously quoted requests remain in Jobs until
+        // the customer completes a booking. Offline drivers retain known jobs.
+        ...(!availability.isOnline
+          ? { driverAlerts: { some: { driverId: profile.id } } }
+          : {}),
         pickupLatitude: { not: null },
         pickupLongitude: { not: null },
         dropoffLatitude: { not: null },
@@ -1628,14 +1614,6 @@ export class DriverService {
       const existingAlert = request.driverAlerts.find(
         (alert) => alert.driverId === profile.id,
       );
-      if (
-        existingAlert &&
-        (existingAlert.status === DriverRequestAlertStatus.IGNORED ||
-          existingAlert.status === DriverRequestAlertStatus.EXPIRED)
-      ) {
-        continue;
-      }
-
       if (
         !existingAlert &&
         (!request.service ||
@@ -1685,6 +1663,15 @@ export class DriverService {
       throw new NotFoundException('Request not found.');
     }
 
+    const isSelectedDriver = request.assignedDriverId === profile.id;
+    const isOpenForQuotes =
+      !request.assignedDriverId &&
+      (request.status === TransportRequestStatus.PENDING_QUOTES ||
+        request.status === TransportRequestStatus.QUOTED);
+    if (!isSelectedDriver && !isOpenForQuotes) {
+      throw new NotFoundException('Request not available for this driver.');
+    }
+
     const offer = await this.prisma.driverOffer.findUnique({
       where: {
         requestId_driverId: {
@@ -1700,12 +1687,8 @@ export class DriverService {
     const existingAlert =
       request.driverAlerts.find((alert) => alert.driverId === profile.id) ??
       null;
-    const isSelectedDriver = request.assignedDriverId === profile.id;
     const hasOfferAccess = Boolean(offer);
-    const hasAlertAccess =
-      existingAlert !== null &&
-      existingAlert.status !== DriverRequestAlertStatus.IGNORED &&
-      existingAlert.status !== DriverRequestAlertStatus.EXPIRED;
+    const hasAlertAccess = existingAlert !== null;
 
     if (!hasAlertAccess && !hasOfferAccess && !isSelectedDriver) {
       throw new NotFoundException('Request not available for this driver.');
@@ -1819,15 +1802,6 @@ export class DriverService {
       driverId: profile.id,
     });
 
-    if (
-      alert.status === DriverRequestAlertStatus.IGNORED ||
-      alert.status === DriverRequestAlertStatus.EXPIRED
-    ) {
-      throw new BadRequestException(
-        'Cannot accept ignored or expired request alert.',
-      );
-    }
-
     if (alert.status === DriverRequestAlertStatus.ACCEPTED) {
       return {
         alertId: alert.id,
@@ -1842,6 +1816,7 @@ export class DriverService {
       data: {
         status: DriverRequestAlertStatus.ACCEPTED,
         acceptedAt: new Date(),
+        ignoredAt: null,
         seenAt: alert.seenAt ?? new Date(),
       },
       select: DRIVER_REQUEST_ALERT_SELECT,

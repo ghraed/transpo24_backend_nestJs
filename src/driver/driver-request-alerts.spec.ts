@@ -68,21 +68,14 @@ describe('unresolved driver job requests', () => {
       expect(query.where.status.in).toEqual(['PENDING_QUOTES', 'QUOTED']);
       expect(query.where.assignedDriverId).toBeNull();
       expect(query.where.acceptedOfferId).toBeNull();
-      expect(query.where.offers.none).toEqual({
-        driverId: 'driver',
-        status: { not: 'PENDING' },
-      });
-      expect(query.where.driverAlerts.none.status.in).toEqual([
-        'IGNORED',
-        'EXPIRED',
-      ]);
-      expect(query.where.driverAlerts.some).toEqual(
-        online ? undefined : { driverId: 'driver' },
+      expect(query.where.offers).toBeUndefined();
+      expect(query.where.driverAlerts).toEqual(
+        online ? undefined : { some: { driverId: 'driver' } },
       );
     },
   );
 
-  it('does not rediscover unmatched jobs or restore ignored/expired alerts', async () => {
+  it('keeps dismissed and expired alerts visible while the request remains open', async () => {
     const { service, findMany } = setup();
     findMany.mockResolvedValue([
       { id: 'new', driverAlerts: [] },
@@ -96,7 +89,7 @@ describe('unresolved driver job requests', () => {
       },
     ]);
     expect(await service.getDriverRequestAlerts({ userId: 'user' })).toEqual({
-      alerts: [],
+      alerts: [{ requestId: 'ignored' }, { requestId: 'expired' }],
     });
   });
 
@@ -122,5 +115,82 @@ describe('unresolved driver job requests', () => {
       }),
     ).resolves.toMatchObject({ alertStatus: 'IGNORED' });
     expect(update).toHaveBeenCalled();
+  });
+});
+
+describe('job navigation and assignment access', () => {
+  it.each(['IGNORED', 'EXPIRED'])(
+    'can reopen an available %s alert',
+    async (status) => {
+      const { service, update } = setup();
+      Object.assign(service, {
+        ensureDriverRequestAlert: jest
+          .fn()
+          .mockResolvedValue({ id: 'alert', requestId: 'request', status }),
+      });
+      await service.acceptDriverRequestAlert({
+        userId: 'user',
+        requestId: 'request',
+      });
+      expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'ACCEPTED',
+            ignoredAt: null,
+          }),
+        }),
+      );
+    },
+  );
+
+  it('denies a previous viewer access after the customer books another driver', async () => {
+    const { service } = setup();
+    const prisma = (
+      service as unknown as {
+        prisma: { transportRequest: { findUnique: jest.Mock } };
+      }
+    ).prisma;
+    prisma.transportRequest.findUnique.mockResolvedValue({
+      id: 'request',
+      assignedDriverId: 'other-driver',
+      status: 'DRIVER_GOING_TO_PICKUP',
+    });
+    await expect(
+      service.getDriverRequestDetails({ userId: 'user', requestId: 'request' }),
+    ).rejects.toThrow('Request not available for this driver.');
+  });
+
+  it('returns all active accepted jobs independently of alert viewing or online state', async () => {
+    const { service, findMany } = setup(false);
+    const statuses = [
+      'ACCEPTED',
+      'DRIVER_ASSIGNED',
+      'DRIVER_GOING_TO_PICKUP',
+      'DRIVER_ARRIVED_PICKUP',
+      'ITEM_PICKED_UP',
+      'PICKUP_IN_PROGRESS',
+      'IN_TRANSIT',
+      'DRIVER_GOING_TO_DROPOFF',
+    ];
+    findMany.mockResolvedValue(
+      statuses.map((status) => ({
+        id: status,
+        status,
+        acceptedOffer: { id: 'offer' },
+      })),
+    );
+    Object.assign(service, {
+      toAcceptedJobSummaryResponse: (request: {
+        id: string;
+        status: string;
+      }) => ({ requestId: request.id, requestStatus: request.status }),
+    });
+    expect(
+      await service.getDriverAcceptedJobs({ userId: 'user' }),
+    ).toHaveLength(statuses.length);
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      assignedDriverId: 'driver',
+      status: { in: statuses },
+    });
   });
 });
