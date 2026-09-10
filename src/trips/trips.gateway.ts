@@ -238,7 +238,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async driverLocationUpdate(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DriverLocationUpdateDto,
-  ): Promise<void> {
+  ): Promise<{ ok: true }> {
     try {
       const user = this.getAuthenticatedSocketUser(client);
       if (user.role !== UserRole.DRIVER && !user.hasDriverProfile) {
@@ -263,6 +263,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
           .to(this.getTripRoom(payload.tripId))
           .emit('driverNearDelivery', updated.nearDelivery);
       }
+      return { ok: true };
     } catch (error) {
       throw this.toWsException(error);
     }
