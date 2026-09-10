@@ -1,4 +1,15 @@
 import {
+  APPROVED_MATCHING_VEHICLE_WHERE,
+  MATCHING_AVAILABILITY_SELECT,
+  CoveragePin,
+  parseCoveragePins,
+  validCoordinate,
+  coverageDistance,
+  immediateReference,
+  isEligibleRequest,
+  LIVE_LOCATION_MAX_AGE_MS,
+} from './request-eligibility';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -81,9 +92,7 @@ import {
   UpsertDriverVehicleLoadCapacityDto,
 } from './dto/driver-load-capacity.dto';
 import {
-  canVehicleSupportRequestLoad,
   isCarCarrierVehicleType,
-  isWorkingScheduleAvailableForDate,
   type WorkingDayScheduleValue,
 } from './vehicle-load-capacity.util';
 import {
@@ -221,6 +230,7 @@ interface UpdateDriverAvailabilityInput {
   baseLatitude?: number;
   baseLongitude?: number;
   baseAddress?: string;
+  cityCoverage?: CoveragePin[];
   acceptsImmediateRequests: boolean;
   acceptsScheduledRequests: boolean;
   weeklySchedule: DriverAvailabilityDayInput[] | DriverAvailabilityDayDto[];
@@ -413,6 +423,7 @@ type AvailabilitySource = {
   baseLatitude: number | null;
   baseLongitude: number | null;
   baseAddress: string | null;
+  cityCoverage: Prisma.JsonValue;
   acceptsImmediateRequests: boolean;
   acceptsScheduledRequests: boolean;
   createdAt: Date;
@@ -490,6 +501,7 @@ type DriverRatingSource = {
 };
 
 type RequestDetailsSource = {
+  acceptedOfferId: string | null;
   id: string;
   customerId: string;
   status: TransportRequestStatus;
@@ -705,6 +717,7 @@ const DRIVER_REQUEST_ALERT_SELECT = {
 } satisfies Prisma.DriverRequestAlertSelect;
 
 const DRIVER_REQUEST_DETAILS_SELECT = {
+  acceptedOfferId: true,
   id: true,
   status: true,
   assignedDriverId: true,
@@ -785,6 +798,7 @@ const DRIVER_AVAILABILITY_SELECT = {
   baseLatitude: true,
   baseLongitude: true,
   baseAddress: true,
+  cityCoverage: true,
   acceptsImmediateRequests: true,
   acceptsScheduledRequests: true,
   createdAt: true,
@@ -1315,6 +1329,45 @@ export class DriverService {
       );
     }
 
+    if (
+      input.acceptsImmediateRequests &&
+      !validCoordinate(input.baseLatitude, input.baseLongitude)
+    ) {
+      throw new BadRequestException(
+        'Set a base location for use when GPS is unavailable.',
+      );
+    }
+    const storedCoverage =
+      input.cityCoverage === undefined
+        ? await this.prisma.driverAvailability.findUnique({
+            where: { driverId: profile.id },
+            select: { cityCoverage: true },
+          })
+        : null;
+    const pins =
+      input.cityCoverage ??
+      parseCoveragePins(storedCoverage?.cityCoverage).filter((pin) =>
+        profile.cities.includes(pin.city),
+      );
+    if (
+      parseCoveragePins(pins).length !== pins.length ||
+      new Set(pins.map((pin) => pin.city)).size !== pins.length ||
+      pins.some((pin) => !profile.cities.includes(pin.city))
+    ) {
+      throw new BadRequestException(
+        'Coverage pins must be unique and belong to your selected cities.',
+      );
+    }
+    if (
+      input.acceptsScheduledRequests &&
+      (!profile.cities.length ||
+        profile.cities.some((city) => !pins.some((pin) => pin.city === city)))
+    ) {
+      throw new BadRequestException(
+        'Set a coverage pin for each selected city to receive scheduled requests.',
+      );
+    }
+
     const normalizedSchedule = this.validateAndNormalizeWeeklySchedule(
       input.weeklySchedule,
     );
@@ -1335,6 +1388,7 @@ export class DriverService {
           baseLatitude: input.baseLatitude ?? null,
           baseLongitude: input.baseLongitude ?? null,
           baseAddress: input.baseAddress?.trim() || null,
+          cityCoverage: pins,
           acceptsImmediateRequests: input.acceptsImmediateRequests,
           acceptsScheduledRequests: input.acceptsScheduledRequests,
         },
@@ -1346,6 +1400,7 @@ export class DriverService {
           baseLatitude: input.baseLatitude ?? null,
           baseLongitude: input.baseLongitude ?? null,
           baseAddress: input.baseAddress?.trim() || null,
+          cityCoverage: pins,
           acceptsImmediateRequests: input.acceptsImmediateRequests,
           acceptsScheduledRequests: input.acceptsScheduledRequests,
         },
@@ -1390,6 +1445,55 @@ export class DriverService {
     return this.toAvailabilityResponse(profile, availability);
   }
 
+  async updateMatchingLocation(
+    userId: string,
+    location: {
+      latitude: number;
+      longitude: number;
+      recordedAt: number;
+    } | null,
+  ) {
+    const profile = await this.ensureDriverProfile(userId);
+    if (location && profile.status !== DriverStatus.APPROVED) {
+      throw new BadRequestException(
+        'Driver must be approved to share a matching location.',
+      );
+    }
+    const now = Date.now();
+    if (
+      location &&
+      (!validCoordinate(location.latitude, location.longitude) ||
+        !Number.isFinite(location.recordedAt) ||
+        location.recordedAt > now ||
+        now - location.recordedAt > LIVE_LOCATION_MAX_AGE_MS)
+    ) {
+      throw new BadRequestException(
+        'A recent, valid GPS location is required.',
+      );
+    }
+    // Store one latest fix, not a location history. Late fixes cannot replace newer ones.
+    await this.prisma.driverAvailability.updateMany({
+      where: {
+        driverId: profile.id,
+        ...(location
+          ? {
+              isOnline: true,
+              OR: [
+                { liveLocationAt: null },
+                { liveLocationAt: { lte: new Date(location.recordedAt) } },
+              ],
+            }
+          : {}),
+      },
+      data: {
+        liveLatitude: location?.latitude ?? null,
+        liveLongitude: location?.longitude ?? null,
+        liveLocationAt: location ? new Date(location.recordedAt) : null,
+      },
+    });
+    return { success: true };
+  }
+
   async updateOnlineStatus(
     input: UpdateDriverOnlineStatusInput,
   ): Promise<DriverAvailabilityResponseDto> {
@@ -1405,25 +1509,48 @@ export class DriverService {
       );
     }
 
+    if (
+      input.isOnline &&
+      availability.acceptsImmediateRequests &&
+      !validCoordinate(availability.baseLatitude, availability.baseLongitude)
+    ) {
+      throw new BadRequestException(
+        'Set a base location for use when GPS is unavailable.',
+      );
+    }
+    const pins = parseCoveragePins(availability.cityCoverage);
+    if (
+      input.isOnline &&
+      availability.acceptsScheduledRequests &&
+      (!profile.cities.length ||
+        profile.cities.some((city) => !pins.some((pin) => pin.city === city)))
+    ) {
+      throw new BadRequestException(
+        'Set a coverage pin for each selected city to receive scheduled requests.',
+      );
+    }
     const isAvailabilityValid = this.isStoredAvailabilityValid(availability);
-    if (!isAvailabilityValid) {
+    if (input.isOnline && !isAvailabilityValid) {
       throw new BadRequestException(
         'Availability settings are incomplete or invalid.',
       );
     }
 
-    const hasEligibleVehicle = await this.hasVehicleReadyForAvailability(
-      profile.id,
-    );
-    this.ensureDriverCanGoOnline(
-      profile.status,
-      hasEligibleVehicle,
-      input.isOnline,
-    );
+    if (input.isOnline) {
+      const hasEligibleVehicle = await this.hasVehicleReadyForAvailability(
+        profile.id,
+      );
+      this.ensureDriverCanGoOnline(profile.status, hasEligibleVehicle, true);
+    }
 
     const updated = await this.prisma.driverAvailability.update({
       where: { id: availability.id },
-      data: { isOnline: input.isOnline },
+      data: {
+        isOnline: input.isOnline,
+        ...(!input.isOnline
+          ? { liveLatitude: null, liveLongitude: null, liveLocationAt: null }
+          : {}),
+      },
       select: DRIVER_AVAILABILITY_SELECT,
     });
 
@@ -1565,13 +1692,7 @@ export class DriverService {
 
     const availability = await this.prisma.driverAvailability.findUnique({
       where: { driverId: profile.id },
-      select: {
-        id: true,
-        isOnline: true,
-        baseLatitude: true,
-        baseLongitude: true,
-        serviceRadiusKm: true,
-      },
+      select: MATCHING_AVAILABILITY_SELECT,
     });
 
     if (!availability) {
@@ -1614,38 +1735,25 @@ export class DriverService {
       const existingAlert = request.driverAlerts.find(
         (alert) => alert.driverId === profile.id,
       );
-      if (
-        !existingAlert &&
-        (!request.service ||
-          !this.hasCompatibleDriverVehicleForRequest(request, vehicles))
-      ) {
-        continue;
-      }
-
-      const distanceKm = this.calculateDistanceKm(
-        availability.baseLatitude,
-        availability.baseLongitude,
-        request.pickupLatitude,
-        request.pickupLongitude,
-      );
-      if (
-        !existingAlert &&
-        distanceKm !== null &&
-        availability.serviceRadiusKm > 0 &&
-        distanceKm > availability.serviceRadiusKm
-      ) {
-        continue;
-      }
+      const eligible = isEligibleRequest(request, availability, vehicles);
+      if (!existingAlert && !eligible) continue;
+      const distanceKm = coverageDistance(request, availability);
 
       const alert = await this.ensureDriverRequestAlert({
         requestId: request.id,
         driverId: profile.id,
       });
 
-      alerts.push(this.toRequestAlertSummary(request, alert, distanceKm));
+      alerts.push({
+        ...this.toRequestAlertSummary(request, alert, distanceKm),
+        isCurrentlyEligible: eligible,
+      });
     }
 
-    return { alerts };
+    return {
+      alerts,
+      locationReference: immediateReference(availability).source,
+    };
   }
 
   async getDriverRequestDetails(
@@ -1696,20 +1804,11 @@ export class DriverService {
 
     const availability = await this.prisma.driverAvailability.findUnique({
       where: { driverId: profile.id },
-      select: {
-        baseLatitude: true,
-        baseLongitude: true,
-        serviceRadiusKm: true,
-      },
+      select: MATCHING_AVAILABILITY_SELECT,
     });
 
     const distanceKm = availability
-      ? this.calculateDistanceKm(
-          availability.baseLatitude,
-          availability.baseLongitude,
-          request.pickupLatitude,
-          request.pickupLongitude,
-        )
+      ? coverageDistance(request, availability)
       : null;
 
     let alert = existingAlert;
@@ -1952,22 +2051,10 @@ export class DriverService {
       }
 
       const vehicles = await this.getApprovedDriverVehiclesTx(tx, profile.id);
-      if (
-        !request.service ||
-        !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
-      ) {
-        throw new BadRequestException(
-          'Request is not available for this driver.',
-        );
-      }
 
       const availability = await tx.driverAvailability.findUnique({
         where: { driverId: profile.id },
-        select: {
-          baseLatitude: true,
-          baseLongitude: true,
-          serviceRadiusKm: true,
-        },
+        select: MATCHING_AVAILABILITY_SELECT,
       });
 
       if (!availability) {
@@ -1976,19 +2063,11 @@ export class DriverService {
         );
       }
 
-      const distanceKm = this.calculateDistanceKm(
-        availability.baseLatitude,
-        availability.baseLongitude,
-        request.pickupLatitude,
-        request.pickupLongitude,
-      );
       if (
-        distanceKm !== null &&
-        availability.serviceRadiusKm > 0 &&
-        distanceKm > availability.serviceRadiusKm
+        !isEligibleRequest(request, availability, vehicles, new Date(), false)
       ) {
         throw new BadRequestException(
-          'Request is outside your service radius.',
+          'Request is outside your coverage or availability.',
         );
       }
 
@@ -4067,15 +4146,10 @@ export class DriverService {
     const vehicles = await this.prisma.driverVehicle.findMany({
       where: {
         driverId,
-        isActive: true,
-        status: DriverVehicleReviewStatus.APPROVED,
+        ...APPROVED_MATCHING_VEHICLE_WHERE,
       },
       select: DRIVER_VEHICLE_SELECT,
     });
-
-    if (vehicles.length === 0) {
-      throw new BadRequestException('At least one active vehicle is required.');
-    }
 
     return vehicles;
   }
@@ -4085,13 +4159,7 @@ export class DriverService {
   ): Promise<void> {
     const availability = await this.prisma.driverAvailability.findUnique({
       where: { driverId },
-      select: {
-        id: true,
-        isOnline: true,
-        baseLatitude: true,
-        baseLongitude: true,
-        serviceRadiusKm: true,
-      },
+      select: MATCHING_AVAILABILITY_SELECT,
     });
 
     if (!availability?.isOnline) {
@@ -4101,8 +4169,7 @@ export class DriverService {
     const vehicles = await this.prisma.driverVehicle.findMany({
       where: {
         driverId,
-        isActive: true,
-        status: DriverVehicleReviewStatus.APPROVED,
+        ...APPROVED_MATCHING_VEHICLE_WHERE,
       },
       select: DRIVER_VEHICLE_SELECT,
     });
@@ -4113,7 +4180,14 @@ export class DriverService {
 
     const requests = await this.prisma.transportRequest.findMany({
       where: {
-        status: TransportRequestStatus.PENDING_QUOTES,
+        status: {
+          in: [
+            TransportRequestStatus.PENDING_QUOTES,
+            TransportRequestStatus.QUOTED,
+          ],
+        },
+        assignedDriverId: null,
+        acceptedOfferId: null,
         pickupLatitude: { not: null },
         pickupLongitude: { not: null },
         dropoffLatitude: { not: null },
@@ -4140,26 +4214,8 @@ export class DriverService {
         continue;
       }
 
-      if (
-        !request.service ||
-        !this.hasCompatibleDriverVehicleForRequest(request, vehicles)
-      ) {
-        continue;
-      }
-
-      const distanceKm = this.calculateDistanceKm(
-        availability.baseLatitude,
-        availability.baseLongitude,
-        request.pickupLatitude,
-        request.pickupLongitude,
-      );
-      if (
-        distanceKm !== null &&
-        availability.serviceRadiusKm > 0 &&
-        distanceKm > availability.serviceRadiusKm
-      ) {
-        continue;
-      }
+      if (!isEligibleRequest(request, availability, vehicles)) continue;
+      const distanceKm = coverageDistance(request, availability);
 
       const alert =
         existingAlert ??
@@ -4187,8 +4243,7 @@ export class DriverService {
     const vehicles = await tx.driverVehicle.findMany({
       where: {
         driverId,
-        isActive: true,
-        status: DriverVehicleReviewStatus.APPROVED,
+        ...APPROVED_MATCHING_VEHICLE_WHERE,
       },
       select: DRIVER_VEHICLE_SELECT,
     });
@@ -4262,132 +4317,6 @@ export class DriverService {
     if (input.message && input.message.trim().length > 1000) {
       throw new BadRequestException('message must be at most 1000 characters.');
     }
-  }
-
-  private isServiceCompatibleWithDriverVehicles(
-    serviceKey: ServiceKey,
-    vehicleTypes: Set<VehicleType>,
-  ): boolean {
-    const serviceVehicleTypeMap: Record<ServiceKey, VehicleType[]> = {
-      VEHICLE_TRANSPORT: [
-        'CAR_CARRIER',
-        'FLATBED_TRUCK',
-        'TOW_TRUCK',
-        'FLATBED_OPEN',
-        'FLATBED_ENCLOSED',
-      ],
-      MOTORCYCLE_TRANSPORT: [
-        'MOTORCYCLE_TRAILER',
-        'VAN',
-        'PICKUP_TRUCK',
-        'MOTORCYCLE',
-        'PICKUP',
-        'FLATBED_TRUCK',
-        'FLATBED_OPEN',
-        'FLATBED_ENCLOSED',
-        'TOW_TRUCK',
-        'CAR_CARRIER',
-      ],
-      GOODS_TRANSPORT: [
-        'VAN',
-        'BOX_TRUCK',
-        'PICKUP_TRUCK',
-        'SMALL_TRUCK',
-        'MEDIUM_TRUCK',
-        'PICKUP',
-      ],
-      FURNITURE_TRANSPORT: [
-        'FURNITURE_TRUCK',
-        'BOX_TRUCK',
-        'VAN',
-        'SMALL_TRUCK',
-        'MEDIUM_TRUCK',
-      ],
-    };
-
-    const allowedTypes = serviceVehicleTypeMap[serviceKey];
-    return allowedTypes.some((vehicleType) => vehicleTypes.has(vehicleType));
-  }
-
-  private hasCompatibleDriverVehicleForRequest(
-    request: RequestDetailsSource & { service: { key: ServiceKey } | null },
-    vehicles: VehicleSource[],
-  ): boolean {
-    if (!request.service) {
-      return false;
-    }
-
-    const requestDate = request.isImmediate
-      ? new Date()
-      : (request.scheduledPickupAt ?? new Date());
-
-    return vehicles.some((vehicle) => {
-      if (
-        !this.isServiceCompatibleWithDriverVehicles(
-          request.service!.key,
-          new Set([vehicle.vehicleType]),
-        )
-      ) {
-        return false;
-      }
-
-      const workingSchedule = this.parseVehicleWorkingSchedule(
-        vehicle.workingSchedule,
-      );
-      if (!isWorkingScheduleAvailableForDate(workingSchedule, requestDate)) {
-        return false;
-      }
-
-      return canVehicleSupportRequestLoad(
-        {
-          vehicleType: vehicle.vehicleType,
-          capacityKg: vehicle.capacityKg,
-          lengthCm: vehicle.lengthCm,
-          widthCm: vehicle.widthCm,
-          heightCm: vehicle.heightCm,
-          dimensionsAreStandard: vehicle.dimensionsAreStandard,
-          allowedCargoTypes: vehicle.allowedCargoTypes,
-          workingSchedule,
-        },
-        {
-          serviceKey: request.service!.key,
-          itemType: request.itemType,
-          weightKg: request.itemWeightKg,
-          lengthCm: request.itemLengthCm,
-          widthCm: request.itemWidthCm,
-          heightCm: request.itemHeightCm,
-        },
-      );
-    });
-  }
-
-  private calculateDistanceKm(
-    originLat: number | null,
-    originLng: number | null,
-    targetLat: number | null,
-    targetLng: number | null,
-  ): number | null {
-    if (
-      originLat === null ||
-      originLng === null ||
-      targetLat === null ||
-      targetLng === null
-    ) {
-      return null;
-    }
-
-    const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
-    const earthRadiusKm = 6371;
-    const dLat = toRadians(targetLat - originLat);
-    const dLng = toRadians(targetLng - originLng);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRadians(originLat)) *
-        Math.cos(toRadians(targetLat)) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return Number((earthRadiusKm * c).toFixed(2));
   }
 
   private async ensureDriverRequestAlert(input: {
@@ -5018,6 +4947,7 @@ export class DriverService {
         baseLatitude: null,
         baseLongitude: null,
         baseAddress: null,
+        cityCoverage: [],
         acceptsImmediateRequests: true,
         acceptsScheduledRequests: true,
         weeklySchedule: fallbackSchedule,
@@ -5051,6 +4981,7 @@ export class DriverService {
       baseLatitude: availability.baseLatitude,
       baseLongitude: availability.baseLongitude,
       baseAddress: availability.baseAddress,
+      cityCoverage: parseCoveragePins(availability.cityCoverage),
       acceptsImmediateRequests: availability.acceptsImmediateRequests,
       acceptsScheduledRequests: availability.acceptsScheduledRequests,
       weeklySchedule: orderedSchedule,
@@ -5219,6 +5150,7 @@ export class DriverService {
   }
 
   private async ensureDriverProfile(userId: string): Promise<{
+    cities: string[];
     id: string;
     countryCode: string | null;
     status: DriverStatus;
@@ -5229,6 +5161,7 @@ export class DriverService {
       select: {
         driverProfile: {
           select: {
+            cities: true,
             id: true,
             countryCode: true,
             status: true,

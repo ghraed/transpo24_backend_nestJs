@@ -1,3 +1,4 @@
+import type { CoveragePin } from '../request-eligibility';
 import { DayOfWeek, DriverStatus } from '@prisma/client';
 
 export type DriverAvailabilityNextStep =
@@ -23,6 +24,7 @@ export interface DriverAvailabilityResponseDto {
   baseLatitude: number | null;
   baseLongitude: number | null;
   baseAddress: string | null;
+  cityCoverage: CoveragePin[];
   acceptsImmediateRequests: boolean;
   acceptsScheduledRequests: boolean;
   weeklySchedule: DriverAvailabilityDayResponseDto[];

@@ -36,7 +36,46 @@ export class DriverAvailabilityDayDto {
   endTime?: string;
 }
 
+export class DriverCityCoverageDto {
+  @IsString()
+  @IsNotEmpty()
+  city!: string;
+
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
+}
+
+export class UpdateDriverMatchingLocationDto {
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
+
+  @IsNumber()
+  @Min(0)
+  recordedAt!: number;
+}
+
 export class UpdateDriverAvailabilityDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => DriverCityCoverageDto)
+  cityCoverage?: DriverCityCoverageDto[];
+
   @IsString()
   @IsNotEmpty()
   timezone!: string;

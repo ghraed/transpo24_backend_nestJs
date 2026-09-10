@@ -1,3 +1,4 @@
+import { UpdateDriverMatchingLocationDto } from './dto/update-driver-availability.dto';
 import {
   BadRequestException,
   Body,
@@ -341,10 +342,24 @@ export class DriverController {
       baseLatitude: dto.baseLatitude,
       baseLongitude: dto.baseLongitude,
       baseAddress: dto.baseAddress,
+      cityCoverage: dto.cityCoverage,
       acceptsImmediateRequests: dto.acceptsImmediateRequests,
       acceptsScheduledRequests: dto.acceptsScheduledRequests,
       weeklySchedule: dto.weeklySchedule,
     });
+  }
+
+  @Put('me/availability/location')
+  async updateMatchingLocation(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpdateDriverMatchingLocationDto,
+  ) {
+    return this.driverService.updateMatchingLocation(request.user.id, dto);
+  }
+
+  @Delete('me/availability/location')
+  async clearMatchingLocation(@Req() request: AuthenticatedRequest) {
+    return this.driverService.updateMatchingLocation(request.user.id, null);
   }
 
   @Patch('me/availability/online-status')

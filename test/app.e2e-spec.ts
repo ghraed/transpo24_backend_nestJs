@@ -1,3 +1,9 @@
+import 'reflect-metadata';
+import { DriverController } from '../src/driver/driver.controller';
+import { DriverService } from '../src/driver/driver.service';
+import { DriverAuthGuard } from '../src/auth/guards/driver-auth.guard';
+import { TripsService } from '../src/trips/trips.service';
+import { NotificationsService } from '../src/notifications/notifications.service';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PushApp, PushPlatform, UserRole } from '@prisma/client';
@@ -60,6 +66,11 @@ describe('API HTTP contract (e2e)', () => {
     completeCustomerProfile: jest.fn(),
     updateCustomerProfile: jest.fn(),
     getUserFromAccessToken: jest.fn(),
+    isUserActive: jest.fn().mockResolvedValue(true),
+  };
+  const driverService = {
+    updateMatchingLocation: jest.fn().mockResolvedValue({ success: true }),
+    updateAvailability: jest.fn().mockResolvedValue({ success: true }),
   };
   const servicesService = { listActiveServices: jest.fn() };
   const pushTokensService = { registerToken: jest.fn() };
@@ -76,6 +87,7 @@ describe('API HTTP contract (e2e)', () => {
 
     const moduleFixture = await Test.createTestingModule({
       controllers: [
+        DriverController,
         AppController,
         AuthController,
         ServicesController,
@@ -84,6 +96,10 @@ describe('API HTTP contract (e2e)', () => {
         PaymentsController,
       ],
       providers: [
+        DriverAuthGuard,
+        { provide: DriverService, useValue: driverService },
+        { provide: TripsService, useValue: {} },
+        { provide: NotificationsService, useValue: {} },
         AppService,
         AuthenticatedUserGuard,
         CustomerAuthGuard,
@@ -275,6 +291,88 @@ describe('API HTTP contract (e2e)', () => {
       platform: PushPlatform.android,
       deviceName: 'Pixel',
     });
+  });
+
+  it('protects matching location updates and validates coordinates before dispatch', async () => {
+    const endpoint = '/driver/me/availability/location';
+    const fix = { latitude: 47.38, longitude: 8.54, recordedAt: Date.now() };
+    await request(app.getHttpServer()).put(endpoint).send(fix).expect(401);
+    await request(app.getHttpServer())
+      .put(endpoint)
+      .set('Authorization', 'Bearer customer-token')
+      .send(fix)
+      .expect(403);
+    await request(app.getHttpServer())
+      .put(endpoint)
+      .set('Authorization', 'Bearer driver-token')
+      .send({ ...fix, latitude: 91 })
+      .expect(400);
+    expect(driverService.updateMatchingLocation).not.toHaveBeenCalled();
+    await request(app.getHttpServer())
+      .put(endpoint)
+      .set('Authorization', 'Bearer driver-token')
+      .send(fix)
+      .expect(200);
+    expect(driverService.updateMatchingLocation).toHaveBeenCalledWith(
+      driver.id,
+      fix,
+    );
+    await request(app.getHttpServer())
+      .delete(endpoint)
+      .set('Authorization', 'Bearer driver-token')
+      .expect(200);
+    expect(driverService.updateMatchingLocation).toHaveBeenLastCalledWith(
+      driver.id,
+      null,
+    );
+  });
+
+  it('validates and forwards city coverage pins with availability settings', async () => {
+    const payload = {
+      timezone: 'Europe/Zurich',
+      isOnline: true,
+      serviceRadiusKm: 30,
+      baseLatitude: 47.38,
+      baseLongitude: 8.54,
+      acceptsImmediateRequests: true,
+      acceptsScheduledRequests: true,
+      cityCoverage: [{ city: 'Zurich', latitude: 47.38, longitude: 8.54 }],
+      weeklySchedule: [
+        'MONDAY',
+        'TUESDAY',
+        'WEDNESDAY',
+        'THURSDAY',
+        'FRIDAY',
+        'SATURDAY',
+        'SUNDAY',
+      ].map((dayOfWeek) => ({
+        dayOfWeek,
+        isAvailable: true,
+        startTime: '08:00',
+        endTime: '18:00',
+      })),
+    };
+    await request(app.getHttpServer())
+      .put('/driver/me/availability')
+      .set('Authorization', 'Bearer driver-token')
+      .send({
+        ...payload,
+        cityCoverage: [{ city: 'Zurich', latitude: 0, longitude: 181 }],
+      })
+      .expect(400);
+    expect(driverService.updateAvailability).not.toHaveBeenCalled();
+    await request(app.getHttpServer())
+      .put('/driver/me/availability')
+      .set('Authorization', 'Bearer driver-token')
+      .send(payload)
+      .expect(200);
+    expect(driverService.updateAvailability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: driver.id,
+        cityCoverage: payload.cityCoverage,
+        serviceRadiusKm: 30,
+      }),
+    );
   });
 
   it('honors the configured CORS allowlist', async () => {

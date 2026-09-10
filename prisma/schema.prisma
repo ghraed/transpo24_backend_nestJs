@@ -763,6 +763,10 @@ model DriverAvailability {
   baseLatitude             Float?
   baseLongitude            Float?
   baseAddress              String?
+  cityCoverage             Json     @default("[]")
+  liveLatitude             Float?
+  liveLongitude            Float?
+  liveLocationAt           DateTime?
   acceptsImmediateRequests Boolean  @default(true)
   acceptsScheduledRequests Boolean  @default(true)
   createdAt                DateTime @default(now())

@@ -1,4 +1,11 @@
 import {
+  APPROVED_MATCHING_VEHICLE_WHERE,
+  MATCHING_AVAILABILITY_SELECT,
+  MatchingAvailability,
+  coverageDistance,
+  isEligibleRequest,
+} from '../driver/request-eligibility';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -12,10 +19,8 @@ import { unlink } from 'node:fs/promises';
 import { relative } from 'node:path';
 type MulterFile = Express.Multer.File;
 import {
-  DocumentStatus,
   DriverDocumentType,
   DriverOfferStatus,
-  DriverVehicleReviewStatus,
   DriverRequestAlertStatus,
   DriverStatus,
   GoodsHeavyShipmentType,
@@ -40,11 +45,6 @@ import { ChatService } from '../chat/chat.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PaymentSummaryDto } from '../payments/dto/request-payment.dto';
 import { TripsGateway } from '../trips/trips.gateway';
-import {
-  canVehicleSupportRequestLoad,
-  isWorkingScheduleAvailableForDate,
-  type WorkingDayScheduleValue,
-} from '../driver/vehicle-load-capacity.util';
 import {
   CustomerRequestResponseDto,
   CustomerHomeRequestSummaryDto,
@@ -319,6 +319,8 @@ type RequestPhotoResponse = {
 };
 
 type TransportRequestResponseSource = {
+  assignedDriverId: string | null;
+  acceptedOfferId: string | null;
   id: string;
   serviceId: string;
   status: TransportRequestStatus;
@@ -504,14 +506,7 @@ type EligibleDriverDispatchCandidate = {
   lastName: string;
   status: DriverStatus;
   isProfileCompleted: boolean;
-  availability: {
-    isOnline: boolean;
-    baseLatitude: number | null;
-    baseLongitude: number | null;
-    serviceRadiusKm: number;
-    acceptsImmediateRequests: boolean;
-    acceptsScheduledRequests: boolean;
-  } | null;
+  availability: MatchingAvailability | null;
   vehicles: Array<{
     vehicleType: VehicleType;
     capacityKg: number | null;
@@ -582,6 +577,8 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/webp',
 ]);
 const REQUEST_SELECT = {
+  assignedDriverId: true,
+  acceptedOfferId: true,
   id: true,
   serviceId: true,
   status: true,
@@ -717,43 +714,6 @@ const REQUEST_STATUS_SELECT = {
     },
   },
 } satisfies Prisma.TransportRequestSelect;
-
-const DRIVER_SERVICE_VEHICLE_TYPE_MAP: Record<ServiceKey, VehicleType[]> = {
-  VEHICLE_TRANSPORT: [
-    'CAR_CARRIER',
-    'FLATBED_TRUCK',
-    'TOW_TRUCK',
-    'FLATBED_OPEN',
-    'FLATBED_ENCLOSED',
-  ],
-  MOTORCYCLE_TRANSPORT: [
-    'MOTORCYCLE_TRAILER',
-    'VAN',
-    'PICKUP_TRUCK',
-    'MOTORCYCLE',
-    'PICKUP',
-    'FLATBED_TRUCK',
-    'FLATBED_OPEN',
-    'FLATBED_ENCLOSED',
-    'TOW_TRUCK',
-    'CAR_CARRIER',
-  ],
-  GOODS_TRANSPORT: [
-    'VAN',
-    'BOX_TRUCK',
-    'PICKUP_TRUCK',
-    'SMALL_TRUCK',
-    'MEDIUM_TRUCK',
-    'PICKUP',
-  ],
-  FURNITURE_TRANSPORT: [
-    'FURNITURE_TRUCK',
-    'BOX_TRUCK',
-    'VAN',
-    'SMALL_TRUCK',
-    'MEDIUM_TRUCK',
-  ],
-};
 
 const STATUS_LABELS: Record<TransportRequestStatus, string> = {
   DRAFT: 'Draft',
@@ -2487,7 +2447,7 @@ export class CustomerRequestsService {
             },
           },
           vehicles: {
-            where: this.buildCompleteApprovedVehicleWhereInput(),
+            where: APPROVED_MATCHING_VEHICLE_WHERE,
             select: { id: true },
             take: 1,
           },
@@ -3700,13 +3660,9 @@ export class CustomerRequestsService {
       where: {
         status: DriverStatus.APPROVED,
         isProfileCompleted: true,
-        availability: {
-          is: {
-            isOnline: true,
-          },
-        },
+        availability: { is: { isOnline: true } },
         vehicles: {
-          some: this.buildCompleteApprovedVehicleWhereInput(),
+          some: APPROVED_MATCHING_VEHICLE_WHERE,
         },
       },
       select: {
@@ -3716,18 +3672,9 @@ export class CustomerRequestsService {
         lastName: true,
         status: true,
         isProfileCompleted: true,
-        availability: {
-          select: {
-            isOnline: true,
-            baseLatitude: true,
-            baseLongitude: true,
-            serviceRadiusKm: true,
-            acceptsImmediateRequests: true,
-            acceptsScheduledRequests: true,
-          },
-        },
+        availability: { select: MATCHING_AVAILABILITY_SELECT },
         vehicles: {
-          where: this.buildCompleteApprovedVehicleWhereInput(),
+          where: APPROVED_MATCHING_VEHICLE_WHERE,
           select: {
             vehicleType: true,
             capacityKg: true,
@@ -3789,12 +3736,9 @@ export class CustomerRequestsService {
         alertsCreatedCount += 1;
       }
 
-      const distanceKm = this.calculateDistanceKm(
-        driver.availability?.baseLatitude ?? null,
-        driver.availability?.baseLongitude ?? null,
-        request.pickupLatitude,
-        request.pickupLongitude,
-      );
+      const distanceKm = driver.availability
+        ? coverageDistance(request, driver.availability)
+        : null;
 
       driverNotifications.push({
         userId: driver.userId,
@@ -3827,246 +3771,13 @@ export class CustomerRequestsService {
     };
   }
 
-  private buildCompleteApprovedVehicleWhereInput(): Prisma.DriverVehicleWhereInput {
-    return {
-      isActive: true,
-      status: DriverVehicleReviewStatus.APPROVED,
-      AND: [
-        {
-          documents: {
-            some: {
-              type: DriverDocumentType.VEHICLE_FRONT_PHOTO,
-              status: { not: DocumentStatus.REJECTED },
-            },
-          },
-        },
-        {
-          documents: {
-            some: {
-              type: DriverDocumentType.VEHICLE_REAR_PHOTO,
-              status: { not: DocumentStatus.REJECTED },
-            },
-          },
-        },
-        {
-          documents: {
-            some: {
-              type: DriverDocumentType.VEHICLE_SIDE_PHOTO,
-              status: { not: DocumentStatus.REJECTED },
-            },
-          },
-        },
-        {
-          documents: {
-            some: {
-              type: DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
-              status: { not: DocumentStatus.REJECTED },
-            },
-          },
-        },
-        {
-          documents: {
-            some: {
-              type: DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
-              status: { not: DocumentStatus.REJECTED },
-            },
-          },
-        },
-        {
-          documents: {
-            some: {
-              type: DriverDocumentType.VEHICLE_REGISTRATION_BACK,
-              status: { not: DocumentStatus.REJECTED },
-            },
-          },
-        },
-        {
-          documents: {
-            some: {
-              type: DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
-              status: { not: DocumentStatus.REJECTED },
-            },
-          },
-        },
-      ],
-    };
-  }
-
   private isEligibleForRealtimeDispatch(
     request: TransportRequestResponseSource & {
       service: { key: ServiceKey } | null;
     },
     driver: EligibleDriverDispatchCandidate,
   ): boolean {
-    if (!driver.availability?.isOnline || !request.service) {
-      return false;
-    }
-
-    if (request.isImmediate && !driver.availability.acceptsImmediateRequests) {
-      return false;
-    }
-
-    if (!request.isImmediate && !driver.availability.acceptsScheduledRequests) {
-      return false;
-    }
-
-    if (!this.hasCompatibleVehicleForRequest(request, driver.vehicles)) {
-      return false;
-    }
-
-    const distanceKm = this.calculateDistanceKm(
-      driver.availability.baseLatitude,
-      driver.availability.baseLongitude,
-      request.pickupLatitude,
-      request.pickupLongitude,
-    );
-
-    if (
-      distanceKm !== null &&
-      driver.availability.serviceRadiusKm > 0 &&
-      distanceKm > driver.availability.serviceRadiusKm
-    ) {
-      return false;
-    }
-
-    return true;
-  }
-
-  private hasCompatibleVehicleForRequest(
-    request: TransportRequestResponseSource & {
-      service: { key: ServiceKey } | null;
-    },
-    vehicles: EligibleDriverDispatchCandidate['vehicles'],
-  ): boolean {
-    if (!request.service) {
-      return false;
-    }
-
-    const scheduledDate = request.isImmediate
-      ? new Date()
-      : (request.scheduledPickupAt ?? new Date());
-
-    return vehicles.some((vehicle) => {
-      if (
-        !this.isServiceCompatibleWithDriverVehicles(
-          request.service!.key,
-          new Set([vehicle.vehicleType]),
-        )
-      ) {
-        return false;
-      }
-
-      const normalizedSchedule = this.parseVehicleWorkingSchedule(
-        vehicle.workingSchedule,
-      );
-      if (
-        !isWorkingScheduleAvailableForDate(normalizedSchedule, scheduledDate)
-      ) {
-        return false;
-      }
-
-      return canVehicleSupportRequestLoad(
-        {
-          vehicleType: vehicle.vehicleType,
-          capacityKg: vehicle.capacityKg,
-          lengthCm: vehicle.lengthCm,
-          widthCm: vehicle.widthCm,
-          heightCm: vehicle.heightCm,
-          dimensionsAreStandard: vehicle.dimensionsAreStandard,
-          allowedCargoTypes: vehicle.allowedCargoTypes,
-          workingSchedule: normalizedSchedule,
-        },
-        {
-          serviceKey: request.service!.key,
-          itemType: request.itemType,
-          weightKg: request.itemWeightKg,
-          lengthCm: request.itemLengthCm,
-          widthCm: request.itemWidthCm,
-          heightCm: request.itemHeightCm,
-        },
-      );
-    });
-  }
-
-  private parseVehicleWorkingSchedule(
-    raw: Prisma.JsonValue | null,
-  ): WorkingDayScheduleValue[] {
-    if (!raw || !Array.isArray(raw)) {
-      return [];
-    }
-
-    return raw.flatMap((entry) => {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-        return [];
-      }
-      const value = entry as Record<string, unknown>;
-      if (
-        typeof value.dayOfWeek !== 'string' ||
-        typeof value.isAvailable !== 'boolean' ||
-        !Array.isArray(value.timeRanges)
-      ) {
-        return [];
-      }
-
-      return [
-        {
-          dayOfWeek: value.dayOfWeek as WorkingDayScheduleValue['dayOfWeek'],
-          isAvailable: value.isAvailable,
-          timeRanges: value.timeRanges.flatMap((range) => {
-            if (!range || typeof range !== 'object' || Array.isArray(range)) {
-              return [];
-            }
-            const timeRange = range as Record<string, unknown>;
-            if (
-              typeof timeRange.startTime !== 'string' ||
-              typeof timeRange.endTime !== 'string'
-            ) {
-              return [];
-            }
-            return [
-              { startTime: timeRange.startTime, endTime: timeRange.endTime },
-            ];
-          }),
-        },
-      ];
-    });
-  }
-
-  private isServiceCompatibleWithDriverVehicles(
-    serviceKey: ServiceKey,
-    vehicleTypes: Set<VehicleType>,
-  ): boolean {
-    const allowedTypes = DRIVER_SERVICE_VEHICLE_TYPE_MAP[serviceKey];
-    return allowedTypes.some((vehicleType) => vehicleTypes.has(vehicleType));
-  }
-
-  private calculateDistanceKm(
-    originLat: number | null,
-    originLng: number | null,
-    targetLat: number | null,
-    targetLng: number | null,
-  ): number | null {
-    if (
-      originLat === null ||
-      originLng === null ||
-      targetLat === null ||
-      targetLng === null
-    ) {
-      return null;
-    }
-
-    const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
-    const earthRadiusKm = 6371;
-    const dLat = toRadians(targetLat - originLat);
-    const dLng = toRadians(targetLng - originLng);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRadians(originLat)) *
-        Math.cos(toRadians(targetLat)) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return Number((earthRadiusKm * c).toFixed(2));
+    return isEligibleRequest(request, driver.availability, driver.vehicles);
   }
 
   private toDriverRequestAlertSummaryPayload(

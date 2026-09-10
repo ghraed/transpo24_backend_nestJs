@@ -16,6 +16,7 @@ export interface DriverRequestAlertServiceDto {
 }
 
 export interface DriverRequestAlertSummaryDto {
+  isCurrentlyEligible?: boolean;
   alertId: string;
   requestId: string;
   alertStatus: DriverRequestAlertStatus;
@@ -61,6 +62,7 @@ export interface DriverRequestAlertSummaryDto {
 }
 
 export interface DriverRequestAlertsResponseDto {
+  locationReference: 'GPS' | 'BASE' | 'NONE';
   alerts: DriverRequestAlertSummaryDto[];
 }
 

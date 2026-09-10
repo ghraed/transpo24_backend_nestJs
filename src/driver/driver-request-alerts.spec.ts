@@ -16,6 +16,12 @@ function setup(isOnline = true) {
       driverAvailability: {
         findUnique: jest.fn().mockResolvedValue({
           isOnline,
+          driver: { status: 'APPROVED', isProfileCompleted: true, cities: [] },
+          timezone: 'UTC',
+          schedule: [],
+          cityCoverage: [],
+          acceptsImmediateRequests: true,
+          acceptsScheduledRequests: true,
           baseLatitude: 0,
           baseLongitude: 0,
           serviceRadiusKm: 10,
@@ -89,7 +95,11 @@ describe('unresolved driver job requests', () => {
       },
     ]);
     expect(await service.getDriverRequestAlerts({ userId: 'user' })).toEqual({
-      alerts: [{ requestId: 'ignored' }, { requestId: 'expired' }],
+      alerts: [
+        { requestId: 'ignored', isCurrentlyEligible: false },
+        { requestId: 'expired', isCurrentlyEligible: false },
+      ],
+      locationReference: 'BASE',
     });
   });
 
