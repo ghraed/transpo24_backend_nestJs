@@ -36,6 +36,88 @@ describe('NotificationsService', () => {
     );
   }
 
+  describe('test notifications', () => {
+    it('rejects devices not registered to the authenticated user and app', async () => {
+      const findFirst = jest.fn().mockResolvedValue(null);
+      const service = createService({ pushToken: { findFirst } });
+      const send = jest.fn();
+      Object.assign(service, { expo: { sendPushNotificationsAsync: send } });
+      await expect(
+        service.sendTestToDevice(
+          'user-1',
+          PushApp.CUSTOMER,
+          'ExponentPushToken[test]',
+        ),
+      ).rejects.toThrow('Register notifications');
+      expect(findFirst).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          app: PushApp.CUSTOMER,
+          token: 'ExponentPushToken[test]',
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('sends only to the selected device and reports acceptance', async () => {
+      const service = createService({
+        pushToken: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'token-1' }),
+        },
+      });
+      const send = jest
+        .fn()
+        .mockResolvedValue([{ status: 'ok', id: 'receipt-1' }]);
+      Object.assign(service, { expo: { sendPushNotificationsAsync: send } });
+      await expect(
+        service.sendTestToDevice(
+          'user-1',
+          PushApp.DRIVER,
+          'ExponentPushToken[test]',
+        ),
+      ).resolves.toEqual({ accepted: true });
+      expect(send).toHaveBeenCalledWith([
+        expect.objectContaining({
+          to: 'ExponentPushToken[test]',
+          sound: 'default',
+          data: { type: 'TEST_NOTIFICATION' },
+        }),
+      ]);
+    });
+
+    it('surfaces rejected tickets and deactivates expired devices', async () => {
+      const updateMany = jest.fn();
+      const service = createService({
+        pushToken: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'token-1' }),
+          updateMany,
+        },
+      });
+      Object.assign(service, {
+        expo: {
+          sendPushNotificationsAsync: jest
+            .fn()
+            .mockResolvedValue([
+              { status: 'error', details: { error: 'DeviceNotRegistered' } },
+            ]),
+        },
+      });
+      await expect(
+        service.sendTestToDevice(
+          'user-1',
+          PushApp.CUSTOMER,
+          'ExponentPushToken[test]',
+        ),
+      ).rejects.toThrow('DeviceNotRegistered');
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['token-1'] } },
+        data: { isActive: false },
+      });
+    });
+  });
+
   it('deactivates invalid Expo tokens and skips sending them', async () => {
     const prisma = {
       pushToken: {

@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { PushApp, UserRole } from '@prisma/client';
 import {
   Expo,
@@ -37,6 +42,55 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly webPushProvider: WebPushProvider,
   ) {}
+
+  async sendTestToDevice(
+    userId: string,
+    app: PushApp,
+    token: string,
+  ): Promise<{ accepted: true }> {
+    const storedToken = await this.prisma.pushToken.findFirst({
+      where: { userId, app, token, isActive: true },
+      select: { id: true },
+    });
+    if (!storedToken || !Expo.isExpoPushToken(token)) {
+      throw new BadRequestException(
+        'Register notifications on this device before testing.',
+      );
+    }
+    let tickets: ExpoPushTicket[];
+    try {
+      tickets = await this.expo.sendPushNotificationsAsync([
+        {
+          to: token,
+          title: 'Transpo24 test notification',
+          body: 'Your test push notification has arrived.',
+          sound: 'default',
+          priority: 'high',
+          channelId: TRANSPORT_JOBS_CHANNEL_ID,
+          data: { type: 'TEST_NOTIFICATION' },
+        },
+      ]);
+    } catch {
+      throw new BadGatewayException(
+        'Unable to reach the push notification service. Please try again.',
+      );
+    }
+    const ticket = tickets[0];
+    if (!ticket || ticket.status !== 'ok') {
+      if (
+        ticket?.status === 'error' &&
+        ticket.details?.error === EXPO_DEVICE_NOT_REGISTERED
+      ) {
+        await this.deactivateTokensByIds([storedToken.id]);
+      }
+      throw new BadGatewayException(
+        ticket?.status === 'error'
+          ? `Push notification rejected: ${ticket.details?.error ?? 'Unknown error'}.`
+          : 'The push notification service did not accept the test.',
+      );
+    }
+    return { accepted: true };
+  }
 
   async sendToUsers(input: SendPushNotificationInput): Promise<void> {
     const userIds = Array.from(
