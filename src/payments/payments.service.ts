@@ -212,6 +212,8 @@ type DriverPayoutAttemptResult = {
 };
 
 type DriverPayoutContext = {
+  tripStatus: TransportRequestStatus;
+  deliveryConfirmedByCustomerAt: Date | null;
   settlementId: string;
   tripId: string;
   customerId: string;
@@ -1737,6 +1739,12 @@ export class PaymentsService {
     );
     const candidates = await this.prisma.tripPaymentSettlement.findMany({
       where: {
+        request: {
+          OR: [
+            { status: TransportRequestStatus.CANCELLED },
+            { deliveryConfirmedByCustomerAt: { not: null } },
+          ],
+        },
         OR: [
           {
             driverPayoutState: DriverPayoutState.EARNING_CREATED,
@@ -1819,6 +1827,18 @@ export class PaymentsService {
         transferred: true,
         stripeTransferId: context.stripeTransferId,
         reason: 'Transfer already completed.',
+      };
+    }
+
+    if (
+      context.tripStatus !== TransportRequestStatus.CANCELLED &&
+      !context.deliveryConfirmedByCustomerAt
+    ) {
+      return {
+        transferred: false,
+        stripeTransferId: null,
+        reason:
+          'Waiting for the paying customer to confirm successful delivery.',
       };
     }
 
@@ -2004,6 +2024,8 @@ export class PaymentsService {
         trip: {
           select: {
             customerId: true,
+            status: true,
+            deliveryConfirmedByCustomerAt: true,
             paymentSettlement: {
               select: {
                 id: true,
@@ -2027,6 +2049,8 @@ export class PaymentsService {
     }
 
     return {
+      tripStatus: earning.trip.status,
+      deliveryConfirmedByCustomerAt: earning.trip.deliveryConfirmedByCustomerAt,
       settlementId: earning.trip.paymentSettlement.id,
       tripId: earning.tripId,
       customerId: earning.trip.customerId,

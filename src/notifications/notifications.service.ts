@@ -344,8 +344,8 @@ export class NotificationsService {
     await this.sendToUsers({
       userIds: [input.customerId],
       app: PushApp.CUSTOMER,
-      title: 'Delivery confirmed',
-      body: `Driver confirmed delivery and uploaded ${proofLabel}.`,
+      title: 'Confirm delivery to release payment',
+      body: `Your driver marked the service as delivered and uploaded ${proofLabel}. Review the delivery and confirm it was successful to release the driver’s payment.`,
       type: 'ITEM_DELIVERED',
       data: {
         requestId: input.tripId,

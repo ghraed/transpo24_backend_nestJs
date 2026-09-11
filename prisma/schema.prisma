@@ -600,6 +600,7 @@ model TransportRequest {
   nearDeliveryNotifiedAt DateTime?
   deliveredAt         DateTime?
   deliveryConfirmedByDriver Boolean           @default(false)
+  deliveryConfirmedByCustomerAt DateTime?
   deliveryNotes       String?
   deliveryProofImageUrl String?
   ratingAvailableAt   DateTime?

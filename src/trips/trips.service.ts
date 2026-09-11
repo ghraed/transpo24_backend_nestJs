@@ -868,6 +868,52 @@ export class TripsService {
     };
   }
 
+  async listPendingDeliveryConfirmations(customerId: string) {
+    return this.prisma.transportRequest.findMany({
+      where: {
+        customerId,
+        status: TransportRequestStatus.DELIVERED,
+        deliveryConfirmedByCustomerAt: null,
+        driverEarning: {
+          stripeTransferId: null,
+          status: { not: DriverEarningStatus.PAID_OUT },
+        },
+      },
+      select: {
+        id: true,
+        pickupAddress: true,
+        dropoffAddress: true,
+        deliveredAt: true,
+      },
+      orderBy: { deliveredAt: 'desc' },
+    });
+  }
+
+  async confirmCustomerDelivery(customerId: string, tripId: string) {
+    this.validateTripId(tripId);
+    return this.prisma.$transaction(async (tx) => {
+      const trip = await tx.transportRequest.findUnique({
+        where: { id: tripId },
+      });
+      if (!trip) throw new NotFoundException('Trip not found.');
+      if (trip.customerId !== customerId)
+        throw new ForbiddenException('This trip does not belong to you.');
+      if (
+        trip.status !== TransportRequestStatus.DELIVERED ||
+        !trip.deliveredAt
+      ) {
+        throw new BadRequestException(
+          'The driver must complete delivery before you confirm it.',
+        );
+      }
+      await tx.transportRequest.updateMany({
+        where: { id: tripId, customerId, deliveryConfirmedByCustomerAt: null },
+        data: { deliveryConfirmedByCustomerAt: new Date() },
+      });
+      return { confirmed: true };
+    });
+  }
+
   async createDriverRating(
     input: CreateDriverRatingInput,
   ): Promise<CreateDriverRatingResponse> {

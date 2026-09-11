@@ -43,6 +43,7 @@ export class CustomerRequestTrackingResponseDto {
   deliveryProofPhotos!: RequestProofPhotoDto[];
   nearDeliveryNotifiedAt!: string | null;
   deliveredAt!: string | null;
+  deliveryConfirmedByCustomerAt!: string | null;
   ratingAvailable!: boolean;
   updatedAt!: string;
 }

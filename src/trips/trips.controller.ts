@@ -1,4 +1,12 @@
-import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 
@@ -11,6 +19,7 @@ import {
   TripIdParamDto,
 } from './dto/create-driver-rating.dto';
 import { TripsGateway } from './trips.gateway';
+import { PaymentsService } from '../payments/payments.service';
 import { TripsService } from './trips.service';
 import { CreateDriverRatingResponse } from './trips.types';
 
@@ -72,7 +81,28 @@ export class TripsController {
 @Controller('customer/trips')
 @UseGuards(CustomerAuthGuard)
 export class CustomerTripsController {
-  constructor(private readonly tripsService: TripsService) {}
+  constructor(
+    private readonly tripsService: TripsService,
+    private readonly paymentsService: PaymentsService,
+  ) {}
+
+  @Get('pending-delivery-confirmations')
+  async pendingDeliveries(@Req() request: AuthenticatedRequest) {
+    return this.tripsService.listPendingDeliveryConfirmations(request.user.id);
+  }
+
+  @Post(':tripId/confirm-delivery')
+  async confirmDelivery(
+    @Req() request: AuthenticatedRequest,
+    @Param() params: TripIdParamDto,
+  ) {
+    const result = await this.tripsService.confirmCustomerDelivery(
+      request.user.id,
+      params.tripId,
+    );
+    await this.paymentsService.queueDriverPayoutForTrip(params.tripId);
+    return result;
+  }
 
   @Post(':tripId/rating')
   async rateDriver(

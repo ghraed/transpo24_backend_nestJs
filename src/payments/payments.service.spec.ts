@@ -346,6 +346,8 @@ describe('PaymentsService', () => {
         } | null>;
       }
     ).getDriverPayoutContext = jest.fn().mockResolvedValue({
+      tripStatus: TransportRequestStatus.DELIVERED,
+      deliveryConfirmedByCustomerAt: new Date(),
       settlementId: 'settlement-1',
       tripId: 'trip-1',
       customerId: 'customer-1',
