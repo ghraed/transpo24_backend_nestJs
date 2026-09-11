@@ -19,6 +19,7 @@ import {
   TripIdParamDto,
 } from './dto/create-driver-rating.dto';
 import { TripsGateway } from './trips.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { TripsService } from './trips.service';
 import { CreateDriverRatingResponse } from './trips.types';
@@ -84,6 +85,7 @@ export class CustomerTripsController {
   constructor(
     private readonly tripsService: TripsService,
     private readonly paymentsService: PaymentsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   @Get('pending-delivery-confirmations')
@@ -99,6 +101,10 @@ export class CustomerTripsController {
     const result = await this.tripsService.confirmCustomerDelivery(
       request.user.id,
       params.tripId,
+    );
+    await this.notificationsService.notifyCustomerTripUpdate(
+      params.tripId,
+      'CUSTOMER_DELIVERY_CONFIRMED',
     );
     await this.paymentsService.queueDriverPayoutForTrip(params.tripId);
     return result;

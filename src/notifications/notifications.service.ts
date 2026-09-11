@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { PushApp, UserRole } from '@prisma/client';
 import {
@@ -102,6 +103,42 @@ export class NotificationsService {
     }
 
     try {
+      // Save before inspecting device tokens: Alerts must work without push permission.
+      if (input.app === PushApp.CUSTOMER) {
+        const milestoneTypes = new Set([
+          'NEW_DRIVER_OFFER',
+          'DRIVER_GOING_TO_PICKUP',
+          'DRIVER_ARRIVED_PICKUP',
+          'ITEM_PICKED_UP',
+          'DRIVER_GOING_TO_DROPOFF',
+          'DRIVER_NEAR_DELIVERY',
+          'ITEM_DELIVERED',
+          'CUSTOMER_DELIVERY_CONFIRMED',
+          'TRIP_CANCELLED',
+          'TRIP_FUNDS_TRANSFERRED',
+        ]);
+        const eventId =
+          input.type === 'NEW_DRIVER_OFFER'
+            ? input.data?.offerId
+            : (input.data?.tripId ?? input.data?.requestId);
+        const eventKey =
+          milestoneTypes.has(input.type) && typeof eventId === 'string'
+            ? `${input.type}:${eventId}`
+            : null;
+        const saved = await this.prisma.customerNotification.createMany({
+          data: userIds.map((userId) => ({
+            userId,
+            type: input.type,
+            title: input.title,
+            body: input.body,
+            data: input.data ?? {},
+            eventKey,
+          })),
+          skipDuplicates: true,
+        });
+        if (saved.count === 0) return;
+      }
+
       const storedTokens = await this.prisma.pushToken.findMany({
         where: {
           userId: { in: userIds },
@@ -181,6 +218,99 @@ export class NotificationsService {
         `Push notification dispatch failed for ${input.type}: ${this.toErrorMessage(error)}`,
       );
     }
+  }
+
+  async listCustomerNotifications(
+    userId: string,
+    cursor?: string,
+    since?: string,
+  ) {
+    const createdAt = since ? { gte: new Date(since) } : undefined;
+    const where = { userId, ...(createdAt ? { createdAt } : {}) };
+    if (
+      cursor &&
+      !(await this.prisma.customerNotification.findFirst({
+        where: { id: cursor, ...where },
+        select: { id: true },
+      }))
+    ) {
+      throw new BadRequestException('Invalid notification cursor.');
+    }
+    const [rows, unreadCount] = await Promise.all([
+      this.prisma.customerNotification.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 16,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+      this.prisma.customerNotification.count({
+        where: { userId, readAt: null },
+      }),
+    ]);
+    const items = rows.slice(0, 15);
+    return {
+      items,
+      unreadCount,
+      nextCursor: rows.length > 15 ? items[items.length - 1].id : null,
+    };
+  }
+
+  async markCustomerNotificationRead(userId: string, id: string) {
+    const notification = await this.prisma.customerNotification.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!notification) throw new NotFoundException('Notification not found.');
+    await this.prisma.customerNotification.updateMany({
+      where: { id, userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return { success: true };
+  }
+
+  async notifyCustomerTripUpdate(tripId: string, type: string) {
+    const copy: Record<string, [string, string]> = {
+      DRIVER_GOING_TO_PICKUP: [
+        'Driver confirmed',
+        'Your driver is assigned and heading to pickup.',
+      ],
+      DRIVER_ARRIVED_PICKUP: [
+        'Driver reached pickup',
+        'Your driver confirmed arrival at the pickup location.',
+      ],
+      DRIVER_GOING_TO_DROPOFF: [
+        'Driver heading to dropoff',
+        'Pickup is complete. Your driver is on the way to the delivery location.',
+      ],
+      DRIVER_NEAR_DELIVERY: [
+        'Driver near dropoff',
+        'Your driver is near the delivery location. Please prepare to receive your items.',
+      ],
+      CUSTOMER_DELIVERY_CONFIRMED: [
+        'Delivery confirmed by you',
+        'You confirmed successful delivery and authorized release of the driver payment.',
+      ],
+      TRIP_CANCELLED: [
+        'Job cancelled',
+        'Your job was cancelled. Open the job to review the cancellation and payment details.',
+      ],
+    };
+    const message = copy[type];
+    if (!message)
+      throw new BadRequestException('Unknown trip notification type.');
+    const trip = await this.prisma.transportRequest.findUnique({
+      where: { id: tripId },
+      select: { customerId: true },
+    });
+    if (!trip) return;
+    await this.sendToUsers({
+      userIds: [trip.customerId],
+      app: PushApp.CUSTOMER,
+      type,
+      title: message[0],
+      body: message[1],
+      data: { tripId, requestId: tripId },
+    });
   }
 
   async notifyDriversAboutNewTransportRequest(input: {

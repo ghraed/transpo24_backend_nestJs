@@ -20,7 +20,6 @@ import { relative } from 'node:path';
 type MulterFile = Express.Multer.File;
 import {
   DriverDocumentType,
-  DriverEarningStatus,
   DriverOfferStatus,
   DriverRequestAlertStatus,
   DriverStatus,
@@ -2893,6 +2892,11 @@ export class CustomerRequestsService {
       );
     }
 
+    await this.notificationsService.notifyCustomerTripUpdate(
+      result.updatedRequest.id,
+      'DRIVER_GOING_TO_PICKUP',
+    );
+
     const selectedDriverUserId = acceptedRequest?.assignedDriver?.userId;
     if (!selectedDriverUserId) {
       this.logger.error(
@@ -3038,19 +3042,10 @@ export class CustomerRequestsService {
         pendingQuotesRequests,
       },
       notifications: {
-        unreadCount: await this.prisma.transportRequest.count({
-          where: {
-            customerId: input.customerId,
-            status: TransportRequestStatus.DELIVERED,
-            deliveryConfirmedByCustomerAt: null,
-            driverEarning: {
-              stripeTransferId: null,
-              status: { not: DriverEarningStatus.PAID_OUT },
-            },
-          },
+        unreadCount: await this.prisma.customerNotification.count({
+          where: { userId: input.customerId, readAt: null },
         }),
       },
-      // TODO: integrate notification module unread count when notifications are implemented.
     };
   }
 

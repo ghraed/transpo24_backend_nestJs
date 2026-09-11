@@ -22,6 +22,7 @@ import {
   TransportRequestStatus,
 } from '@prisma/client';
 
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DeliverItemInput,
@@ -89,7 +90,10 @@ const PROOF_PHOTO_SELECT = {
 
 @Injectable()
 export class TripsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async joinTripRoom(input: JoinTripRoomInput): Promise<void> {
     const trip = await this.prisma.transportRequest.findUnique({
@@ -266,6 +270,12 @@ export class TripsService {
       });
     }
 
+    if (nearDelivery)
+      await this.notificationsService.notifyCustomerTripUpdate(
+        trip.id,
+        'DRIVER_NEAR_DELIVERY',
+      );
+
     return {
       location: this.mapDriverLocationUpdatedPayload(location),
       nearDelivery,
@@ -350,6 +360,11 @@ export class TripsService {
 
       return updatedTrip;
     });
+
+    await this.notificationsService.notifyCustomerTripUpdate(
+      updated.id,
+      'DRIVER_ARRIVED_PICKUP',
+    );
 
     return {
       arrival: this.mapDriverArrivedPickupConfirmedPayload(updated),
@@ -665,6 +680,11 @@ export class TripsService {
       });
     });
 
+    await this.notificationsService.notifyCustomerTripUpdate(
+      updated.id,
+      'DRIVER_GOING_TO_DROPOFF',
+    );
+
     return {
       response: this.mapStartDeliveryResponse(updated),
       startedDelivery: this.mapDriverStartedDeliveryPayload(updated),
@@ -886,6 +906,7 @@ export class TripsService {
         deliveredAt: true,
       },
       orderBy: { deliveredAt: 'desc' },
+      take: 3,
     });
   }
 

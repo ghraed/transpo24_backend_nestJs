@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { DRIVER_PAYOUT_DELAY_HOURS, TripsService } from './trips.service';
 
 describe('TripsService', () => {
-  const service = new TripsService({} as never);
+  const service = new TripsService({} as never, {} as never);
 
   it('calculates driver earnings with the platform fee deducted', () => {
     const amounts = service.calculateDriverEarningAmounts(

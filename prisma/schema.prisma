@@ -387,6 +387,7 @@ model User {
   paymentHolds  PaymentHold[]
   additionalCharges AdditionalCharge[]
   pushTokens    PushToken[]
+  customerNotifications CustomerNotification[]
   webPushSubscriptions WebPushSubscription[]
   paymentReconciliationRecords PaymentReconciliationRecord[]
   chatRooms     ChatRoom[]           @relation("ChatRoomClient")
@@ -1321,4 +1322,21 @@ model RequestFile {
   request TransportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   @@index([requestId, category])
   @@map("request_files")
+}
+
+model CustomerNotification {
+  id String @id @default(cuid())
+  userId String
+  type String
+  title String
+  body String
+  data Json
+  eventKey String?
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, eventKey])
+  @@index([userId, createdAt, id])
+  @@index([userId, readAt])
+  @@map("customer_notifications")
 }

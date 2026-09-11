@@ -21,9 +21,12 @@ describe('Customer delivery confirmation', () => {
         updateMany,
       },
     };
-    const service = new TripsService({
-      $transaction: (fn: (value: typeof tx) => unknown) => fn(tx),
-    } as never);
+    const service = new TripsService(
+      {
+        $transaction: (fn: (value: typeof tx) => unknown) => fn(tx),
+      } as never,
+      {} as never,
+    );
     return { service, updateMany };
   }
   it('rejects confirmation by another customer', async () => {

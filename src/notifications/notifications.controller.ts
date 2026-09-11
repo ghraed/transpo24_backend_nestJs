@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Post,
+  UseGuards,
+  Param,
+  Query,
+} from '@nestjs/common';
+
+import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
+import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
+import { NotificationsService } from './notifications.service';
 
 import { CurrentUser } from '../admin/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
@@ -10,6 +23,17 @@ import {
   WebPushSubscriptionResponseDto,
   WebPushSubscriptionsService,
 } from './web-push-subscriptions.service';
+
+class NotificationListQueryDto {
+  @IsOptional()
+  @IsDateString({ strict: true })
+  since?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  cursor?: string;
+}
 
 @Controller('notifications/web-push/subscriptions')
 @UseGuards(AuthenticatedUserGuard, AdminRoleGuard)
@@ -47,5 +71,28 @@ export class NotificationsController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<WebPushSubscriptionResponseDto[]> {
     return this.webPushSubscriptionsService.findMine(user.id);
+  }
+}
+
+@Controller('customer/notifications')
+@UseGuards(CustomerAuthGuard)
+export class CustomerNotificationsController {
+  constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Get()
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: NotificationListQueryDto,
+  ) {
+    return this.notificationsService.listCustomerNotifications(
+      user.id,
+      query.cursor,
+      query.since,
+    );
+  }
+
+  @Post(':id/read')
+  markRead(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.notificationsService.markCustomerNotificationRead(user.id, id);
   }
 }

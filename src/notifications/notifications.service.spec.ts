@@ -29,7 +29,12 @@ import { NotificationsService } from './notifications.service';
 describe('NotificationsService', () => {
   function createService(prisma: object): NotificationsService {
     return new NotificationsService(
-      prisma as never,
+      {
+        customerNotification: {
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        ...prisma,
+      } as never,
       {
         sendToUser: jest.fn().mockResolvedValue(undefined),
       } as never,

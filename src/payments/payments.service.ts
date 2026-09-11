@@ -537,6 +537,10 @@ export class PaymentsService {
         this.cancelCollectedTripTx(tx, input.requestId, input.customerId),
       )
       .then(async (result) => {
+        await this.notificationsService.notifyCustomerTripUpdate(
+          input.requestId,
+          'TRIP_CANCELLED',
+        );
         if (result.driverShareAmount > 0) {
           await this.queueDriverPayoutForTrip(input.requestId);
         }

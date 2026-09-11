@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 
+import { NotificationsModule } from '../notifications/notifications.module';
 import { AuthModule } from '../auth/auth.module';
 import { ChatModule } from '../chat/chat.module';
 import { CustomerRequestsModule } from '../customer-requests/customer-requests.module';
@@ -12,6 +13,7 @@ import { TripsService } from './trips.service';
 @Module({
   imports: [
     AuthModule,
+    NotificationsModule,
     forwardRef(() => ChatModule),
     forwardRef(() => CustomerRequestsModule),
     forwardRef(() => PaymentsModule),
