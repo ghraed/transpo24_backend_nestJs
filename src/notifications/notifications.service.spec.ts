@@ -84,6 +84,43 @@ describe('NotificationsService', () => {
     expect(expo.sendPushNotificationsAsync).not.toHaveBeenCalled();
   });
 
+  it.each(['android', 'ios'])(
+    'sends audible high-priority notifications on %s',
+    async (platform) => {
+      const service = createService({
+        pushToken: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 'token-1', token: 'ExponentPushToken[test]', platform },
+            ]),
+          updateMany: jest.fn(),
+        },
+      });
+      const send = jest.fn().mockResolvedValue([]);
+      Object.assign(service, {
+        expo: {
+          chunkPushNotifications: (messages: unknown[]) => [messages],
+          sendPushNotificationsAsync: send,
+        },
+      });
+      await service.sendToUsers({
+        userIds: ['customer-1'],
+        app: PushApp.CUSTOMER,
+        title: 'New offer',
+        body: 'A driver sent an offer.',
+        type: 'NEW_DRIVER_OFFER',
+      });
+      expect(send).toHaveBeenCalledWith([
+        expect.objectContaining({
+          sound: 'default',
+          priority: 'high',
+          channelId: 'transport_jobs',
+        }),
+      ]);
+    },
+  );
+
   it('builds the correct generic payload for new driver offers', async () => {
     const prisma = {
       pushToken: {

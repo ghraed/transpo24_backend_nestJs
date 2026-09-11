@@ -29,7 +29,9 @@ const TRANSPORT_JOBS_CHANNEL_ID = 'transport_jobs';
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private readonly expo = new Expo();
+  private readonly expo = new Expo({
+    accessToken: process.env.EXPO_ACCESS_TOKEN?.trim() || undefined,
+  });
 
   constructor(
     private readonly prisma: PrismaService,
@@ -84,9 +86,7 @@ export class NotificationsService {
         to: storedToken.token,
         title: input.title,
         body: input.body,
-        ...(storedToken.platform === 'ios'
-          ? { sound: 'default' as const }
-          : {}),
+        sound: 'default' as const,
         priority: 'high',
         channelId: TRANSPORT_JOBS_CHANNEL_ID,
         data: {
