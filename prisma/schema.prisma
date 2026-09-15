@@ -365,6 +365,7 @@ enum ChatReportStatus {
 }
 
 model User {
+  nickname      String?            @db.VarChar(40)
   id            String             @id @default(cuid())
   name          String
   email         String             @unique

@@ -319,6 +319,7 @@ type RequestPhotoResponse = {
 };
 
 type TransportRequestResponseSource = {
+  customer?: { nickname: string | null } | null;
   assignedDriverId: string | null;
   acceptedOfferId: string | null;
   id: string;
@@ -520,6 +521,7 @@ type EligibleDriverDispatchCandidate = {
 };
 
 type DriverRequestAlertSummaryPayload = {
+  customerNickname: string;
   alertId: string;
   requestId: string;
   alertStatus: DriverRequestAlertStatus;
@@ -577,6 +579,7 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/webp',
 ]);
 const REQUEST_SELECT = {
+  customer: { select: { nickname: true } },
   assignedDriverId: true,
   acceptedOfferId: true,
   id: true,
@@ -3807,6 +3810,7 @@ export class CustomerRequestsService {
     distanceKm: number | null,
   ): DriverRequestAlertSummaryPayload {
     return {
+      customerNickname: request.customer?.nickname?.trim() || 'Customer',
       alertId: alert.id,
       requestId: request.id,
       alertStatus: alert.status,

@@ -4,6 +4,7 @@ export interface PhoneAuthResponseDto {
   user: {
     id: string;
     name: string;
+    nickname: string | null;
     email: string;
     phoneNumber: string;
     countryCode: string | null;

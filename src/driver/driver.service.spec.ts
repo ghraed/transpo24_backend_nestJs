@@ -133,3 +133,34 @@ describe('DriverService', () => {
     expect(response.canSubmitForReview).toBe(false);
   });
 });
+
+
+describe('driver-facing customer identity', () => {
+  const service = new DriverService({} as never, {} as never, {} as never);
+  const mapper = service as unknown as {
+    toRequestDetailsResponse: (...args: unknown[]) => { customerNickname: string; customer: { firstName: string } };
+    toAcceptedJobDetailsResponse: (...args: unknown[]) => { customerNickname: string; customer: { firstName: string } };
+    mapDriverRatingItemResponse: (item: unknown) => { customerName: string };
+  };
+  const request = {
+    id: 'request-1', photos: [], customer: { name: 'Private Legal Name', nickname: 'Road Runner' },
+    acceptedOffer: { id: 'offer-1', price: 20, createdAt: new Date(), updatedAt: new Date(), driver: { id: 'driver-1' } },
+  };
+  it('uses the entire nickname in request details without disclosing the full name', () => {
+    const result = mapper.toRequestDetailsResponse(request, { id: 'alert-1', createdAt: new Date() }, null, null);
+    expect(result.customerNickname).toBe('Road Runner');
+    expect(result.customer.firstName).toBe('Road Runner');
+    expect(JSON.stringify(result)).not.toContain('Private Legal Name');
+  });
+  it('uses the nickname in accepted jobs and ratings', () => {
+    const result = mapper.toAcceptedJobDetailsResponse(request);
+    expect(result.customerNickname).toBe('Road Runner');
+    expect(result.customer.firstName).toBe('Road Runner');
+    expect(JSON.stringify(result)).not.toContain('Private Legal Name');
+    expect(mapper.mapDriverRatingItemResponse({ createdAt: new Date(), customer: request.customer }).customerName).toBe('Road Runner');
+  });
+  it('uses a neutral label for legacy customer ratings without a nickname', () => {
+    const result = mapper.mapDriverRatingItemResponse({ id: 'rating-1', rating: 5, createdAt: new Date(), customer: { name: 'Private Legal Name', nickname: null } });
+    expect(result.customerName).toBe('Customer');
+  });
+});

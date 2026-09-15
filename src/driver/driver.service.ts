@@ -496,7 +496,7 @@ type DriverRatingSource = {
   comment: string | null;
   createdAt: Date;
   customer: {
-    name: string;
+    nickname?: string | null;
   } | null;
 };
 
@@ -551,7 +551,7 @@ type RequestDetailsSource = {
     icon: string;
   } | null;
   customer: {
-    name: string;
+    nickname?: string | null;
   } | null;
   photos: Array<{
     id: string;
@@ -612,7 +612,7 @@ type AcceptedJobRequestSource = {
     icon: string;
   } | null;
   customer: {
-    name: string;
+    nickname?: string | null;
   } | null;
   photos: Array<{
     id: string;
@@ -770,7 +770,7 @@ const DRIVER_REQUEST_DETAILS_SELECT = {
   customerId: true,
   customer: {
     select: {
-      name: true,
+      nickname: true,
     },
   },
   photos: {
@@ -2632,7 +2632,7 @@ export class DriverService {
           createdAt: true,
           customer: {
             select: {
-              name: true,
+              nickname: true,
             },
           },
         },
@@ -2713,7 +2713,7 @@ export class DriverService {
         },
         customer: {
           select: {
-            name: true,
+            nickname: true,
           },
         },
         photos: {
@@ -2797,7 +2797,7 @@ export class DriverService {
         },
         customer: {
           select: {
-            name: true,
+            nickname: true,
           },
         },
         photos: {
@@ -4346,6 +4346,7 @@ export class DriverService {
     distanceKm: number | null,
   ): DriverRequestAlertSummaryDto {
     return {
+      customerNickname: request.customer?.nickname?.trim() || 'Customer',
       alertId: alert.id,
       requestId: request.id,
       alertStatus: alert.status,
@@ -4410,9 +4411,7 @@ export class DriverService {
     offerStatus: DriverOfferStatus | null,
   ): DriverRequestDetailsResponseDto {
     const summary = this.toRequestAlertSummary(request, alert, distanceKm);
-    const customerFirstName = request.customer?.name
-      ? (request.customer.name.trim().split(/\s+/)[0] ?? null)
-      : null;
+    const customerFirstName = request.customer?.nickname?.trim() || 'Customer';
 
     return {
       ...summary,
@@ -5144,7 +5143,7 @@ export class DriverService {
       tripId: item.tripId,
       rating: item.rating,
       comment: item.comment,
-      customerName: item.customer?.name ?? null,
+      customerName: item.customer?.nickname?.trim() || 'Customer',
       createdAt: item.createdAt.toISOString(),
     };
   }
@@ -5588,6 +5587,7 @@ export class DriverService {
     }
 
     return {
+      customerNickname: request.customer?.nickname?.trim() || 'Customer',
       requestId: request.id,
       requestStatus: request.status,
       acceptedAt: request.acceptedAt ? request.acceptedAt.toISOString() : null,
@@ -5645,9 +5645,7 @@ export class DriverService {
     request: AcceptedJobRequestSource,
   ): DriverAcceptedJobDetailsResponseDto {
     const summary = this.toAcceptedJobSummaryResponse(request);
-    const customerFirstName = request.customer?.name
-      ? (request.customer.name.trim().split(/\s+/)[0] ?? null)
-      : null;
+    const customerFirstName = request.customer?.nickname?.trim() || 'Customer';
 
     return {
       ...summary,

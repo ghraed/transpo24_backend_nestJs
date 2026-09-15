@@ -29,6 +29,7 @@ import type {
 } from './chat.types';
 
 type RoomAccessRecord = {
+  client?: { nickname: string | null };
   id: string;
   transportRequestId: string;
   clientId: string;
@@ -74,6 +75,7 @@ type ChatAccessContext = {
 };
 
 const ROOM_ACCESS_SELECT = {
+  client: { select: { nickname: true } },
   id: true,
   transportRequestId: true,
   clientId: true,
@@ -284,6 +286,9 @@ export class ChatService {
       .notifyChatMessage({
         recipientUserId: access.recipientUserId,
         recipientApp: access.recipientApp,
+        senderNickname: access.recipientApp === PushApp.DRIVER
+          ? access.room.client?.nickname?.trim() || 'Customer'
+          : undefined,
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: normalizedBody,
@@ -350,6 +355,9 @@ export class ChatService {
       .notifyChatMessage({
         recipientUserId: access.recipientUserId,
         recipientApp: access.recipientApp,
+        senderNickname: access.recipientApp === PushApp.DRIVER
+          ? access.room.client?.nickname?.trim() || 'Customer'
+          : undefined,
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: validated.fileName,
@@ -730,6 +738,7 @@ export class ChatService {
       id: room.id,
       transportRequestId: room.transportRequestId,
       clientId: room.clientId,
+      clientNickname: room.client?.nickname?.trim() || 'Customer',
       driverId: room.driverId,
       acceptedOfferId: room.acceptedOfferId,
       status: room.status,

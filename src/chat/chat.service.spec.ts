@@ -49,6 +49,7 @@ describe('ChatService', () => {
         findUnique: jest.fn(),
       },
       chatRoom: {
+        findMany: jest.fn(),
         findUnique: jest.fn(),
         upsert: jest.fn(),
         update: jest.fn(),
@@ -84,6 +85,7 @@ describe('ChatService', () => {
   };
 
   const roomRecord = {
+    client: { nickname: 'Road Runner' },
     id: 'room-1',
     transportRequestId: 'request-1',
     clientId: 'customer-user-1',
@@ -103,6 +105,30 @@ describe('ChatService', () => {
     },
     messages: [],
   };
+
+  it('shows the customer nickname in driver chat summaries', async () => {
+    const { prisma, service } = createService();
+    prisma.driverProfile.findUnique.mockResolvedValue({ id: 'driver-profile-1' });
+    prisma.chatRoom.findMany.mockResolvedValue([roomRecord]);
+    const rooms = await service.listRooms(driverUser);
+    expect(rooms[0].clientNickname).toBe('Road Runner');
+    prisma.chatRoom.findMany.mockResolvedValue([{ ...roomRecord, client: { nickname: null, name: 'Private Name' } }]);
+    expect((await service.listRooms(driverUser))[0].clientNickname).toBe('Customer');
+  });
+
+  it('identifies the customer by nickname in driver message notifications', async () => {
+    const { prisma, notificationsService, service } = createService();
+    prisma.chatRoom.findUnique.mockResolvedValue(roomRecord);
+    prisma.chatMessage.create.mockResolvedValue({
+      id: 'message-nickname', chatRoomId: roomRecord.id, senderId: customerUser.id,
+      senderRole: ChatMessageSenderRole.CLIENT, type: ChatMessageType.TEXT,
+      body: 'Hello', attachmentUrl: null, createdAt: new Date(), readAt: null,
+    });
+    await service.sendTextMessage({ user: customerUser, roomId: roomRecord.id, body: 'Hello' });
+    expect(notificationsService.notifyChatMessage).toHaveBeenCalledWith(expect.objectContaining({
+      recipientApp: PushApp.DRIVER, senderNickname: 'Road Runner',
+    }));
+  });
 
   it('creates or reuses the room for an accepted offer via upsert', async () => {
     const { prisma, service } = createService();

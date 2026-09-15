@@ -3,6 +3,7 @@ import { TransportRequestStatus, VehicleCondition } from '@prisma/client';
 import { DriverOfferResponseDto } from './driver-offer.dto';
 
 export interface DriverAcceptedJobSummaryDto {
+  customerNickname: string;
   requestId: string;
   requestStatus: TransportRequestStatus;
   acceptedAt: string | null;

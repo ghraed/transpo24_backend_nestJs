@@ -85,6 +85,7 @@ const ACTIVE_ACCOUNT_DELETION_REQUEST_STATUSES: TransportRequestStatus[] = [
 @Injectable()
 export class AuthService {
   private readonly customerSessionUserSelect = {
+    nickname: true,
     id: true,
     name: true,
     email: true,
@@ -179,6 +180,7 @@ export class AuthService {
         where: { id: existing.id },
         data: {
           name: 'Deleted account',
+          nickname: null,
           email: `deleted-${existing.id}@deleted.transpo24.invalid`,
           phoneNumber: null,
           countryCode: null,
@@ -503,6 +505,7 @@ export class AuthService {
         where: { id: account.id },
         data: {
           name: 'Deleted account',
+          nickname: null,
           email: `deleted-${account.id}@deleted.transpo24.invalid`,
           passwordHash: hashPassword(randomBytes(32).toString('base64url')),
           phoneNumber: null,
@@ -520,12 +523,22 @@ export class AuthService {
     return { success: true };
   }
 
+  private normalizeCustomerNickname(nickname: string): string {
+    const value = typeof nickname === 'string' ? nickname.trim() : '';
+    if (value.length < 2 || value.length > 40 || /[\u0000-\u001f\u007f]/u.test(value)) {
+      throw new BadRequestException('Nickname must be between 2 and 40 characters.');
+    }
+    return value;
+  }
+
   async completeCustomerProfile(
     userId: string,
     name: string,
     countryCode: string,
-  ): Promise<{ success: true; name: string; countryCode: string }> {
+    nickname: string,
+  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
     const normalizedName = name.trim();
+    const normalizedNickname = this.normalizeCustomerNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -536,6 +549,7 @@ export class AuthService {
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
       data: {
         name: normalizedName,
+        nickname: normalizedNickname,
         countryCode: normalizedCountryCode,
         isProfileCompleted: true,
       },
@@ -545,6 +559,7 @@ export class AuthService {
     }
     return {
       success: true,
+      nickname: normalizedNickname,
       name: normalizedName,
       countryCode: normalizedCountryCode,
     };
@@ -554,8 +569,10 @@ export class AuthService {
     userId: string,
     name: string,
     countryCode: string,
-  ): Promise<{ success: true; name: string; countryCode: string }> {
+    nickname: string,
+  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
     const normalizedName = name.trim();
+    const normalizedNickname = this.normalizeCustomerNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -564,13 +581,14 @@ export class AuthService {
     }
     const updated = await this.prisma.user.updateMany({
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
-      data: { name: normalizedName, countryCode: normalizedCountryCode },
+      data: { name: normalizedName, nickname: normalizedNickname, countryCode: normalizedCountryCode },
     });
     if (updated.count !== 1) {
       throw new ForbiddenException('Customer access is required.');
     }
     return {
       success: true,
+      nickname: normalizedNickname,
       name: normalizedName,
       countryCode: normalizedCountryCode,
     };
@@ -623,6 +641,7 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
+        nickname: this.normalizeCustomerNickname(dto.nickname),
         email: normalizedEmail,
         passwordHash: hashPassword(dto.password),
         role: UserRole.CUSTOMER,
@@ -999,6 +1018,7 @@ export class AuthService {
     user: {
       id: string;
       name: string;
+      nickname?: string | null;
       email: string;
       phoneNumber: string | null;
       countryCode: string | null;
@@ -1023,6 +1043,7 @@ export class AuthService {
     user: {
       id: string;
       name: string;
+      nickname?: string | null;
       email: string;
       phoneNumber: string | null;
       countryCode: string | null;
@@ -1051,6 +1072,7 @@ export class AuthService {
       ),
       refreshToken,
       user: {
+        nickname: user.nickname ?? null,
         id: user.id,
         name: user.name,
         email: user.email,

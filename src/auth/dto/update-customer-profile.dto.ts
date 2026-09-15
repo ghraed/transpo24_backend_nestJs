@@ -10,6 +10,12 @@ export class UpdateCustomerProfileDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
+  @MaxLength(40)
+  nickname!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
   @MaxLength(100)
   name!: string;
 

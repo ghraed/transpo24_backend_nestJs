@@ -144,11 +144,12 @@ export class AuthController {
   completeCustomerProfile(
     @Body() dto: CompleteCustomerProfileDto,
     @Req() request: AuthenticatedRequest,
-  ): Promise<{ success: true; name: string; countryCode: string }> {
+  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
     return this.authService.completeCustomerProfile(
       request.user.id,
       dto.name,
       dto.countryCode,
+      dto.nickname,
     );
   }
 
@@ -157,11 +158,12 @@ export class AuthController {
   updateCustomerProfile(
     @Body() dto: UpdateCustomerProfileDto,
     @Req() request: AuthenticatedRequest,
-  ): Promise<{ success: true; name: string; countryCode: string }> {
+  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
     return this.authService.updateCustomerProfile(
       request.user.id,
       dto.name,
       dto.countryCode,
+      dto.nickname,
     );
   }
 }
