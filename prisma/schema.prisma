@@ -705,6 +705,7 @@ model TransportRequestProofPhoto {
 }
 
 model DriverProfile {
+  nickname              String?            @db.VarChar(40)
   id                    String             @id @default(cuid())
   userId                String             @unique
   firstName             String

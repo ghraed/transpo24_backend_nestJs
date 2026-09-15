@@ -1,3 +1,4 @@
+import { UpdateDriverNicknameDto } from './dto/update-driver-nickname.dto';
 import { UpdateDriverMatchingLocationDto } from './dto/update-driver-availability.dto';
 import {
   BadRequestException,
@@ -178,6 +179,7 @@ export class DriverController {
   ): Promise<DriverOnboardingResponseDto> {
     return this.driverService.upsertPersonalInfo({
       userId: request.user.id,
+      nickname: dto.nickname,
       fullNameOnId: dto.fullNameOnId,
       dateOfBirth: new Date(dto.dateOfBirth),
       idOrResidencyNumber: dto.idOrResidencyNumber,
@@ -294,6 +296,14 @@ export class DriverController {
     });
   }
 
+  @Patch('me/nickname')
+  async updateMyNickname(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpdateDriverNicknameDto,
+  ): Promise<DriverMeResponseDto> {
+    return this.driverService.updateNickname(request.user.id, dto.nickname);
+  }
+
   @Patch('me/profile')
   async updateMyProfile(
     @Req() request: AuthenticatedRequest,
@@ -301,6 +311,7 @@ export class DriverController {
   ): Promise<DriverMeResponseDto> {
     return this.driverService.updateProfile({
       userId: request.user.id,
+      nickname: dto.nickname,
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone,

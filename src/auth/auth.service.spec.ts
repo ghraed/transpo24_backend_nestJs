@@ -275,6 +275,7 @@ describe('AuthService phone authentication', () => {
     });
 
     const response = await service.registerDriver({
+      nickname: 'Night Rider',
       firstName: 'New',
       lastName: 'Driver',
       email: 'driver@example.com',

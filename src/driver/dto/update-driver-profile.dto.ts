@@ -1,3 +1,4 @@
+import { UpdateDriverNicknameDto } from './update-driver-nickname.dto';
 import {
   ArrayUnique,
   IsDateString,
@@ -10,7 +11,7 @@ import {
 import { PreferredLanguage } from '@prisma/client';
 import { IsEnum } from 'class-validator';
 
-export class UpdateDriverProfileDto {
+export class UpdateDriverProfileDto extends UpdateDriverNicknameDto {
   @IsString()
   @IsNotEmpty()
   firstName!: string;

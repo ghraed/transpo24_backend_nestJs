@@ -44,6 +44,7 @@ type RoomAccessRecord = {
     driverId: string;
   } | null;
   driver: {
+    nickname?: string | null;
     id: string;
     userId: string;
   };
@@ -93,6 +94,7 @@ const ROOM_ACCESS_SELECT = {
   },
   driver: {
     select: {
+      nickname: true,
       id: true,
       userId: true,
     },
@@ -288,7 +290,7 @@ export class ChatService {
         recipientApp: access.recipientApp,
         senderNickname: access.recipientApp === PushApp.DRIVER
           ? access.room.client?.nickname?.trim() || 'Customer'
-          : undefined,
+          : access.room.driver.nickname?.trim() || 'Driver',
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: normalizedBody,
@@ -357,7 +359,7 @@ export class ChatService {
         recipientApp: access.recipientApp,
         senderNickname: access.recipientApp === PushApp.DRIVER
           ? access.room.client?.nickname?.trim() || 'Customer'
-          : undefined,
+          : access.room.driver.nickname?.trim() || 'Driver',
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: validated.fileName,
@@ -740,6 +742,7 @@ export class ChatService {
       clientId: room.clientId,
       clientNickname: room.client?.nickname?.trim() || 'Customer',
       driverId: room.driverId,
+      driverNickname: room.driver.nickname?.trim() || 'Driver',
       acceptedOfferId: room.acceptedOfferId,
       status: room.status,
       createdAt: room.createdAt.toISOString(),

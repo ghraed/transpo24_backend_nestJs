@@ -50,6 +50,7 @@ type AccessTokenPayload = {
 };
 
 interface RegisterDriverInput {
+  nickname: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -105,6 +106,7 @@ export class AuthService {
     driverProfile: {
       select: {
         id: true,
+        nickname: true,
         firstName: true,
         lastName: true,
         phone: true,
@@ -466,6 +468,7 @@ export class AuthService {
           where: { id: account.driverProfile.id },
           data: {
             firstName: 'Deleted',
+            nickname: null,
             lastName: 'Driver',
             phone: `deleted-${account.driverProfile.id}`,
             countryCode: null,
@@ -523,7 +526,7 @@ export class AuthService {
     return { success: true };
   }
 
-  private normalizeCustomerNickname(nickname: string): string {
+  private normalizeNickname(nickname: string): string {
     const value = typeof nickname === 'string' ? nickname.trim() : '';
     if (value.length < 2 || value.length > 40 || /[\u0000-\u001f\u007f]/u.test(value)) {
       throw new BadRequestException('Nickname must be between 2 and 40 characters.');
@@ -538,7 +541,7 @@ export class AuthService {
     nickname: string,
   ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
     const normalizedName = name.trim();
-    const normalizedNickname = this.normalizeCustomerNickname(nickname);
+    const normalizedNickname = this.normalizeNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -572,7 +575,7 @@ export class AuthService {
     nickname: string,
   ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
     const normalizedName = name.trim();
-    const normalizedNickname = this.normalizeCustomerNickname(nickname);
+    const normalizedNickname = this.normalizeNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -641,7 +644,7 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
-        nickname: this.normalizeCustomerNickname(dto.nickname),
+        nickname: this.normalizeNickname(dto.nickname),
         email: normalizedEmail,
         passwordHash: hashPassword(dto.password),
         role: UserRole.CUSTOMER,
@@ -676,6 +679,7 @@ export class AuthService {
     const input: RegisterDriverInput = {
       firstName: normalizedNames.firstName,
       lastName: normalizedNames.lastName,
+      nickname: this.normalizeNickname(dto.nickname),
       email: dto.email.trim().toLowerCase(),
       phone: dto.phone.trim(),
       password: dto.password,
@@ -720,6 +724,7 @@ export class AuthService {
       role: UserRole;
       driverProfile: {
         id: string;
+        nickname?: string | null;
         firstName: string;
         lastName: string;
         phone: string;
@@ -752,6 +757,7 @@ export class AuthService {
             `${input.firstName} ${input.lastName}`.trim() || existingUser.name,
           driverProfile: {
             create: {
+              nickname: input.nickname,
               firstName: input.firstName,
               lastName: input.lastName,
               phone: input.phone,
@@ -771,6 +777,7 @@ export class AuthService {
           driverProfile: {
             select: {
               id: true,
+              nickname: true,
               firstName: true,
               lastName: true,
               phone: true,
@@ -793,6 +800,7 @@ export class AuthService {
           role: UserRole.DRIVER,
           driverProfile: {
             create: {
+              nickname: input.nickname,
               firstName: input.firstName,
               lastName: input.lastName,
               phone: input.phone,
@@ -812,6 +820,7 @@ export class AuthService {
           driverProfile: {
             select: {
               id: true,
+              nickname: true,
               firstName: true,
               lastName: true,
               phone: true,
@@ -848,6 +857,7 @@ export class AuthService {
       },
       driver: {
         id: created.driverProfile.id,
+        nickname: created.driverProfile.nickname ?? null,
         firstName: created.driverProfile.firstName,
         lastName: created.driverProfile.lastName,
         phone: created.driverProfile.phone,
@@ -876,6 +886,7 @@ export class AuthService {
         driverProfile: {
           select: {
             id: true,
+            nickname: true,
             firstName: true,
             lastName: true,
             phone: true,
@@ -927,6 +938,7 @@ export class AuthService {
       driver: driverProfile
         ? {
             id: driverProfile.id,
+            nickname: driverProfile.nickname ?? null,
             firstName: driverProfile.firstName,
             lastName: driverProfile.lastName,
             phone: driverProfile.phone,
@@ -1128,6 +1140,7 @@ export class AuthService {
     deletedAt: Date | null;
     driverProfile: {
       id: string;
+      nickname?: string | null;
       firstName: string;
       lastName: string;
       phone: string;
@@ -1168,6 +1181,7 @@ export class AuthService {
       },
       driver: {
         id: user.driverProfile.id,
+        nickname: user.driverProfile.nickname ?? null,
         firstName: user.driverProfile.firstName,
         lastName: user.driverProfile.lastName,
         phone: user.driverProfile.phone,

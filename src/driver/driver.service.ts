@@ -112,6 +112,7 @@ interface GetDriverMeInput {
 }
 
 interface UpdateDriverProfileInput {
+  nickname: string;
   userId: string;
   firstName: string;
   lastName: string;
@@ -138,6 +139,7 @@ interface GetDriverOnboardingStatusInput {
 }
 
 interface UpsertDriverPersonalInfoInput {
+  nickname: string;
   userId: string;
   fullNameOnId: string;
   dateOfBirth: Date;
@@ -329,6 +331,7 @@ interface GetDriverAcceptedJobDetailsInput {
 }
 
 type DriverProfileSource = {
+  nickname?: string | null;
   id: string;
   userId: string;
   firstName: string;
@@ -633,6 +636,7 @@ const DRIVER_ME_SELECT = {
     select: {
       id: true,
       userId: true,
+      nickname: true,
       firstName: true,
       lastName: true,
       phone: true,
@@ -1219,6 +1223,7 @@ export class DriverService {
       userId: input.userId,
       existingProfile: user.driverProfile,
       changes: {
+        nickname: input.nickname,
         fullNameOnId: input.fullNameOnId,
         dateOfBirth: input.dateOfBirth,
         idOrResidencyNumber: input.idOrResidencyNumber,
@@ -1228,6 +1233,24 @@ export class DriverService {
     });
 
     return this.toDriverOnboardingResponse(updatedProfile);
+  }
+
+  private normalizeDriverNickname(nickname: string): string {
+    const value = typeof nickname === 'string' ? nickname.trim() : '';
+    if (value.length < 2 || value.length > 40 || /[\u0000-\u001f\u007f]/u.test(value)) {
+      throw new BadRequestException('Nickname must be between 2 and 40 characters.');
+    }
+    return value;
+  }
+
+  async updateNickname(userId: string, nickname: string): Promise<DriverMeResponseDto> {
+    const normalizedNickname = this.normalizeDriverNickname(nickname);
+    const updated = await this.prisma.driverProfile.updateMany({
+      where: { userId, user: { deletedAt: null } },
+      data: { nickname: normalizedNickname },
+    });
+    if (updated.count !== 1) throw new NotFoundException('Driver profile not found.');
+    return this.getMe({ userId });
   }
 
   async updateProfile(
@@ -2157,6 +2180,7 @@ export class DriverService {
         acceptedAt: true,
         driver: {
           select: {
+            nickname: true,
             firstName: true,
             lastName: true,
             averageRating: true,
@@ -2184,7 +2208,7 @@ export class DriverService {
         ? customerOffer.estimatedPickupAt.toISOString()
         : null;
       const driverName =
-        `${customerOffer.driver.firstName} ${customerOffer.driver.lastName}`.trim();
+        customerOffer.driver.nickname?.trim() || 'Driver';
       const payload: OfferNewPayload = {
         requestId: result.updatedRequest.id,
         requestStatus: result.updatedRequest.status,
@@ -3485,6 +3509,7 @@ export class DriverService {
       );
     }
 
+    const nextNickname = this.normalizeDriverNickname(input.changes.nickname ?? input.existingProfile.nickname ?? '');
     const nextFirstName =
       input.changes.firstName !== undefined
         ? input.changes.firstName.trim()
@@ -3611,6 +3636,7 @@ export class DriverService {
     return this.prisma.driverProfile.update({
       where: { userId: input.userId },
       data: {
+        nickname: nextNickname,
         firstName: nextFirstName,
         lastName: nextLastName,
         phone: nextPhone,
@@ -5690,6 +5716,7 @@ export class DriverService {
     return {
       id: profile.id,
       userId: profile.userId,
+      nickname: profile.nickname ?? null,
       firstName: profile.firstName,
       lastName: profile.lastName,
       phone: profile.phone,

@@ -24,6 +24,7 @@ export interface ChatRoomSummaryDto {
   clientId: string;
   clientNickname: string;
   driverId: string;
+  driverNickname: string;
   acceptedOfferId: string;
   status: ChatRoomStatus;
   createdAt: string;

@@ -7,6 +7,7 @@ export interface RegisterDriverResponseDto {
   };
   driver: {
     id: string;
+    nickname?: string | null;
     firstName: string;
     lastName: string;
     phone: string;

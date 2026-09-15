@@ -1,3 +1,4 @@
+import { UpdateDriverNicknameDto } from '../../driver/dto/update-driver-nickname.dto';
 import {
   ArrayUnique,
   IsEmail,
@@ -8,7 +9,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-export class RegisterDriverDto {
+export class RegisterDriverDto extends UpdateDriverNicknameDto {
   @IsOptional()
   @IsString()
   firstName!: string;

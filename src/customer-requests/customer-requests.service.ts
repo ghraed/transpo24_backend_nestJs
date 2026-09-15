@@ -405,6 +405,7 @@ type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
     icon: string;
   };
   assignedDriver: {
+    nickname?: string | null;
     firstName: string;
     lastName: string;
     vehicles: Array<{
@@ -476,6 +477,7 @@ type CustomerRequestOfferSource = {
   createdAt: Date;
   acceptedAt: Date | null;
   driver: {
+    nickname?: string | null;
     firstName: string;
     lastName: string;
     averageRating: Prisma.Decimal | null;
@@ -503,6 +505,7 @@ type DispatchResult = {
 type EligibleDriverDispatchCandidate = {
   id: string;
   userId: string;
+  nickname?: string | null;
   firstName: string;
   lastName: string;
   status: DriverStatus;
@@ -673,6 +676,7 @@ const REQUEST_STATUS_SELECT = {
   },
   assignedDriver: {
     select: {
+      nickname: true,
       firstName: true,
       lastName: true,
       vehicles: {
@@ -2058,6 +2062,7 @@ export class CustomerRequestsService {
         acceptedAt: true,
         driver: {
           select: {
+            nickname: true,
             firstName: true,
             lastName: true,
             averageRating: true,
@@ -2150,6 +2155,7 @@ export class CustomerRequestsService {
         },
         assignedDriver: {
           select: {
+            nickname: true,
             firstName: true,
             lastName: true,
             vehicles: {
@@ -2201,8 +2207,7 @@ export class CustomerRequestsService {
       currentStatus: request.status,
       assignedDriverId: request.assignedDriverId,
       driverName: request.assignedDriver
-        ? `${request.assignedDriver.firstName} ${request.assignedDriver.lastName}`.trim() ||
-          null
+        ? request.assignedDriver.nickname?.trim() || 'Driver'
         : null,
       driverVehiclePhoto:
         request.assignedDriver?.vehicles[0]?.documents[0]?.url ?? null,
@@ -3390,7 +3395,7 @@ export class CustomerRequestsService {
   ): CustomerRequestStatusResponseDto {
     const baseResponse = this.toResponseDto(request);
     const driverName = request.assignedDriver
-      ? `${request.assignedDriver.firstName} ${request.assignedDriver.lastName}`.trim()
+      ? request.assignedDriver.nickname?.trim() || 'Driver'
       : null;
     const primaryVehicle = request.assignedDriver?.vehicles[0] ?? null;
     const vehicleInfo = primaryVehicle
@@ -3606,7 +3611,7 @@ export class CustomerRequestsService {
     offer: CustomerRequestOfferSource,
   ): CustomerRequestOfferSummaryDto {
     const driverName =
-      `${offer.driver.firstName} ${offer.driver.lastName}`.trim();
+      offer.driver.nickname?.trim() || 'Driver';
     const driverVehiclePhoto =
       offer.driver.vehicles[0]?.documents[0]?.url ??
       offer.driver.profilePhotoUrl ??
@@ -3680,6 +3685,7 @@ export class CustomerRequestsService {
       select: {
         id: true,
         userId: true,
+        nickname: true,
         firstName: true,
         lastName: true,
         status: true,

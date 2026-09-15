@@ -100,6 +100,7 @@ describe('ChatService', () => {
       driverId: 'driver-profile-1',
     },
     driver: {
+      nickname: 'Night Rider',
       id: 'driver-profile-1',
       userId: 'driver-user-1',
     },
@@ -128,6 +129,14 @@ describe('ChatService', () => {
     expect(notificationsService.notifyChatMessage).toHaveBeenCalledWith(expect.objectContaining({
       recipientApp: PushApp.DRIVER, senderNickname: 'Road Runner',
     }));
+  });
+
+  it('shows the driver nickname to the client without exposing a legal name', async () => {
+    const { prisma, service } = createService();
+    prisma.chatRoom.findMany.mockResolvedValue([roomRecord]);
+    expect((await service.listRooms(customerUser))[0].driverNickname).toBe('Night Rider');
+    prisma.chatRoom.findMany.mockResolvedValue([{ ...roomRecord, driver: { ...roomRecord.driver, nickname: null, firstName: 'Private', lastName: 'Name' } }]);
+    expect((await service.listRooms(customerUser))[0].driverNickname).toBe('Driver');
   });
 
   it('creates or reuses the room for an accepted offer via upsert', async () => {
@@ -200,6 +209,7 @@ describe('ChatService', () => {
     expect(notificationsService.notifyChatMessage).toHaveBeenCalledWith({
       recipientUserId: 'customer-user-1',
       recipientApp: PushApp.CUSTOMER,
+      senderNickname: 'Night Rider',
       chatRoomId: 'room-1',
       transportRequestId: 'request-1',
       body: 'On my way.',
