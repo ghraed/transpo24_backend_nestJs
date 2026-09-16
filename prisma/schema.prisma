@@ -365,6 +365,7 @@ enum ChatReportStatus {
 }
 
 model User {
+  savedPlaces SavedPlace[]
   nickname      String?            @db.VarChar(40)
   id            String             @id @default(cuid())
   name          String
@@ -1341,4 +1342,21 @@ model CustomerNotification {
   @@index([userId, createdAt, id])
   @@index([userId, readAt])
   @@map("customer_notifications")
+}
+
+model SavedPlace {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label       String   @db.VarChar(80)
+  address     String   @db.VarChar(1000)
+  latitude    Float
+  longitude   Float
+  placeId     String?  @db.VarChar(500)
+  locationKey String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([customerId, locationKey])
+  @@index([customerId, updatedAt])
 }

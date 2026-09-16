@@ -499,6 +499,7 @@ export class AuthService {
       }
 
       await Promise.all([
+        tx.savedPlace.deleteMany({ where: { customerId: account.id } }),
         tx.pushToken.deleteMany({ where: { userId: account.id } }),
         tx.webPushSubscription.deleteMany({ where: { userId: account.id } }),
         tx.refreshSession.deleteMany({ where: { userId: account.id } }),

@@ -10,6 +10,9 @@ import { CustomerHomeController } from './customer-home.controller';
 import { CustomerRequestsController } from './customer-requests.controller';
 import { CustomerRequestsService } from './customer-requests.service';
 
+import { CustomerPlacesController } from './customer-places.controller';
+import { CustomerPlacesService } from './customer-places.service';
+
 @Module({
   imports: [
     AuthModule,
@@ -18,8 +21,12 @@ import { CustomerRequestsService } from './customer-requests.service';
     forwardRef(() => PaymentsModule),
     forwardRef(() => TripsModule),
   ],
-  controllers: [CustomerHomeController, CustomerRequestsController],
-  providers: [CustomerRequestsService, PrismaService],
+  controllers: [
+    CustomerPlacesController,
+    CustomerHomeController,
+    CustomerRequestsController,
+  ],
+  providers: [CustomerPlacesService, CustomerRequestsService, PrismaService],
   exports: [CustomerRequestsService],
 })
 export class CustomerRequestsModule {}
