@@ -1,3 +1,6 @@
+beforeEach(() => {
+  process.env.PUSH_ENVIRONMENT = 'DEVELOPMENT';
+});
 import { PushApp } from '@prisma/client';
 
 jest.mock('expo-server-sdk', () => ({
@@ -59,6 +62,8 @@ describe('NotificationsService', () => {
           userId: 'user-1',
           app: PushApp.CUSTOMER,
           token: 'ExponentPushToken[test]',
+          environment: 'DEVELOPMENT',
+          applicationId: 'com.transpo24.app.dev',
           isActive: true,
         },
         select: { id: true },
@@ -156,6 +161,8 @@ describe('NotificationsService', () => {
       where: {
         userId: { in: ['driver-user-1'] },
         app: PushApp.DRIVER,
+        environment: 'DEVELOPMENT',
+        applicationId: 'com.transpo24.driver.dev',
         isActive: true,
       },
       select: {

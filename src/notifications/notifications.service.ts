@@ -22,6 +22,7 @@ import type {
   SendPushNotificationInput,
 } from './notifications.types';
 import { WebPushProvider } from './web-push.provider';
+import { pushScope } from './push-environment';
 
 type PushTokenRecord = {
   id: string;
@@ -50,7 +51,7 @@ export class NotificationsService {
     token: string,
   ): Promise<{ accepted: true }> {
     const storedToken = await this.prisma.pushToken.findFirst({
-      where: { userId, app, token, isActive: true },
+      where: { userId, app, token, isActive: true, ...pushScope(app) },
       select: { id: true },
     });
     if (!storedToken || !Expo.isExpoPushToken(token)) {
@@ -143,6 +144,7 @@ export class NotificationsService {
         where: {
           userId: { in: userIds },
           app: input.app,
+          ...pushScope(input.app),
           isActive: true,
         },
         select: {

@@ -128,6 +128,7 @@ export class StripeService {
     const stripePaymentMethodId = input.stripePaymentMethodId?.trim();
 
     if (stripePaymentMethodId) {
+      await this.requireOwnedCard(input.customerId, stripePaymentMethodId);
       return this.runStripe(() =>
         client.paymentIntents.create(
           {
@@ -193,6 +194,68 @@ export class StripeService {
     return this.toCardPaymentMethodSummary(defaultPaymentMethod);
   }
 
+  async createCardSetupIntent(
+    customerId: string,
+  ): Promise<{ clientSecret: string }> {
+    const intent = await this.runStripe(() =>
+      this.getClient().setupIntents.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        usage: 'off_session',
+      }),
+    );
+    if (!intent.client_secret)
+      throw new BadGatewayException('Unable to set up card.');
+    return { clientSecret: intent.client_secret };
+  }
+
+  async listCustomerCards(
+    customerId: string,
+  ): Promise<StripeCardPaymentMethodSummary[]> {
+    const cards: StripeCardPaymentMethodSummary[] = [];
+    let startingAfter: string | undefined;
+    do {
+      const page = await this.runStripe(() =>
+        this.getClient().paymentMethods.list({
+          customer: customerId,
+          type: 'card',
+          limit: 100,
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        }),
+      );
+      cards.push(
+        ...page.data.map((card) => this.toCardPaymentMethodSummary(card)),
+      );
+      startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
+    } while (startingAfter);
+    return cards;
+  }
+
+  private async requireOwnedCard(customerId: string, paymentMethodId: string) {
+    const card = await this.runStripe(() =>
+      this.getClient().paymentMethods.retrieve(paymentMethodId),
+    );
+    const owner =
+      typeof card.customer === 'string' ? card.customer : card.customer?.id;
+    // Unattached tokens must complete a customer-bound SetupIntent before reuse.
+    if (card.type !== 'card' || owner !== customerId) {
+      throw new BadRequestException(
+        'Saved card is not available for this account.',
+      );
+    }
+    return card;
+  }
+
+  async removeCustomerCard(
+    customerId: string,
+    paymentMethodId: string,
+  ): Promise<void> {
+    await this.requireOwnedCard(customerId, paymentMethodId);
+    await this.runStripe(() =>
+      this.getClient().paymentMethods.detach(paymentMethodId),
+    );
+  }
+
   async attachCustomerDefaultPaymentMethod(input: {
     customerId: string;
     paymentMethodId: string;
@@ -200,26 +263,10 @@ export class StripeService {
     const client = this.getClient();
     const paymentMethodId = input.paymentMethodId.trim();
 
-    const existing = await this.runStripe(() =>
-      client.paymentMethods.retrieve(paymentMethodId),
+    const attached = await this.requireOwnedCard(
+      input.customerId,
+      paymentMethodId,
     );
-
-    if (existing.type !== 'card') {
-      throw new BadRequestException('Only card payment methods can be saved.');
-    }
-
-    let attached = existing;
-    if (!existing.customer) {
-      attached = await this.runStripe(() =>
-        client.paymentMethods.attach(paymentMethodId, {
-          customer: input.customerId,
-        }),
-      );
-    } else if (existing.customer !== input.customerId) {
-      throw new BadRequestException(
-        'This payment method belongs to another customer profile.',
-      );
-    }
 
     await this.runStripe(() =>
       client.customers.update(input.customerId, {

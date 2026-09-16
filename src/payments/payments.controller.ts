@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
+  Header,
   Get,
   Headers,
   Inject,
@@ -108,7 +110,38 @@ export class PaymentsController {
     return result;
   }
 
+  @Get('customer/payment-methods')
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(CustomerAuthGuard)
+  async getSavedCards(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SavedPaymentMethodSummaryDto[]> {
+    return this.paymentsService.getCustomerSavedCards(request.user.id);
+  }
+
+  @Post('customer/payment-methods/setup')
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(CustomerAuthGuard)
+  async createCardSetup(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{ clientSecret: string }> {
+    return this.paymentsService.createCustomerCardSetup(request.user.id);
+  }
+
+  @Delete('customer/payment-methods/:paymentMethodId')
+  @UseGuards(CustomerAuthGuard)
+  async removeSavedCard(
+    @Req() request: AuthenticatedRequest,
+    @Param('paymentMethodId') paymentMethodId: string,
+  ): Promise<void> {
+    await this.paymentsService.removeCustomerSavedCard(
+      request.user.id,
+      paymentMethodId,
+    );
+  }
+
   @Get('customer/payment-method/default')
+  @Header('Cache-Control', 'no-store')
   @UseGuards(CustomerAuthGuard)
   async getDefaultPaymentMethod(
     @Req() request: AuthenticatedRequest,

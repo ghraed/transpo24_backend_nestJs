@@ -6,6 +6,10 @@ export class RegisterPushTokenDto {
   @MaxLength(255)
   token!: string;
 
+  @IsString()
+  @MaxLength(255)
+  applicationId!: string;
+
   @IsEnum(PushApp)
   app!: PushApp;
 

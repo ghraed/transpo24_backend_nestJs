@@ -13,12 +13,20 @@ describe('StripeService', () => {
     (
       service as unknown as {
         getClient(): {
+          paymentMethods: { retrieve: jest.Mock };
           paymentIntents: {
             create: typeof create;
           };
         };
       }
     ).getClient = () => ({
+      paymentMethods: {
+        retrieve: jest.fn().mockResolvedValue({
+          id: 'pm_card_mastercard',
+          type: 'card',
+          customer: 'cus_test',
+        }),
+      },
       paymentIntents: {
         create,
       },
@@ -192,12 +200,14 @@ describe('StripeService', () => {
     (
       service as unknown as {
         getClient(): {
+          paymentMethods: { retrieve: typeof create };
           paymentIntents: {
             create: typeof create;
           };
         };
       }
     ).getClient = () => ({
+      paymentMethods: { retrieve: create },
       paymentIntents: {
         create,
       },

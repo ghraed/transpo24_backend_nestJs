@@ -1,3 +1,6 @@
+beforeEach(() => {
+  process.env.PUSH_ENVIRONMENT = 'DEVELOPMENT';
+});
 import { PushApp } from '@prisma/client';
 import { NotificationsService } from './notifications.service';
 

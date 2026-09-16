@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { PushApp, PushPlatform, UserRole } from '@prisma/client';
 
+import { pushScope } from '../notifications/push-environment';
 import { PrismaService } from '../prisma/prisma.service';
 
 type RegisterPushTokenInput = {
@@ -8,6 +9,7 @@ type RegisterPushTokenInput = {
   role: UserRole;
   hasDriverProfile: boolean;
   token: string;
+  applicationId: string;
   app: PushApp;
   platform: PushPlatform;
   deviceName?: string;
@@ -24,9 +26,35 @@ export class PushTokensService {
   ): Promise<{ success: true }> {
     this.assertRoleMatchesApp(input.role, input.app, input.hasDriverProfile);
 
-    await this.prisma.pushToken.upsert({
+    const scope = pushScope(input.app);
+    if (input.applicationId !== scope.applicationId) {
+      throw new ForbiddenException(
+        'This app cannot register notifications in this environment.',
+      );
+    }
+    const existing = await this.prisma.pushToken.findUnique({
       where: { token: input.token.trim() },
+      select: { environment: true, applicationId: true },
+    });
+    if (
+      existing &&
+      ((existing.environment !== null &&
+        existing.environment !== scope.environment) ||
+        (existing.applicationId !== null &&
+          existing.applicationId !== scope.applicationId))
+    ) {
+      throw new ForbiddenException(
+        'This notification token belongs to another environment or app.',
+      );
+    }
+
+    await this.prisma.pushToken.upsert({
+      where: {
+        token: input.token.trim(),
+        OR: [{ environment: null, applicationId: null }, scope],
+      },
       update: {
+        ...scope,
         userId: input.userId,
         app: input.app,
         platform: input.platform,
@@ -34,6 +62,7 @@ export class PushTokensService {
         isActive: true,
       },
       create: {
+        ...scope,
         userId: input.userId,
         app: input.app,
         platform: input.platform,

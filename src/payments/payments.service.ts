@@ -905,38 +905,68 @@ export class PaymentsService {
       : null;
   }
 
-  async saveCustomerDefaultPaymentMethod(
-    input: SaveDefaultPaymentMethodInput,
-  ): Promise<SavedPaymentMethodSummaryDto> {
+  async getCustomerSavedCards(
+    customerId: string,
+  ): Promise<SavedPaymentMethodSummaryDto[]> {
     const customer = await this.prisma.user.findUnique({
-      where: { id: input.customerId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        stripeCustomerId: true,
-      },
+      where: { id: customerId },
+      select: { stripeCustomerId: true },
     });
+    if (!customer?.stripeCustomerId) return [];
+    return this.stripeService.listCustomerCards(customer.stripeCustomerId);
+  }
 
-    if (!customer) {
-      throw new NotFoundException('Customer account not found.');
-    }
+  async removeCustomerSavedCard(
+    customerId: string,
+    paymentMethodId: string,
+  ): Promise<void> {
+    const customer = await this.prisma.user.findUnique({
+      where: { id: customerId },
+      select: { stripeCustomerId: true },
+    });
+    if (!customer?.stripeCustomerId)
+      throw new NotFoundException('Saved card not found.');
+    await this.stripeService.removeCustomerCard(
+      customer.stripeCustomerId,
+      paymentMethodId,
+    );
+  }
 
+  async createCustomerCardSetup(
+    customerId: string,
+  ): Promise<{ clientSecret: string }> {
+    return this.stripeService.createCardSetupIntent(
+      await this.ensureSavedCardCustomer(customerId),
+    );
+  }
+
+  private async ensureSavedCardCustomer(customerId: string): Promise<string> {
+    const customer = await this.prisma.user.findUnique({
+      where: { id: customerId },
+      select: { id: true, email: true, name: true, stripeCustomerId: true },
+    });
+    if (!customer) throw new NotFoundException('Customer account not found.');
     const stripeCustomerId = await this.stripeService.ensureCustomer({
       customerId: customer.id,
       email: customer.email,
       name: customer.name,
       stripeCustomerId: customer.stripeCustomerId,
     });
-
     if (stripeCustomerId !== customer.stripeCustomerId) {
       await this.prisma.user.update({
         where: { id: customer.id },
-        data: {
-          stripeCustomerId,
-        },
+        data: { stripeCustomerId },
       });
     }
+    return stripeCustomerId;
+  }
+
+  async saveCustomerDefaultPaymentMethod(
+    input: SaveDefaultPaymentMethodInput,
+  ): Promise<SavedPaymentMethodSummaryDto> {
+    const stripeCustomerId = await this.ensureSavedCardCustomer(
+      input.customerId,
+    );
 
     const paymentMethod =
       await this.stripeService.attachCustomerDefaultPaymentMethod({
