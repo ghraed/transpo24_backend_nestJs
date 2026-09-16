@@ -33,6 +33,11 @@ async function main() {
       await tx.transportRequest.create({ data: { ...route, submittedAt: new Date(), status: 'PENDING_QUOTES' } });
       await tx.transportRequest.create({ data: { ...route, pickupAddress: 'Ignored draft', pickupLatitude: 50 } });
       assert.deepEqual((await service.list(owner.id)).recent.map(point => point.address), ['Test warehouse', 'Test destination']);
+      const repeated = await service.routes(owner.id);
+      assert.equal(repeated.length, 1);
+      assert.equal(repeated[0].pickup.address, 'Test warehouse');
+      assert.equal(repeated[0].dropoff.address, 'Test destination');
+      assert.deepEqual(await service.routes(other.id), []);
       await service.remove(owner.id, saved.id);
       assert.equal((await service.list(owner.id)).saved.length, 0);
       // Physical account deletion cascades to saved places.

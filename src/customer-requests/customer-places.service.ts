@@ -42,6 +42,63 @@ export class CustomerPlacesService {
     if (!result.count) throw new NotFoundException('Saved place not found.');
   }
 
+  async routes(customerId: string) {
+    const found = new Map<string, { pickup: Address; dropoff: Address }>();
+    let cursor: string | undefined;
+    while (found.size < 5) {
+      const rows = await this.prisma.transportRequest.findMany({
+        where: { customerId, submittedAt: { not: null } },
+        orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
+        take: 50,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: {
+          id: true,
+          pickupLatitude: true,
+          pickupLongitude: true,
+          pickupAddress: true,
+          pickupPlaceId: true,
+          dropoffLatitude: true,
+          dropoffLongitude: true,
+          dropoffAddress: true,
+          dropoffPlaceId: true,
+        },
+      });
+      for (const row of rows) {
+        const read = (kind: 'pickup' | 'dropoff'): Address | undefined => {
+          const latitude = row[`${kind}Latitude`];
+          const longitude = row[`${kind}Longitude`];
+          const address = row[`${kind}Address`];
+          if (
+            latitude === null ||
+            longitude === null ||
+            !address?.trim() ||
+            !Number.isFinite(latitude) ||
+            Math.abs(latitude) > 90 ||
+            !Number.isFinite(longitude) ||
+            Math.abs(longitude) > 180
+          )
+            return;
+          return {
+            latitude,
+            longitude,
+            address,
+            placeId: row[`${kind}PlaceId`] ?? undefined,
+          };
+        };
+        const pickup = read('pickup');
+        const dropoff = read('dropoff');
+        if (!pickup || !dropoff || locationKey(pickup) === locationKey(dropoff))
+          continue;
+        const key = `${locationKey(pickup)}:${locationKey(dropoff)}`;
+        if (!found.has(key)) found.set(key, { pickup, dropoff });
+        if (found.size === 5) return [...found.values()];
+      }
+      if (rows.length < 50) break;
+      cursor = rows[rows.length - 1].id;
+    }
+    return [...found.values()];
+  }
+
   async recent(customerId: string): Promise<Address[]> {
     const found = new Map<string, Address>();
     let cursor: string | undefined;

@@ -145,3 +145,57 @@ describe('Customer places', () => {
     }
   });
 });
+
+describe('Repeat routes', () => {
+  const findMany = jest.fn();
+  const service = new CustomerPlacesService({
+    transportRequest: { findMany },
+  } as unknown as PrismaService);
+  beforeEach(() => jest.resetAllMocks());
+  it('returns distinct directional pairs from submitted requests scoped to the customer', async () => {
+    findMany.mockResolvedValue([
+      row('new'),
+      row('duplicate'),
+      {
+        ...row('reverse'),
+        pickupLatitude: 49,
+        pickupLongitude: 9,
+        pickupAddress: 'Work',
+        dropoffLatitude: 48,
+        dropoffLongitude: 8,
+        dropoffAddress: 'Home',
+      },
+      { ...row('missing'), dropoffAddress: null },
+      { ...row('same'), dropoffLatitude: 48, dropoffLongitude: 8 },
+    ]);
+    const result = await service.routes('owner');
+    expect(result).toHaveLength(2);
+    expect(result[0].pickup.address).toBe('Home');
+    expect(result[1].pickup.address).toBe('Work');
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      customerId: 'owner',
+      submittedAt: { not: null },
+    });
+  });
+  it('pages past repeated pairs and caps results at five', async () => {
+    findMany
+      .mockResolvedValueOnce(
+        Array.from({ length: 50 }, (_, i) => row(String(i))),
+      )
+      .mockResolvedValueOnce([
+        row('a', 50),
+        row('b', 51),
+        row('c', 52),
+        row('d', 53),
+        row('e', 54),
+      ]);
+    const result = await service.routes('owner');
+    expect(result.map((route) => route.pickup.latitude)).toEqual([
+      48, 50, 51, 52, 53,
+    ]);
+    expect(findMany.mock.calls[1][0]).toMatchObject({
+      cursor: { id: '49' },
+      skip: 1,
+    });
+  });
+});

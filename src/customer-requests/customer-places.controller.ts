@@ -25,6 +25,11 @@ export class CustomerPlacesController {
     return this.places.list(request.user.id);
   }
 
+  @Get('routes')
+  routes(@Req() request: CustomerRequest) {
+    return this.places.routes(request.user.id);
+  }
+
   @Post()
   save(@Req() request: CustomerRequest, @Body() dto: SavePlaceDto) {
     return this.places.save(request.user.id, dto);
