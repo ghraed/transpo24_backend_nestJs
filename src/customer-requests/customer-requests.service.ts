@@ -1,4 +1,8 @@
 import {
+  EditCustomerRequestDto,
+  EDITABLE_REQUEST_FIELDS,
+} from './dto/edit-customer-request.dto';
+import {
   APPROVED_MATCHING_VEHICLE_WHERE,
   MATCHING_AVAILABILITY_SELECT,
   MatchingAvailability,
@@ -197,6 +201,7 @@ interface CreateFurnitureTransportRequestInput {
   furnitureDescription: string;
   approximateItemCount: number;
   needsHelpers?: boolean;
+  helpersCount?: number;
   isImmediate?: boolean;
   scheduledPickupAt?: Date;
   movingDate: Date;
@@ -319,6 +324,7 @@ type RequestPhotoResponse = {
 };
 
 type TransportRequestResponseSource = {
+  createdAt: Date;
   customer?: { nickname: string | null } | null;
   assignedDriverId: string | null;
   acceptedOfferId: string | null;
@@ -571,6 +577,7 @@ type DriverRequestAlertSummaryPayload = {
     transmission?: string | null;
   };
   distanceKm: number | null;
+  requestCreatedAt: string;
   createdAt: string;
   submittedAt: string | null;
 };
@@ -582,6 +589,7 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/webp',
 ]);
 const REQUEST_SELECT = {
+  createdAt: true,
   customer: { select: { nickname: true } },
   assignedDriverId: true,
   acceptedOfferId: true,
@@ -1191,6 +1199,9 @@ export class CustomerRequestsService {
           furnitureCustomerCanHelpLoading:
             input.customerCanHelpLoading ?? false,
           requiresLoadingHelp: input.needsHelpers ?? false,
+          loadingWorkersCount: input.needsHelpers
+            ? (input.helpersCount ?? null)
+            : null,
           photos: {
             create: photoRows,
           },
@@ -1739,41 +1750,9 @@ export class CustomerRequestsService {
     };
   }
 
-  async submitCustomerRequest(
-    input: SubmitCustomerRequestInput,
-  ): Promise<CustomerRequestResponseDto> {
-    if (!input.requestId.trim()) {
-      throw new BadRequestException('requestId is required.');
-    }
-
-    const request = await this.prisma.transportRequest.findUnique({
-      where: { id: input.requestId },
-      select: REQUEST_SELECT,
-    });
-
-    if (!request) {
-      throw new NotFoundException('Transport request not found.');
-    }
-
-    const requestOwner = await this.prisma.transportRequest.findUnique({
-      where: { id: input.requestId },
-      select: { customerId: true, status: true },
-    });
-
-    if (!requestOwner) {
-      throw new NotFoundException('Transport request not found.');
-    }
-
-    if (requestOwner.customerId !== input.customerId) {
-      throw new ForbiddenException(
-        'You are not allowed to update this request.',
-      );
-    }
-
-    if (requestOwner.status !== TransportRequestStatus.DRAFT) {
-      throw new BadRequestException('Only draft requests can be submitted.');
-    }
-
+  private async validateSubmittedRequest(
+    request: TransportRequestResponseSource,
+  ): Promise<void> {
     if (request.pickupLatitude === null || request.pickupLongitude === null) {
       throw new BadRequestException(
         'Pickup location is required before submission.',
@@ -1930,6 +1909,317 @@ export class CustomerRequestsService {
         }
       }
     }
+  }
+
+  private async canEditRequest(
+    requestId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<boolean> {
+    return (
+      (await db.transportRequest.count({
+        where: {
+          id: requestId,
+          status: TransportRequestStatus.PENDING_QUOTES,
+          assignedDriverId: null,
+          acceptedOfferId: null,
+          acceptedAt: null,
+          offers: { none: {} },
+        },
+      })) > 0
+    );
+  }
+
+  async getRequestForEdit(customerId: string, requestId: string) {
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: requestId },
+      include: { photos: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!request) throw new NotFoundException('Transport request not found.');
+    if (request.customerId !== customerId)
+      throw new ForbiddenException('You are not allowed to edit this request.');
+    if (!(await this.canEditRequest(requestId)))
+      throw new ConflictException({
+        code: 'REQUEST_EDIT_LOCKED',
+        message:
+          'This request can no longer be edited because a driver sent an offer or it is no longer waiting for offers.',
+      });
+    return {
+      ...Object.fromEntries(
+        EDITABLE_REQUEST_FIELDS.map((key) => [key, request[key]]),
+      ),
+      updatedAt: request.updatedAt.toISOString(),
+      pickupLocation: {
+        latitude: request.pickupLatitude,
+        longitude: request.pickupLongitude,
+        address: request.pickupAddress,
+        placeId: request.pickupPlaceId,
+      },
+      dropoffLocation: {
+        latitude: request.dropoffLatitude,
+        longitude: request.dropoffLongitude,
+        address: request.dropoffAddress,
+        placeId: request.dropoffPlaceId,
+      },
+      retainedPhotoIds: request.photos.map((photo) => photo.id),
+      photos: this.toPhotoResponses(request.photos),
+    };
+  }
+
+  async editCustomerRequest(
+    customerId: string,
+    requestId: string,
+    dto: EditCustomerRequestDto,
+    files: MulterFile[],
+  ) {
+    const pendingEvents: (() => void)[] = [];
+    const removedStorageKeys: string[] = [];
+    let dispatch!: DispatchResult;
+    let updatedRequest: TransportRequestResponseSource & {
+      service: {
+        id: string;
+        key: ServiceKey;
+        nameEn: string;
+        nameAr: string;
+        icon: string | null;
+      } | null;
+    };
+    try {
+      updatedRequest = await this.prisma.$transaction(
+        async (tx) => {
+          // Offer creation takes the same lock, so an edit cannot pass after an offer is sent.
+          await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${requestId} FOR UPDATE`;
+          const request = await tx.transportRequest.findUnique({
+            where: { id: requestId },
+            select: { ...REQUEST_SELECT, customerId: true, updatedAt: true },
+          });
+          if (!request)
+            throw new NotFoundException('Transport request not found.');
+          if (request.customerId !== customerId)
+            throw new ForbiddenException(
+              'You are not allowed to edit this request.',
+            );
+          if (dto.serviceId !== request.serviceId) {
+            throw new BadRequestException(
+              'The service type cannot be changed. Delete this request and create a new one.',
+            );
+          }
+          if (!(await this.canEditRequest(requestId, tx)))
+            throw new ConflictException({
+              code: 'REQUEST_EDIT_LOCKED',
+              message:
+                'This request can no longer be edited because a driver sent an offer or it is no longer waiting for offers.',
+            });
+          if (request.updatedAt.toISOString() !== dto.updatedAt)
+            throw new ConflictException(
+              'This request changed. Reopen it before editing again.',
+            );
+          if (
+            dto.retainedPhotoIds.some(
+              (id) => !request.photos.some((photo) => photo.id === id),
+            )
+          )
+            throw new BadRequestException('Invalid retained photo.');
+          if (dto.retainedPhotoIds.length + files.length > MAX_TOTAL_PHOTOS)
+            throw new BadRequestException('A request can have up to 8 photos.');
+          const service = await tx.service.findUnique({
+            where: { id: request.serviceId },
+          });
+          if (!service?.isActive)
+            throw new BadRequestException('Service is unavailable.');
+          const data: Prisma.TransportRequestUncheckedUpdateInput = {
+            ...Object.fromEntries(
+              EDITABLE_REQUEST_FIELDS.filter(
+                (key) => key !== 'serviceId' && dto[key] !== undefined,
+              ).map((key) => [key, dto[key]]),
+            ),
+            pickupLatitude: dto.pickupLocation.latitude,
+            pickupLongitude: dto.pickupLocation.longitude,
+            pickupAddress: dto.pickupLocation.address ?? null,
+            pickupPlaceId: dto.pickupLocation.placeId ?? null,
+            dropoffLatitude: dto.dropoffLocation.latitude,
+            dropoffLongitude: dto.dropoffLocation.longitude,
+            dropoffAddress: dto.dropoffLocation.address ?? null,
+            dropoffPlaceId: dto.dropoffLocation.placeId ?? null,
+            scheduledPickupAt: dto.isImmediate
+              ? null
+              : dto.scheduledPickupAt
+                ? new Date(dto.scheduledPickupAt)
+                : null,
+          };
+          // Keep matching and driver summaries consistent with the service-specific inputs.
+          if (service.key === ServiceKey.VEHICLE_TRANSPORT) {
+            data.itemType = ItemType.VEHICLE;
+            data.itemBrand = dto.vehicleBrand;
+            data.itemModel = dto.vehicleModel;
+            data.itemYear = dto.vehicleManufactureYear;
+            data.itemWeightKg = dto.vehicleEstimatedWeightKg;
+            if (dto.vehicleMobility) {
+              data.vehicleCondition =
+                dto.vehicleMobility === 'RUNNING'
+                  ? VehicleCondition.RUNNING
+                  : dto.vehicleMobility === 'ROLLABLE'
+                    ? VehicleCondition.NEEDS_WINCH
+                    : VehicleCondition.NEEDS_CRANE;
+            }
+          } else if (service.key === ServiceKey.GOODS_TRANSPORT) {
+            data.itemType = ItemType.GOODS;
+            data.itemDescription = dto.goodsDescription;
+            data.itemWeightKg = dto.goodsApproximateWeightKg;
+            data.itemCondition = dto.goodsIsFragile
+              ? ItemCondition.FRAGILE
+              : null;
+            if ((dto.goodsApproximateWeightKg ?? 0) < 50)
+              data.goodsHeavyShipmentType = null;
+          } else if (service.key === ServiceKey.FURNITURE_TRANSPORT) {
+            data.itemType = ItemType.FURNITURE;
+            data.itemDescription = dto.furnitureDescription;
+            data.requiresLoadingHelp = dto.furnitureNeedsHelpers;
+          } else if (service.key === ServiceKey.MOTORCYCLE_TRANSPORT) {
+            data.itemType = request.itemType;
+            if (dto.specialInstructions !== undefined)
+              data.customerNote = dto.specialInstructions;
+          }
+          if (!data.requiresLoadingHelp && dto.requiresLoadingHelp === false)
+            data.loadingWorkersCount = null;
+          if (
+            data.pickupLatitude === data.dropoffLatitude &&
+            data.pickupLongitude === data.dropoffLongitude
+          )
+            throw new BadRequestException(
+              'Pickup and dropoff must be different locations.',
+            );
+          await tx.transportRequest.update({ where: { id: requestId }, data });
+          if (
+            request.photos.some(
+              (photo) => !dto.retainedPhotoIds.includes(photo.id),
+            )
+          ) {
+            const removed = await tx.transportRequestPhoto.findMany({
+              where: { requestId, id: { notIn: dto.retainedPhotoIds } },
+              select: { storageKey: true },
+            });
+            removedStorageKeys.push(
+              ...removed.flatMap((photo) =>
+                photo.storageKey ? [photo.storageKey] : [],
+              ),
+            );
+          }
+          await tx.transportRequestPhoto.deleteMany({
+            where: { requestId, id: { notIn: dto.retainedPhotoIds } },
+          });
+          if (files.length)
+            await tx.transportRequestPhoto.createMany({
+              data: files.map((file, index) => {
+                const storageKey = relative(process.cwd(), file.path).replace(
+                  /\\/g,
+                  '/',
+                );
+                return {
+                  requestId,
+                  storageKey,
+                  url: `/${storageKey}`,
+                  originalName: file.originalname,
+                  mimeType: file.mimetype,
+                  sizeBytes: file.size,
+                  sortOrder: request.photos.length + index + 1,
+                };
+              }),
+            });
+          const updated = await tx.transportRequest.findUniqueOrThrow({
+            where: { id: requestId },
+            select: {
+              ...REQUEST_SELECT,
+              service: {
+                select: {
+                  id: true,
+                  key: true,
+                  nameEn: true,
+                  nameAr: true,
+                  icon: true,
+                },
+              },
+            },
+          });
+          await this.validateSubmittedRequest(updated);
+          // Expire old matches; dispatch will reactivate only drivers matching the new details.
+          await tx.driverRequestAlert.updateMany({
+            where: { requestId },
+            data: {
+              status: DriverRequestAlertStatus.EXPIRED,
+              acceptedAt: null,
+              seenAt: null,
+              ignoredAt: null,
+            },
+          });
+          dispatch = await this.dispatchSubmittedRequestToEligibleDrivers(
+            updated,
+            true,
+            tx,
+            pendingEvents,
+          );
+          return updated;
+        },
+        { timeout: 30000 },
+      );
+    } catch (error) {
+      await this.cleanupFiles(files);
+      throw error;
+    }
+    await Promise.all(
+      removedStorageKeys.map((key) =>
+        unlink(`${process.cwd()}/${key}`).catch(() => undefined),
+      ),
+    );
+    pendingEvents.forEach((emit) => emit());
+    void this.notificationsService
+      .notifyDriversAboutNewTransportRequest({
+        drivers: dispatch.driverNotifications,
+        updated: true,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Failed to notify drivers about edited request ${requestId}: ${error instanceof Error ? error.message : 'Unexpected error'}`,
+        );
+      });
+    return this.toResponseDto(updatedRequest, dispatch.summary);
+  }
+
+  async submitCustomerRequest(
+    input: SubmitCustomerRequestInput,
+  ): Promise<CustomerRequestResponseDto> {
+    if (!input.requestId.trim()) {
+      throw new BadRequestException('requestId is required.');
+    }
+
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: input.requestId },
+      select: REQUEST_SELECT,
+    });
+
+    if (!request) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    const requestOwner = await this.prisma.transportRequest.findUnique({
+      where: { id: input.requestId },
+      select: { customerId: true, status: true },
+    });
+
+    if (!requestOwner) {
+      throw new NotFoundException('Transport request not found.');
+    }
+
+    if (requestOwner.customerId !== input.customerId) {
+      throw new ForbiddenException(
+        'You are not allowed to update this request.',
+      );
+    }
+
+    if (requestOwner.status !== TransportRequestStatus.DRAFT) {
+      throw new BadRequestException('Only draft requests can be submitted.');
+    }
+
+    await this.validateSubmittedRequest(request);
 
     const updatedRequest = await this.prisma.transportRequest.update({
       where: { id: input.requestId },
@@ -2012,11 +2302,14 @@ export class CustomerRequestsService {
         })
       : null;
 
-    return this.toStatusResponseDto(request, {
-      count: offerStats._count.id,
-      lowestPrice: lowestPriceDecimal ? Number(lowestPriceDecimal) : null,
-      currency: lowestOffer?.currency ?? null,
-    });
+    return {
+      ...this.toStatusResponseDto(request, {
+        count: offerStats._count.id,
+        lowestPrice: lowestPriceDecimal ? Number(lowestPriceDecimal) : null,
+        currency: lowestOffer?.currency ?? null,
+      }),
+      canEdit: await this.canEditRequest(input.requestId),
+    };
   }
 
   async getCustomerRequestOffers(
@@ -3405,6 +3698,7 @@ export class CustomerRequestsService {
 
     return {
       ...baseResponse,
+      canEdit: false,
       cancellation: this.toCancellationStatus(request),
       service: {
         id: request.service.id,
@@ -3610,8 +3904,7 @@ export class CustomerRequestsService {
   private toCustomerRequestOfferSummary(
     offer: CustomerRequestOfferSource,
   ): CustomerRequestOfferSummaryDto {
-    const driverName =
-      offer.driver.nickname?.trim() || 'Driver';
+    const driverName = offer.driver.nickname?.trim() || 'Driver';
     const driverVehiclePhoto =
       offer.driver.vehicles[0]?.documents[0]?.url ??
       offer.driver.profilePhotoUrl ??
@@ -3659,6 +3952,9 @@ export class CustomerRequestsService {
         icon: string | null;
       } | null;
     },
+    refreshAlerts = false,
+    db: Prisma.TransactionClient = this.prisma,
+    pendingEvents?: (() => void)[],
   ): Promise<DispatchResult> {
     if (!request.service) {
       return {
@@ -3673,7 +3969,7 @@ export class CustomerRequestsService {
       };
     }
 
-    const eligibleDrivers = await this.prisma.driverProfile.findMany({
+    const eligibleDrivers = await db.driverProfile.findMany({
       where: {
         status: DriverStatus.APPROVED,
         isProfileCompleted: true,
@@ -3712,7 +4008,7 @@ export class CustomerRequestsService {
     );
     const driverNotifications: DispatchResult['driverNotifications'] = [];
 
-    const existingAlerts = await this.prisma.driverRequestAlert.findMany({
+    const existingAlerts = await db.driverRequestAlert.findMany({
       where: {
         requestId: request.id,
         driverId: { in: filteredDrivers.map((driver) => driver.id) },
@@ -3735,8 +4031,25 @@ export class CustomerRequestsService {
     for (const driver of filteredDrivers) {
       const existingAlert = existingAlertByDriverId.get(driver.id);
       const alert =
-        existingAlert ??
-        (await this.prisma.driverRequestAlert.create({
+        (existingAlert && refreshAlerts
+          ? await db.driverRequestAlert.update({
+              where: { id: existingAlert.id },
+              data: {
+                status: DriverRequestAlertStatus.NEW,
+                acceptedAt: null,
+                seenAt: null,
+                ignoredAt: null,
+                createdAt: new Date(),
+              },
+              select: {
+                id: true,
+                driverId: true,
+                status: true,
+                createdAt: true,
+              },
+            })
+          : existingAlert) ??
+        (await db.driverRequestAlert.create({
           data: {
             requestId: request.id,
             driverId: driver.id,
@@ -3770,10 +4083,13 @@ export class CustomerRequestsService {
       );
       if (roomConnections > 0) {
         connectedDriversCount += 1;
-        this.tripsGateway.emitRequestNew(
-          driver.id,
-          this.toDriverRequestAlertSummaryPayload(request, alert, distanceKm),
-        );
+        const emit = () =>
+          this.tripsGateway.emitRequestNew(
+            driver.id,
+            this.toDriverRequestAlertSummaryPayload(request, alert, distanceKm),
+          );
+        if (pendingEvents) pendingEvents.push(emit);
+        else emit();
       }
     }
 
@@ -3867,6 +4183,7 @@ export class CustomerRequestsService {
         transmission: request.vehicleTransmission ?? null,
       },
       distanceKm,
+      requestCreatedAt: request.createdAt.toISOString(),
       createdAt: alert.createdAt.toISOString(),
       submittedAt: request.submittedAt
         ? request.submittedAt.toISOString()

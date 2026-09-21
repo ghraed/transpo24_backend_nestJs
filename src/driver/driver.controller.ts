@@ -466,6 +466,7 @@ export class DriverController {
     return this.driverService.sendDriverPriceOffer({
       userId: request.user.id,
       requestId,
+      requestVersion: dto.requestVersion,
       price: dto.price,
       currency: dto.currency,
       estimatedPickupAt: dto.estimatedPickupAt

@@ -86,6 +86,12 @@ export class CreateFurnitureTransportRequestDto {
   needsHelpers?: boolean;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  helpersCount?: number;
+
+  @IsOptional()
   @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
   isImmediate?: boolean;

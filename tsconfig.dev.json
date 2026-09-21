@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "outDir": "./node_modules/.cache/transpo24-api-dev",
+    "tsBuildInfoFile": "./node_modules/.cache/transpo24-api-dev/tsconfig.dev.tsbuildinfo"
+  }
+}

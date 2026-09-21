@@ -16,6 +16,7 @@ export interface DriverRequestAlertServiceDto {
 }
 
 export interface DriverRequestAlertSummaryDto {
+  requestCreatedAt: string;
   customerNickname: string;
   isCurrentlyEligible?: boolean;
   alertId: string;
@@ -68,6 +69,7 @@ export interface DriverRequestAlertsResponseDto {
 }
 
 export interface DriverRequestDetailsResponseDto extends DriverRequestAlertSummaryDto {
+  requestVersion: string;
   offerStatus: DriverOfferStatus | null;
   customerNote: string | null;
   customer: {

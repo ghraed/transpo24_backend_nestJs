@@ -10,6 +10,7 @@ import type { Request, Response } from 'express';
 type ErrorBody = {
   statusCode: number;
   message: string;
+  code?: string;
   error?: string;
   timestamp: string;
   path: string;
@@ -56,6 +57,7 @@ export class JsonExceptionFilter implements ExceptionFilter {
       if (payload && typeof payload === 'object') {
         const candidate = payload as {
           message?: string | string[];
+          code?: string;
           error?: string;
           statusCode?: number;
         };
@@ -70,6 +72,9 @@ export class JsonExceptionFilter implements ExceptionFilter {
             exception.message,
             'Unexpected server error.',
           ),
+          ...(typeof candidate.code === 'string'
+            ? { code: candidate.code }
+            : {}),
           error: candidate.error ?? exception.name,
           timestamp: new Date().toISOString(),
           path,

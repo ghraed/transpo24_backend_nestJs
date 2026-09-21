@@ -1,4 +1,9 @@
 import {
+  requestDetailsVersion,
+  REQUEST_VERSION_SELECT,
+  RequestVersionSource,
+} from './request-details-version';
+import {
   APPROVED_MATCHING_VEHICLE_WHERE,
   MATCHING_AVAILABILITY_SELECT,
   CoveragePin,
@@ -311,6 +316,7 @@ interface UploadDriverOnboardingDocumentsInput {
 }
 
 interface SendDriverPriceOfferInput {
+  requestVersion?: string;
   userId: string;
   requestId: string;
   price: number;
@@ -503,7 +509,8 @@ type DriverRatingSource = {
   } | null;
 };
 
-type RequestDetailsSource = {
+type RequestDetailsSource = RequestVersionSource & {
+  createdAt: Date;
   acceptedOfferId: string | null;
   id: string;
   customerId: string;
@@ -721,6 +728,8 @@ const DRIVER_REQUEST_ALERT_SELECT = {
 } satisfies Prisma.DriverRequestAlertSelect;
 
 const DRIVER_REQUEST_DETAILS_SELECT = {
+  ...REQUEST_VERSION_SELECT,
+  createdAt: true,
   acceptedOfferId: true,
   id: true,
   status: true,
@@ -1905,51 +1914,60 @@ export class DriverService {
     const profile = await this.ensureDriverProfile(input.userId);
     this.ensureDriverOnboardingForAlerts(profile);
 
-    const request = await this.prisma.transportRequest.findUnique({
-      where: { id: input.requestId },
-      select: { id: true, status: true },
-    });
-    if (!request) throw new NotFoundException('Request not found.');
-    if (
-      request.status !== TransportRequestStatus.PENDING_QUOTES &&
-      request.status !== TransportRequestStatus.QUOTED
-    ) {
-      throw new BadRequestException(
-        'Request is no longer available for quotes.',
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${input.requestId} FOR UPDATE`;
+      const request = await tx.transportRequest.findUnique({
+        where: { id: input.requestId },
+        select: DRIVER_REQUEST_DETAILS_SELECT,
+      });
+      if (!request) throw new NotFoundException('Request not found.');
+      if (
+        request.status !== TransportRequestStatus.PENDING_QUOTES &&
+        request.status !== TransportRequestStatus.QUOTED
+      ) {
+        throw new BadRequestException(
+          'Request is no longer available for quotes.',
+        );
+      }
+      const alert = await this.ensureDriverRequestAlert(
+        { requestId: request.id, driverId: profile.id },
+        tx,
       );
-    }
-
-    const alert = await this.ensureDriverRequestAlert({
-      requestId: request.id,
-      driverId: profile.id,
-    });
-
-    if (alert.status === DriverRequestAlertStatus.ACCEPTED) {
+      if (alert.status !== DriverRequestAlertStatus.ACCEPTED) {
+        const vehicles = await this.getApprovedDriverVehiclesTx(tx, profile.id);
+        const availability = await tx.driverAvailability.findUnique({
+          where: { driverId: profile.id },
+          select: MATCHING_AVAILABILITY_SELECT,
+        });
+        if (
+          !availability ||
+          !isEligibleRequest(request, availability, vehicles, new Date(), false)
+        ) {
+          throw new BadRequestException(
+            'Request is outside your coverage or availability.',
+          );
+        }
+      }
+      const updated =
+        alert.status === DriverRequestAlertStatus.ACCEPTED
+          ? alert
+          : await tx.driverRequestAlert.update({
+              where: { id: alert.id },
+              data: {
+                status: DriverRequestAlertStatus.ACCEPTED,
+                acceptedAt: new Date(),
+                ignoredAt: null,
+                seenAt: alert.seenAt ?? new Date(),
+              },
+              select: DRIVER_REQUEST_ALERT_SELECT,
+            });
       return {
-        alertId: alert.id,
-        requestId: alert.requestId,
-        alertStatus: alert.status,
+        alertId: updated.id,
+        requestId: updated.requestId,
+        alertStatus: updated.status,
         nextStep: 'SEND_PRICE_OFFER',
       };
-    }
-
-    const updated = await this.prisma.driverRequestAlert.update({
-      where: { id: alert.id },
-      data: {
-        status: DriverRequestAlertStatus.ACCEPTED,
-        acceptedAt: new Date(),
-        ignoredAt: null,
-        seenAt: alert.seenAt ?? new Date(),
-      },
-      select: DRIVER_REQUEST_ALERT_SELECT,
     });
-
-    return {
-      alertId: updated.id,
-      requestId: updated.requestId,
-      alertStatus: updated.status,
-      nextStep: 'SEND_PRICE_OFFER',
-    };
   }
 
   async ignoreDriverRequestAlert(
@@ -2017,6 +2035,8 @@ export class DriverService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Use the same lock as client edits; hold it through offer creation.
+      await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${input.requestId} FOR UPDATE`;
       const request = await tx.transportRequest.findUnique({
         where: { id: input.requestId },
         select: DRIVER_REQUEST_DETAILS_SELECT,
@@ -2024,6 +2044,17 @@ export class DriverService {
 
       if (!request) {
         throw new NotFoundException('Request not found.');
+      }
+
+      if (
+        !input.requestVersion ||
+        input.requestVersion !== requestDetailsVersion(request)
+      ) {
+        throw new ConflictException({
+          code: 'REQUEST_DETAILS_CHANGED',
+          message:
+            'The client changed one or more details of this job request. Review the updated details before sending an offer.',
+        });
       }
 
       if (
@@ -4345,11 +4376,14 @@ export class DriverService {
     }
   }
 
-  private async ensureDriverRequestAlert(input: {
-    requestId: string;
-    driverId: string;
-  }): Promise<RequestAlertSource> {
-    return this.prisma.driverRequestAlert.upsert({
+  private async ensureDriverRequestAlert(
+    input: {
+      requestId: string;
+      driverId: string;
+    },
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<RequestAlertSource> {
+    return db.driverRequestAlert.upsert({
       where: {
         requestId_driverId: {
           requestId: input.requestId,
@@ -4423,6 +4457,7 @@ export class DriverService {
         transmission: request.vehicleTransmission ?? null,
       },
       distanceKm,
+      requestCreatedAt: request.createdAt.toISOString(),
       createdAt: alert.createdAt.toISOString(),
       submittedAt: request.submittedAt
         ? request.submittedAt.toISOString()
@@ -4441,6 +4476,7 @@ export class DriverService {
 
     return {
       ...summary,
+      requestVersion: requestDetailsVersion(request),
       offerStatus,
       customerNote: request.customerNote,
       customer: {

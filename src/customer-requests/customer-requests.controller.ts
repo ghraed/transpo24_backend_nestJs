@@ -1,3 +1,6 @@
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { EditCustomerRequestDto } from './dto/edit-customer-request.dto';
+import { unlink } from 'node:fs/promises';
 import {
   Body,
   Delete,
@@ -188,6 +191,7 @@ export class CustomerRequestsController {
       furnitureDescription: dto.furnitureDescription,
       approximateItemCount: dto.approximateItemCount,
       needsHelpers: dto.needsHelpers ?? false,
+      helpersCount: dto.helpersCount,
       isImmediate: dto.isImmediate,
       scheduledPickupAt: dto.scheduledPickupAt
         ? new Date(dto.scheduledPickupAt)
@@ -198,6 +202,94 @@ export class CustomerRequestsController {
       deliveryLocation: dto.deliveryLocation,
       files: files ?? [],
     });
+  }
+
+  @Get(':requestId/edit')
+  getRequestForEdit(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.customerRequestsService.getRequestForEdit(
+      request.user.id,
+      requestId,
+    );
+  }
+
+  @Post(':requestId/edit')
+  @UseInterceptors(
+    FilesInterceptor('photos', MAX_PHOTOS_PER_REQUEST, {
+      storage: diskStorage({
+        destination: (req, _file, callback) => {
+          const requestIdValue = req.params?.requestId;
+          const requestId =
+            typeof requestIdValue === 'string'
+              ? requestIdValue
+              : 'unknown-request';
+          const targetDirectory = join(
+            process.cwd(),
+            'uploads',
+            'transport-requests',
+            requestId,
+          );
+          mkdirSync(targetDirectory, { recursive: true });
+          callback(null, targetDirectory);
+        },
+        filename: (_req, file, callback) => {
+          const randomSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const extension =
+            extname(file.originalname || '').toLowerCase() || '.jpg';
+          callback(null, `photo-${randomSuffix}${extension}`);
+        },
+      }),
+      limits: {
+        fileSize: MAX_PHOTO_SIZE_BYTES,
+      },
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+          callback(
+            new Error('Only JPEG, PNG, and WEBP images are allowed.'),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async editRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+    @Body('details') details: string,
+    @UploadedFiles() files: MulterFile[],
+  ) {
+    let dto: EditCustomerRequestDto;
+    try {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(details);
+      } catch {
+        throw new BadRequestException('Invalid request details.');
+      }
+      dto = (await new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }).transform(parsed, {
+        type: 'body',
+        metatype: EditCustomerRequestDto,
+      })) as EditCustomerRequestDto;
+    } catch (error) {
+      await Promise.all(
+        (files ?? []).map((file) => unlink(file.path).catch(() => undefined)),
+      );
+      throw error;
+    }
+    return this.customerRequestsService.editCustomerRequest(
+      request.user.id,
+      requestId,
+      dto,
+      files ?? [],
+    );
   }
 
   @Get(':requestId/status')

@@ -103,6 +103,7 @@ export class CustomerRequestResponseDto {
 }
 
 export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto {
+  canEdit!: boolean;
   cancellation!: {
     canCancelCollectedTrip: boolean;
     reason: string | null;

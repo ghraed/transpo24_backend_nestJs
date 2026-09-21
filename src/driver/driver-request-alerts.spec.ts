@@ -1,10 +1,19 @@
+import { DayOfWeek } from '@prisma/client';
 import { DriverService } from './driver.service';
 
 function setup(isOnline = true) {
   const findMany = jest.fn().mockResolvedValue([]);
-  const findUnique = jest
-    .fn()
-    .mockResolvedValue({ id: 'request', status: 'QUOTED' });
+  const findUnique = jest.fn().mockResolvedValue({
+    id: 'request',
+    status: 'QUOTED',
+    assignedDriverId: null,
+    acceptedOfferId: null,
+    isImmediate: true,
+    pickupLatitude: 0.01,
+    pickupLongitude: 0,
+    itemType: 'GOODS',
+    service: { key: 'GOODS_TRANSPORT' },
+  });
   const update = jest.fn().mockResolvedValue({
     id: 'alert',
     requestId: 'request',
@@ -18,7 +27,12 @@ function setup(isOnline = true) {
           isOnline,
           driver: { status: 'APPROVED', isProfileCompleted: true, cities: [] },
           timezone: 'UTC',
-          schedule: [],
+          schedule: Object.values(DayOfWeek).map((dayOfWeek) => ({
+            dayOfWeek,
+            isAvailable: true,
+            startTime: '00:00',
+            endTime: '24:00',
+          })),
           cityCoverage: [],
           acceptsImmediateRequests: true,
           acceptsScheduledRequests: true,
@@ -36,6 +50,14 @@ function setup(isOnline = true) {
     ensureDriverProfile: jest.fn().mockResolvedValue({ id: 'driver' }),
     ensureDriverOnboardingForAlerts: jest.fn(),
     getApprovedDriverVehicles: jest.fn().mockResolvedValue([]),
+    getApprovedDriverVehiclesTx: jest.fn().mockResolvedValue([
+      {
+        vehicleType: 'VAN',
+        capacityKg: 1000,
+        allowedCargoTypes: ['GOODS'],
+        workingSchedule: [],
+      },
+    ]),
     hasCompatibleDriverVehicleForRequest: jest.fn().mockReturnValue(false),
     calculateDistanceKm: jest.fn().mockReturnValue(100),
     ensureDriverRequestAlert: jest
@@ -49,6 +71,15 @@ function setup(isOnline = true) {
         requestId: request.id,
       })),
   });
+  const db = (
+    service as unknown as {
+      prisma: { $transaction: jest.Mock; $queryRaw: jest.Mock };
+    }
+  ).prisma;
+  db.$queryRaw = jest.fn().mockResolvedValue([]);
+  db.$transaction = jest
+    .fn()
+    .mockImplementation((fn: (tx: unknown) => Promise<unknown>) => fn(db));
   return { service, findMany, update };
 }
 
@@ -152,6 +183,42 @@ describe('job navigation and assignment access', () => {
       );
     },
   );
+
+  it('rejects acceptance when edited details no longer match driver coverage', async () => {
+    const { service, update } = setup();
+    Object.assign(service, {
+      ensureDriverRequestAlert: jest.fn().mockResolvedValue({
+        id: 'alert',
+        requestId: 'request',
+        status: 'EXPIRED',
+      }),
+    });
+    const db = (
+      service as unknown as {
+        prisma: {
+          transportRequest: { findUnique: jest.Mock };
+          $queryRaw: jest.Mock;
+        };
+      }
+    ).prisma;
+    db.transportRequest.findUnique.mockResolvedValue({
+      id: 'request',
+      status: 'PENDING_QUOTES',
+      isImmediate: true,
+      pickupLatitude: 45,
+      pickupLongitude: 8,
+      itemType: 'GOODS',
+      service: { key: 'GOODS_TRANSPORT' },
+    });
+    await expect(
+      service.acceptDriverRequestAlert({
+        userId: 'user',
+        requestId: 'request',
+      }),
+    ).rejects.toThrow('outside your coverage');
+    expect(db.$queryRaw).toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
 
   it('denies a previous viewer access after the customer books another driver', async () => {
     const { service } = setup();

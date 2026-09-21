@@ -316,6 +316,7 @@ export class NotificationsService {
   }
 
   async notifyDriversAboutNewTransportRequest(input: {
+    updated?: boolean;
     drivers: Array<{
       userId: string;
       requestId: string;
@@ -332,7 +333,9 @@ export class NotificationsService {
       await this.sendToUsers({
         userIds: [driver.userId],
         app: PushApp.DRIVER,
-        title: 'New transport request',
+        title: input.updated
+          ? 'Transport request updated'
+          : 'New transport request',
         body: `${driver.serviceType} · ${distanceLabel}`,
         type: 'NEW_TRANSPORT_REQUEST',
         data: {

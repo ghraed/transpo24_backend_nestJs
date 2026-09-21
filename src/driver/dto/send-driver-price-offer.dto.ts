@@ -10,6 +10,12 @@ import {
 } from 'class-validator';
 
 export class SendDriverPriceOfferDto {
+  // Missing versions from older apps must reach the same safe conflict response.
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  requestVersion?: string;
+
   @IsNumber()
   @Min(1)
   @Max(100000)
