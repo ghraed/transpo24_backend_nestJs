@@ -494,6 +494,25 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 - Progress remains **278/316 complete (88.0%); 38/316 remaining (12.0%)**,
   unweighted. No deployment, migration, commit or push.
 
+## M11 partial checkpoint — Trip submission verification (2026-09-24)
+
+- Read roadmap, locked decisions and checklist; continued M11 without redoing
+  completed features. Independently counted 278 completed and 38 open items.
+- Added 11 driver service regressions for pickup/delivery proof uploads,
+  authenticated request-specific delivery start, denied uploads, malformed
+  responses, coordinate validation and explicit retry after network failure.
+  Fixtures use a French driver and Swiss job; networking is mocked, so these
+  tests verify mobile transport contracts, not live cross-tenant authorization.
+- Validation: 38 driver tests / 4 suites (submission, accepted-job navigation,
+  background tracking and chat socket lifecycle), 38 backend tests / 3 suites
+  (trips, delivery confirmation and eligibility), driver TypeScript/privacy,
+  changed-test ESLint and diff whitespace checks passed.
+- Active-job lifecycle remains unchecked. Screen-level pickup/delivery actions,
+  native proof-photo capture/upload, expenses, payout and live/device acceptance
+  still need verification. M12–M14 and final acceptance remain open.
+- Progress remains **278/316 complete (88.0%); 38/316 remaining (12.0%)**,
+  unweighted, not an effort estimate. No deployment, migration, commit or push.
+
 ## Exact next task: continue M11 — Driver mobile
 
 Preserve implemented market, coverage, currency, discovery, detail and offer flow,
