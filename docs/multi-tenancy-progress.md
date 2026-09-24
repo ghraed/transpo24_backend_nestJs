@@ -378,13 +378,37 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
   Next milestone: **M11 — Driver mobile**. M12–M14 and final acceptance remain open.
   No production deployment/backfill, commit or push.
 
-## Exact next task: M11 — Driver mobile
+## M11 partial checkpoint — Driver market authentication (2026-09-24)
 
-Preserve completed M0–M10. Implement API-driven market selection/auth, read-only home
-market, operational-country and directional route-permission screens/statuses,
-candidate-backed jobs, route/country/currency presentation, and graceful stale-job
-handling. Verify cross-tenant offers and selected-driver lifecycle in the client.
-Read the driver AGENTS.md and mandated Expo v56 docs before editing.
-M12 security/performance acceptance, M13 compatibility and M14 production rollout
-remain pending. Resolve the documented client Jest stall before claiming full final
-acceptance. Do not enable multi-market production yet.
+- Verified existing backend: 527 tests passed before changes. Continued M11 without
+  redoing M0–M10; completed only the first four driver checklist items.
+- Reused the client market selector in the driver app with its own persisted key,
+  active saved-market validation, loading/error/retry/empty states and explicit choice.
+  Login/registration phone flows carry market through OTP verification and resend.
+  Trusted continuation sends the selected market; mismatch preserves the saved
+  credential and lets the driver correct the market. GPS does not select a market.
+- Driver profile shows home market read-only. Fixed `/driver/me` and profile-update
+  serialization to return the database tenant using the existing public serializer,
+  independently of driver country preferences. Added stable generic route-block and
+  actionable tenant-error messages; internal reasons are hidden.
+- Validation: **528 API tests / 48 suites**, API and driver TypeScript, driver privacy
+  checks, changed-driver-file ESLint, **15 focused driver tests / 3 suites**, and
+  Android production JavaScript/Hermes export pass. Full driver regression run still
+  has the two documented baseline failures: city-coverage fixture and node:test
+  fingerprint suite collected by Jest (142 passing tests in that run, before adding
+  12 further focused auth tests). No physical-device or native APK/AAB acceptance.
+- Remaining M11: operational-country and directional route-permission UI/statuses,
+  candidate job/geography/currency verification, graceful stale-job handling,
+  cross-tenant offers and active-job lifecycle acceptance. Offer UI still derives
+  currency from driver country and must be changed to request currency next.
+- **268/316 complete (84.8%); 48/316 remaining (15.2%)**, unweighted.
+  M11 remains in progress. No production changes, migration, commit or push.
+
+## Exact next task: continue M11 — Driver mobile
+
+Preserve M0–M10 and the verified M11 market-auth portion. Start with operational
+country and directional route-permission screens using the existing M6 endpoints.
+Then finish candidate-backed request geography/currency and stale-job handling.
+`send-price-offer.tsx` still derives currency from driver country; use the request's
+API currency instead. Verify cross-tenant offer and selected-driver lifecycle UI.
+M12–M14 and final acceptance remain open; production rollout has not occurred.

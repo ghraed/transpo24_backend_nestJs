@@ -1,3 +1,4 @@
+import type { PublicTenant } from '../../tenants/tenant.types';
 import { DriverStatus, PreferredLanguage } from '@prisma/client';
 
 export type DriverNextStep =
@@ -37,6 +38,8 @@ export interface DriverProfileResponseDto {
 
 export interface DriverMeResponseDto {
   user: {
+    tenantId?: string | null;
+    tenant?: PublicTenant | null;
     id: string;
     email: string;
     role: 'CUSTOMER' | 'DRIVER';

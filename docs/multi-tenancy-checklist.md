@@ -6,7 +6,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11–M14 remain pending; **next task: M11 — Driver mobile**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11 market authentication is implemented (partial checkpoint below); M11 coverage/request UI and M12–M14 remain pending. **Next task: continue M11 — Driver mobile**.
 
 - [Implementation handoff and exact next task](../backend/api/docs/multi-tenancy-progress.md)
 - [Architecture and installed versions](../backend/api/docs/multi-tenancy-discovery.md)
@@ -226,6 +226,32 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 - Checklist: **264/316 complete (83.5%); 52/316 remaining (16.5%)**, unweighted.
   Next milestone: **M11 — Driver mobile**. M12–M14 and final acceptance remain open.
   No production deployment/backfill, commit or push.
+
+## M11 partial checkpoint — Driver market authentication (2026-09-24)
+
+- Verified existing backend: 527 tests passed before changes. Continued M11 without
+  redoing M0–M10; completed only the first four driver checklist items.
+- Reused the client market selector in the driver app with its own persisted key,
+  active saved-market validation, loading/error/retry/empty states and explicit choice.
+  Login/registration phone flows carry market through OTP verification and resend.
+  Trusted continuation sends the selected market; mismatch preserves the saved
+  credential and lets the driver correct the market. GPS does not select a market.
+- Driver profile shows home market read-only. Fixed `/driver/me` and profile-update
+  serialization to return the database tenant using the existing public serializer,
+  independently of driver country preferences. Added stable generic route-block and
+  actionable tenant-error messages; internal reasons are hidden.
+- Validation: **528 API tests / 48 suites**, API and driver TypeScript, driver privacy
+  checks, changed-driver-file ESLint, **15 focused driver tests / 3 suites**, and
+  Android production JavaScript/Hermes export pass. Full driver regression run still
+  has the two documented baseline failures: city-coverage fixture and node:test
+  fingerprint suite collected by Jest (142 passing tests in that run, before adding
+  12 further focused auth tests). No physical-device or native APK/AAB acceptance.
+- Remaining M11: operational-country and directional route-permission UI/statuses,
+  candidate job/geography/currency verification, graceful stale-job handling,
+  cross-tenant offers and active-job lifecycle acceptance. Offer UI still derives
+  currency from driver country and must be changed to request currency next.
+- **268/316 complete (84.8%); 48/316 remaining (15.2%)**, unweighted.
+  M11 remains in progress. No production changes, migration, commit or push.
 
 # A. Verify projects
 
@@ -465,10 +491,10 @@ For selected cross-tenant driver:
 
 # R. Driver mobile — React Native + Expo
 
-- [ ] Fetch markets.
-- [ ] Market selection/auth.
-- [ ] Handle `TENANT_MISMATCH`.
-- [ ] Home market read-only.
+- [x] Fetch markets.
+- [x] Market selection/auth.
+- [x] Handle `TENANT_MISMATCH`.
+- [x] Home market read-only.
 - [ ] Operational-country screen.
 - [ ] Directional route-permission screen.
 - [ ] Approval statuses displayed.

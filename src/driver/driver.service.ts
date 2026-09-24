@@ -1,3 +1,4 @@
+import { publicTenant, type TenantIdentity } from '../tenants/tenant.types';
 import { MatchingService } from '../matching/matching.service';
 import {
   requestDetailsVersion,
@@ -367,7 +368,7 @@ type DriverProfileSource = {
   updatedAt: Date;
 };
 
-type DriverMeSource = {
+type DriverMeSource = TenantIdentity & {
   id: string;
   email: string;
   role: UserRole;
@@ -640,6 +641,8 @@ type AcceptedJobRequestSource = {
 };
 
 const DRIVER_ME_SELECT = {
+  tenantId: true,
+  tenant: true,
   id: true,
   email: true,
   role: true,
@@ -1296,6 +1299,8 @@ export class DriverService {
     });
 
     const mappedUser: DriverMeSource = {
+      tenantId: user.tenantId,
+      tenant: user.tenant,
       id: user.id,
       email: user.email,
       role: user.role,
@@ -5792,6 +5797,8 @@ export class DriverService {
 
     return {
       user: {
+        tenantId: user.tenantId ?? null,
+        tenant: publicTenant(user.tenant),
         id: user.id,
         email: user.email,
         role: 'DRIVER',
