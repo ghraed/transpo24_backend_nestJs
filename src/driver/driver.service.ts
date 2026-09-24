@@ -513,6 +513,7 @@ type DriverRatingSource = {
 };
 
 type RequestDetailsSource = RequestVersionSource & {
+  currency?: string | null;
   pickupCountryCode?: string | null;
   destinationCountryCode?: string | null;
   createdAt: Date;
@@ -4378,6 +4379,9 @@ export class DriverService {
     distanceKm: number | null,
   ): DriverRequestAlertSummaryDto {
     return {
+      currency: request.currency ?? null,
+      pickupCountryCode: request.pickupCountryCode ?? null,
+      destinationCountryCode: request.destinationCountryCode ?? null,
       customerNickname: request.customer?.nickname?.trim() || 'Customer',
       alertId: alert.id,
       requestId: request.id,

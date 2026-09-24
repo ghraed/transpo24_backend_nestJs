@@ -16,6 +16,9 @@ export interface DriverRequestAlertServiceDto {
 }
 
 export interface DriverRequestAlertSummaryDto {
+  currency?: string | null;
+  pickupCountryCode?: string | null;
+  destinationCountryCode?: string | null;
   requestCreatedAt: string;
   customerNickname: string;
   isCurrentlyEligible?: boolean;

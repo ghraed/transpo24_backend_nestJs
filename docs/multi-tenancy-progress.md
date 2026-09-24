@@ -404,6 +404,25 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 - **268/316 complete (84.8%); 48/316 remaining (15.2%)**, unweighted.
   M11 remains in progress. No production changes, migration, commit or push.
 
+## M11 partial checkpoint — Candidate discovery (2026-09-24)
+
+- Read the roadmap, locked decisions and current checklist; preserved completed
+  milestones and pre-existing uncommitted currency/geography work.
+- Verified API discovery requires an active driver candidate and current matching
+  authorization. The mobile list uses the authenticated API without home-market
+  filtering; cards open request details by ID for authoritative reload.
+- Removed the list's invented CHF fallback, displayed API route country codes,
+  and prevented a pending token read from subscribing after screen cleanup.
+- Seven new rendered tests cover server-returned jobs, detail navigation, missing/
+  invalid currencies, removal on refresh/deletion, and delayed socket setup.
+- Validation: 530 backend tests / 49 suites, 17 focused driver tests / 3 suites,
+  driver TypeScript/privacy checks and changed discovery-file ESLint passed.
+  Mobile APIs are mocked; no device, native-build or live lifecycle acceptance.
+- **275/316 complete (87.0%); 41/316 remaining (13.0%)**, unweighted.
+  M11 remains open for cross-tenant detail/offer verification, broader stale-job
+  handling and active-job lifecycle acceptance. M12–M14 and final acceptance
+  remain open. No deployment, migration, commit or push.
+
 ## M11 partial checkpoint — Request detail recovery (2026-09-24)
 
 - Continued the first incomplete milestone without redoing completed work.
