@@ -52,8 +52,8 @@ missing countries fail closed. This milestone alone is not production readiness.
 M8 now verifies socket room identity, candidate targeting and reconnect behavior;
 see [notification delivery and recovery](request-notifications.md). Current post-commit
 notifications have no durable outbox: a delivery failure after candidate commit
-is not retried by candidate creation. M9 still owns direct offer/current-policy
-and currency enforcement plus full selected-driver lifecycle authorization.
+is not retried by candidate creation. M9 now enforces direct offer/current-policy
+and request-currency checks; see [offer/lifecycle verification](offer-lifecycle.md).
 
 ## Reproduce verification
 

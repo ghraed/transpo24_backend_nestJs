@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isISO31661Alpha2 } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -319,6 +319,30 @@ export class MatchingService {
         )
         .map((r) => r.id),
     );
+  }
+
+  async assertCanOffer(
+    request: Request,
+    driverId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    // Recheck current policy in the caller's offer transaction.
+    if (request.service) {
+      await this.policy.assertAllowed(
+        {
+          fromCountryCode: request.pickupCountryCode ?? null,
+          toCountryCode: request.destinationCountryCode ?? null,
+          transportType: request.service.key,
+        },
+        db,
+      );
+    }
+    if (!(await this.canDiscover(request, driverId, db))) {
+      throw new ForbiddenException({
+        code: 'REQUEST_ACCESS_DENIED',
+        message: 'This request is no longer available to you.',
+      });
+    }
   }
 
   // Reload after candidate commit: a queued notification is not authorization.

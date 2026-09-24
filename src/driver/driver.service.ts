@@ -733,6 +733,7 @@ const DRIVER_REQUEST_ALERT_SELECT = {
 } satisfies Prisma.DriverRequestAlertSelect;
 
 const DRIVER_REQUEST_DETAILS_SELECT = {
+  currency: true,
   pickupCountryCode: true,
   destinationCountryCode: true,
   ...REQUEST_VERSION_SELECT,
@@ -2036,14 +2037,7 @@ export class DriverService {
   ): Promise<SendDriverPriceOfferResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
     this.ensureDriverOnboardingForAlerts(profile);
-    const normalizedCurrency = currencyForCountryCode(profile.countryCode);
-
     this.validateOfferInput(input);
-    if (!SUPPORTED_OFFER_CURRENCIES.has(normalizedCurrency)) {
-      throw new BadRequestException(
-        `currency must be one of: ${Array.from(SUPPORTED_OFFER_CURRENCIES).join(', ')}.`,
-      );
-    }
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Use the same lock as client edits; hold it through offer creation.
@@ -2055,6 +2049,20 @@ export class DriverService {
 
       if (!request) {
         throw new NotFoundException('Request not found.');
+      }
+
+      await this.matching.assertCanOffer(request, profile.id, tx);
+      const normalizedCurrency = request.currency?.trim().toUpperCase();
+      if (
+        !normalizedCurrency ||
+        !SUPPORTED_OFFER_CURRENCIES.has(normalizedCurrency) ||
+        (input.currency != null &&
+          input.currency.trim().toUpperCase() !== normalizedCurrency)
+      ) {
+        throw new BadRequestException({
+          code: 'CURRENCY_MISMATCH',
+          message: 'Offers must use the currency of this request.',
+        });
       }
 
       if (
@@ -4282,10 +4290,6 @@ export class DriverService {
       input.price > 100000
     ) {
       throw new BadRequestException('price must be between 1 and 100000.');
-    }
-
-    if (!input.currency?.trim()) {
-      throw new BadRequestException('currency is required.');
     }
 
     if (

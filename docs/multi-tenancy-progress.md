@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8 implemented** (checkpoint below); **M9–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8 implemented** (checkpoint below); **M9 implemented** (checkpoint below); **M10–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -328,9 +328,31 @@ No production changes or mobile builds. Contract: [request notifications](reques
 
 Checklist: **223/316 complete (70.6%); 93 remain (29.4%)**.
 
-## Exact next task: M9 — Offer/lifecycle authorization
+## M9 checkpoint — Offer/lifecycle authorization (2026-09-24)
 
-Preserve M0–M8. Recheck current candidate/eligibility and route policy on direct
-offers, enforce persisted request currency, and verify the selected cross-tenant
-driver's full existing lifecycle. Accepted/in-progress jobs must continue after
-route blocks. Mobile market/coverage UX remains M10/M11; rollout remains pending.
+Direct offers now recheck active candidates, current matching eligibility and route
+policy inside the request transaction, and enforce persisted request currency.
+Existing price/ETA/version/alert/duplicate checks and event contracts are preserved.
+A database-backed FR-driver/CH-job regression verifies the selected-driver lifecycle
+continues after a route block, including wallet selection, photos, chat, tracking,
+expenses, delivery, rating, payout scheduling and due-balance release. No external
+Stripe transfer or mobile device behavior is claimed.
+
+Validation: **527 unit tests / 47 suites with coverage**, **14 HTTP tests**,
+**7 new + 38 prior PostgreSQL scenarios**; one prior Redis scenario skipped.
+Build, TypeScript and schema validation passed. Existing driver-service lint errors
+remain; other changed TypeScript files pass. All 70 migrations applied only to
+isolated PostgreSQL 16. No production changes, schema change, backfill or commit.
+See [offer/lifecycle contract and verification](offer-lifecycle.md).
+
+Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
+
+## Exact next task: M10 — Client mobile
+
+Preserve completed M0–M9. Add API-driven market selection/persistence, market-aware
+auth and mismatch handling, read-only home market, cross-border/outside-home request
+UX, generic route-block handling and API currency presentation. Verify logout and
+account-switch cache isolation. Fix the legacy token expiry decoder before enabling
+JWT issuance. Read the mandated Expo v56 docs and applicable AGENTS.md first.
+M11 driver mobile, M12 security/performance acceptance, M13 compatibility and M14
+production rollout remain pending. Do not enable multi-market production yet.

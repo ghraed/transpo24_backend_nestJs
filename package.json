@@ -32,7 +32,8 @@
     "test:route-policy:integration": "npm run build && node --test scripts/test-route-policy.cjs",
     "test:route-block-admin:integration": "npm run build && node --test scripts/test-route-block-admin.cjs",
     "test:driver-coverage:integration": "npm run build && node --test scripts/test-driver-coverage.cjs",
-    "test:matching:integration": "npm run build && node --test scripts/test-request-matching.cjs"
+    "test:matching:integration": "npm run build && node --test scripts/test-request-matching.cjs",
+    "test:offer-lifecycle:integration": "npm run build && node --test scripts/test-offer-lifecycle.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",

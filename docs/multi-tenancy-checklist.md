@@ -6,7 +6,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9–M14 remain pending; **next task: M9 — Offer/lifecycle authorization**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10–M14 remain pending; **next task: M10 — Client mobile**.
 
 - [Implementation handoff and exact next task](../backend/api/docs/multi-tenancy-progress.md)
 - [Architecture and installed versions](../backend/api/docs/multi-tenancy-discovery.md)
@@ -174,6 +174,28 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 - Current progress: **223/316 (70.6%) complete; 93/316
   (29.4%) remaining**, unweighted. Next milestone: **M9**.
 
+## M9 checkpoint — 2026-09-24
+
+- Direct offers recheck active candidate/current eligibility and route policy
+  within the existing locked request transaction. Generic ROUTE_BLOCKED and
+  REQUEST_ACCESS_DENIED responses; no home-tenant equality requirement.
+- Persist request currency; omitted/null currency derives from the request and
+  conflicting/missing persisted currency fails closed. Price/ETA/version,
+  accepted-alert and duplicate checks and customer notifications preserved.
+- Real PostgreSQL FR-driver/CH-job flow verifies selection, pickup/delivery,
+  photos, chat, tracking, approach alert, expenses, rating and earning/payout
+  scheduling after a route block and candidate deactivation. GPS preserves tenant.
+  Wallet persistence is real; notifications and payout queue are test stubs.
+  Actual Stripe transfer, multipart uploads and device behavior are not claimed.
+- Validation: **527 API tests / 47 suites with coverage**, **14 HTTP tests**,
+  **7 new + 38 prior PostgreSQL scenarios**; one prior Redis scenario skipped.
+  Build, TypeScript and schema validation pass. Existing driver-service lint
+  errors remain; other changed TypeScript files pass. All 70 migrations applied
+  only to disposable PostgreSQL 16; no production/schema/mobile/admin changes.
+- [M9 offer/lifecycle contract](../backend/api/docs/offer-lifecycle.md).
+- Current progress: **250/316 (79.1%) complete; 66/316 (20.9%) remaining**,
+  unweighted. Next milestone: **M10 — Client mobile**. No commit or push.
+
 # A. Verify projects
 
 - [x] API confirmed NestJS + TypeScript.
@@ -336,8 +358,8 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 
 - [x] New request rejected immediately after block activation.
 - [x] Open unassigned requests get no new candidates.
-- [ ] New offers denied after route becomes blocked.
-- [ ] Accepted/in-progress jobs continue.
+- [x] New offers denied after route becomes blocked.
+- [x] Accepted/in-progress jobs continue.
 - [x] Admin UI warns about this.
 - [x] Queue worker rechecks current route block.
 - [x] Stale queue job cannot bypass block.
@@ -365,33 +387,33 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 
 # O. Offers
 
-- [ ] Candidate/current eligibility checked.
-- [ ] Route policy rechecked.
-- [ ] Non-candidate denied.
-- [ ] Cross-tenant candidate allowed.
-- [ ] Request currency enforced.
-- [ ] Price/ETA validation preserved.
-- [ ] Customer event/notification preserved.
+- [x] Candidate/current eligibility checked.
+- [x] Route policy rechecked.
+- [x] Non-candidate denied.
+- [x] Cross-tenant candidate allowed.
+- [x] Request currency enforced.
+- [x] Price/ETA validation preserved.
+- [x] Customer event/notification preserved.
 
 # P. Full job lifecycle
 
 For selected cross-tenant driver:
 
-- [ ] Accept.
-- [ ] En route pickup.
-- [ ] Arrived.
-- [ ] Pickup complete.
-- [ ] Pickup photos.
-- [ ] En route delivery.
-- [ ] Delivered.
-- [ ] Delivery photos.
-- [ ] Extra expenses.
-- [ ] Chat.
-- [ ] Tracking.
-- [ ] Approach alert.
-- [ ] Payment release.
-- [ ] Rating.
-- [ ] No step fails only because tenants differ.
+- [x] Accept.
+- [x] En route pickup.
+- [x] Arrived.
+- [x] Pickup complete.
+- [x] Pickup photos.
+- [x] En route delivery.
+- [x] Delivered.
+- [x] Delivery photos.
+- [x] Extra expenses.
+- [x] Chat.
+- [x] Tracking.
+- [x] Approach alert.
+- [x] Payment release.
+- [x] Rating.
+- [x] No step fails only because tenants differ.
 
 # Q. Client mobile — React Native + Expo
 
@@ -500,9 +522,9 @@ For selected cross-tenant driver:
 - [x] Driver near Swiss pickup.
 - [x] CH request creates candidate.
 - [x] Driver receives `requestNew`.
-- [ ] Driver submits offer.
+- [x] Driver submits offer.
 - [x] Driver cannot browse unrelated CH requests.
-- [ ] GPS crossing border never changes tenant.
+- [x] GPS crossing border never changes tenant.
 
 # X. Security
 
@@ -517,7 +539,7 @@ For selected cross-tenant driver:
 - [x] Socket room spoofing denied.
 - [x] Stale notification denied.
 - [x] Queue cannot bypass route block.
-- [ ] Direct offer endpoint cannot bypass route block.
+- [x] Direct offer endpoint cannot bypass route block.
 
 # Y. Performance
 

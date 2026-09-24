@@ -15,6 +15,7 @@ const snapshot = () => ({
     Object.keys(REQUEST_VERSION_SELECT).map((key) => [key, null]),
   ),
   id: 'request',
+  currency: 'EUR',
   customerId: 'customer',
   status: 'PENDING_QUOTES',
   itemTitle: 'Goods',
@@ -57,6 +58,7 @@ function setup() {
     } as never,
     {} as never,
     notifications as never,
+    { assertCanOffer: jest.fn().mockResolvedValue(undefined) } as never,
   );
   // Constructor order is Prisma, gateway, notifications.
   Object.assign(service, {
