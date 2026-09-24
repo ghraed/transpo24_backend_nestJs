@@ -513,6 +513,24 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 - Progress remains **278/316 complete (88.0%); 38/316 remaining (12.0%)**,
   unweighted, not an effort estimate. No deployment, migration, commit or push.
 
+## M11 partial checkpoint — Expense-screen verification (2026-09-24)
+
+- Read roadmap, locked decisions and current checklist; independently verified
+  278 completed and 38 remaining items. Continued M11 without redoing completed work.
+- Added 11 rendered expense-screen regressions: exact job ID and selected currency,
+  receipt submission, server-returned total, invalid/missing inputs, missing trip,
+  denied-access recovery, pending submission state, denied camera/library permission,
+  cancelled receipt selection and proof removal. Existing application code unchanged.
+- Validation: **35 driver tests / 3 suites** (expenses, trip submission, accepted-job
+  details), **38 backend tests / 3 suites** (trips, delivery confirmation, eligibility),
+  driver TypeScript/privacy checks, changed-test ESLint and diff whitespace passed.
+- Mobile APIs and image picker are mocked; native receipt capture/upload, live
+  cross-tenant authorization and live payments are not established by these tests.
+  M11 active-job lifecycle remains unchecked pending remaining screen-level
+  pickup/delivery, payout and device/live acceptance. M12–M14 remain open.
+- **278/316 complete (88.0%); 38/316 remaining (12.0%)**, unweighted task count,
+  not an effort estimate. No production deployment, migration, commit or push.
+
 ## Exact next task: continue M11 — Driver mobile
 
 Preserve implemented market, coverage, currency, discovery, detail and offer flow,
