@@ -1,6 +1,7 @@
 # CHECKLIST.md — Transpo24 Multi-Tenancy + Default-Allow Route Blocks
 
-Snapshot of the authoritative checklist in `../../../transpo24-multitenancy-default-allow-docs/CHECKLIST.md`, which is outside Git. Captured after M2 on 2026-09-24.
+> Versioned snapshot of `transpo24-multitenancy-default-allow-docs/CHECKLIST.md`
+> after M5 completion (2026-09-24). The shared source checklist remains outside Git.
 
 Use this checklist across API, client mobile, driver mobile and admin.
 
@@ -8,7 +9,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3–M14 remain pending; **next task: M3 — RouteBlock default-allow policy**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6–M14 remain pending; **next task: M6 — Driver operational coverage**.
 
 - [Implementation handoff and exact next task](multi-tenancy-progress.md)
 - [Architecture and installed versions](multi-tenancy-discovery.md)
@@ -47,6 +48,66 @@ M3–M14 remain pending; **next task: M3 — RouteBlock default-allow policy**.
 - Admin unchanged: typecheck, 12 web-push tests and production build passed.
 - No production deployment/backfill, mobile native build, commit or push occurred.
   Final acceptance and rollout checkboxes intentionally remain unchecked.
+
+## M3 checkpoint — 2026-09-24
+
+- Directional RouteBlock model/migration, central default-allow policy and
+  publication/open-edit enforcement implemented. Existing creation endpoints save
+  drafts; enforcement occurs when publishing, before write/dispatch.
+- Active duplicate rules rejected by partial unique indexes, including null/all
+  types. No cache or allowed-route records. Internal block reasons remain private.
+- Unresolved countries cannot bypass checks, even in geography compatibility mode.
+  A verified Google server geocoder is now required for publishing/open edits.
+- 481 unit tests / 44 suites with coverage, 14 HTTP tests, 21 PostgreSQL integration
+  tests (3 policy + 8 geography + 10 tenant), build, typecheck, schema validation,
+  changed-file lint passed. All 67 migrations applied to isolated PostgreSQL 16.
+- Accepted/in-progress lifecycle untouched. Admin API/auditing (M4), matching and
+  offer checks (M7–M9) still pending. No production deployment/backfill or commit.
+
+## M4 checkpoint — 2026-09-24
+
+- Admin-only list/detail/create/patch/soft-delete and effective route-check endpoints
+  implemented using existing authentication and ADMIN role guards.
+- Country/type/reason/status validation, bounded pagination, directional/type/status
+  filters and duplicate-active 409 errors (including reactivation).
+- New additive `20260924170000_add_route_block_audits` migration: actor, timestamp,
+  direction/type/reason/status before-and-after snapshots commit atomically with
+  policy changes. Row locks preserve accurate prior state on concurrent updates.
+- Shared policy lookup serves admin checks; internal reasons stay out of public errors.
+- Validation: **499 tests / 45 suites with coverage**, **14 HTTP e2e tests**,
+  **27 PostgreSQL tests** (6 admin + 3 policy + 8 geography + 10 tenant), build,
+  TypeScript, schema validation and changed-file lint passed. All **68 migrations**
+  applied to isolated PostgreSQL 16. No production deployment/backfill or commit.
+- Progress: **125/316 checklist items (39.6%)**; M0–M4 complete for their stated
+  implementation scope, M5–M14 pending. Counts are unweighted, not effort estimates.
+
+## M5 checkpoint — 2026-09-24
+
+- Verified existing M1–M4 code/contracts; **97 tests / 5 suites** passed for tenant
+  auth/public markets, request geography, route policy and admin route-block HTTP.
+  Completed API behavior was preserved; no schema/business-logic changes.
+- Added the admin Route Blocks resource/menu and home entry, guarded list/create/edit
+  pages, server pagination and origin/destination/type/status filters. Reuses the
+  existing Refine custom-provider pattern, Axios auth and API ADMIN guards.
+- Country names plus ISO codes, explicit direction/all-types labels, internal reason,
+  timestamps and creator ID displayed. Create/edit/activate/deactivate require a
+  review dialog showing direction/type and accepted/in-progress job warning.
+- Duplicate-active 409 errors remain visible with retry; activation is audited via
+  existing PATCH API. Reverse direction is explicitly unchanged, without claiming
+  it is allowed when another rule may block it. No destructive delete/allow rows.
+- Rollout warning explicitly identifies pending matching/offer enforcement (M7–M9).
+  Specific-type list filters match the API exactly; helper text explains that
+  all-type rules may also affect a route.
+- Validation: admin TypeScript, changed-file ESLint, production build, **12 web-push
+  tests**, and **7 browser scenario groups** passed. Browser API responses mocked;
+  verified auth denial, pagination/filters, cancel/status/duplicate flows,
+  create/edit/null payloads, same-country blocks, error/retry and mobile width.
+  Reproducible script: `admin/Transpo_24/scripts/test-route-blocks-browser.cjs`;
+  instructions: `admin/Transpo_24/docs/route-blocks.md`.
+- Build retains existing multiple-lockfile and unrelated image-element warnings.
+  No production changes, migration/backfill, commit or push. M6–M14 remain pending.
+- Current progress: **145/316 checklist items (45.9%)**; counts are
+  unweighted and do not indicate production readiness.
 
 # A. Verify projects
 
@@ -112,41 +173,41 @@ M3–M14 remain pending; **next task: M3 — RouteBlock default-allow policy**.
 
 # E. RouteBlock database
 
-- [ ] Add `RouteBlock`.
-- [ ] Add from country.
-- [ ] Add to country.
-- [ ] Add optional transport type.
-- [ ] Add reason.
-- [ ] Add active flag.
-- [ ] Add creator if compatible.
-- [ ] Add timestamps.
-- [ ] Add indexes.
-- [ ] Add migration.
-- [ ] Equivalent duplicate active rule prevented/warned.
-- [ ] Null transport type means all.
-- [ ] Directionality preserved.
-- [ ] Same-country block supported.
+- [x] Add `RouteBlock`.
+- [x] Add from country.
+- [x] Add to country.
+- [x] Add optional transport type.
+- [x] Add reason.
+- [x] Add active flag.
+- [x] Add creator if compatible.
+- [x] Add timestamps.
+- [x] Add indexes.
+- [x] Add migration.
+- [x] Equivalent duplicate active rule prevented/warned.
+- [x] Null transport type means all.
+- [x] Directionality preserved.
+- [x] Same-country block supported.
 
 # F. Route policy service
 
-- [ ] Central `isBlocked()` exists.
-- [ ] All-type block checked.
-- [ ] Type-specific block checked.
-- [ ] Any matching active block returns blocked.
-- [ ] No matching block returns allowed.
-- [ ] No allowlist fallback exists.
-- [ ] No DB row required for allowed routes.
-- [ ] Cache invalidation works if cache is used.
-- [ ] Unit tests cover precedence.
+- [x] Central `isBlocked()` exists.
+- [x] All-type block checked.
+- [x] Type-specific block checked.
+- [x] Any matching active block returns blocked.
+- [x] No matching block returns allowed.
+- [x] No allowlist fallback exists.
+- [x] No DB row required for allowed routes.
+- [x] Cache invalidation works if cache is used (not applicable: no policy cache).
+- [x] Unit tests cover precedence.
 
 # G. Request creation
 
 - [x] Customer tenant derived from auth.
 - [x] Pickup country resolved.
 - [x] Destination country resolved.
-- [ ] Route block checked.
-- [ ] `ROUTE_BLOCKED` returned when blocked.
-- [ ] No block means request allowed.
+- [x] Route block checked.
+- [x] `ROUTE_BLOCKED` returned when blocked.
+- [x] No block means request allowed.
 - [x] Origin tenant resolved.
 - [x] Currency persisted.
 - [x] Request persisted.
@@ -212,7 +273,7 @@ M3–M14 remain pending; **next task: M3 — RouteBlock default-allow policy**.
 - [ ] Open unassigned requests get no new candidates.
 - [ ] New offers denied after route becomes blocked.
 - [ ] Accepted/in-progress jobs continue.
-- [ ] Admin UI warns about this.
+- [x] Admin UI warns about this.
 - [ ] Queue worker rechecks current route block.
 - [ ] Stale queue job cannot bypass block.
 
@@ -305,57 +366,57 @@ For selected cross-tenant driver:
 # S. Admin — Next.js + Refine
 
 - [x] Existing admin resource pattern inspected.
-- [ ] `Route Blocks` menu/resource added.
-- [ ] List page added.
-- [ ] Create form added.
-- [ ] Edit form added.
-- [ ] Activate/deactivate control added.
-- [ ] Origin filter.
-- [ ] Destination filter.
-- [ ] Transport-type filter.
-- [ ] Active/inactive filter.
-- [ ] Direction shown clearly.
-- [ ] All-types vs specific type shown.
-- [ ] Reason shown.
-- [ ] Timestamps shown.
-- [ ] Creator shown if available.
-- [ ] Duplicate active rule warned/prevented.
-- [ ] Confirmation explicitly states FROM -> TO.
-- [ ] Reverse route warning shown where useful.
-- [ ] Existing in-progress jobs warning shown.
-- [ ] Admin permission enforced.
+- [x] `Route Blocks` menu/resource added.
+- [x] List page added.
+- [x] Create form added.
+- [x] Edit form added.
+- [x] Activate/deactivate control added.
+- [x] Origin filter.
+- [x] Destination filter.
+- [x] Transport-type filter.
+- [x] Active/inactive filter.
+- [x] Direction shown clearly.
+- [x] All-types vs specific type shown.
+- [x] Reason shown.
+- [x] Timestamps shown.
+- [x] Creator shown if available.
+- [x] Duplicate active rule warned/prevented.
+- [x] Confirmation explicitly states FROM -> TO.
+- [x] Reverse route warning shown where useful.
+- [x] Existing in-progress jobs warning shown.
+- [x] Admin permission enforced.
 
 # T. Admin API
 
-- [ ] List route blocks.
-- [ ] Create route block.
-- [ ] Update route block.
-- [ ] Activate/deactivate.
-- [ ] Delete/soft-delete following convention.
-- [ ] Effective route-status check endpoint/service.
-- [ ] Country validation.
-- [ ] Transport-type validation.
-- [ ] Reason validation.
-- [ ] Actor auditing.
-- [ ] Permission tests.
-- [ ] Directionality tests.
-- [ ] All-types precedence tests.
+- [x] List route blocks.
+- [x] Create route block.
+- [x] Update route block.
+- [x] Activate/deactivate.
+- [x] Delete/soft-delete following convention.
+- [x] Effective route-status check endpoint/service.
+- [x] Country validation.
+- [x] Transport-type validation.
+- [x] Reason validation.
+- [x] Actor auditing.
+- [x] Permission tests.
+- [x] Directionality tests.
+- [x] All-types precedence tests.
 
 # U. Required route-policy tests
 
-- [ ] Empty RouteBlock table: FR -> CH allowed.
-- [ ] Empty table: CH -> LB allowed.
-- [ ] Empty table: LB -> LB allowed.
-- [ ] Add LB -> SY all-types block: LB -> SY rejected.
-- [ ] SY -> LB remains allowed.
-- [ ] LB -> FR remains allowed.
-- [ ] Disable LB -> SY block: LB -> SY allowed again.
-- [ ] Add FR -> CH furniture-only block.
-- [ ] FR -> CH furniture rejected.
-- [ ] FR -> CH vehicle allowed.
-- [ ] FR -> CH motorcycle allowed.
-- [ ] FR -> CH goods allowed.
-- [ ] Same-country block works.
+- [x] Empty RouteBlock table: FR -> CH allowed.
+- [x] Empty table: CH -> LB allowed.
+- [x] Empty table: LB -> LB allowed.
+- [x] Add LB -> SY all-types block: LB -> SY rejected.
+- [x] SY -> LB remains allowed.
+- [x] LB -> FR remains allowed.
+- [x] Disable LB -> SY block: LB -> SY allowed again.
+- [x] Add FR -> CH furniture-only block.
+- [x] FR -> CH furniture rejected.
+- [x] FR -> CH vehicle allowed.
+- [x] FR -> CH motorcycle allowed.
+- [x] FR -> CH goods allowed.
+- [x] Same-country block works.
 
 # V. Required tenant/request separation tests
 
@@ -387,7 +448,7 @@ For selected cross-tenant driver:
 - [ ] Arbitrary driver request access denied.
 - [ ] Candidate-specific access allowed.
 - [ ] Candidate does not expose unrelated tenant data.
-- [ ] Admin route-block permission enforced.
+- [x] Admin route-block permission enforced.
 - [ ] Socket room spoofing denied.
 - [ ] Stale notification denied.
 - [ ] Queue cannot bypass route block.
@@ -395,14 +456,14 @@ For selected cross-tenant driver:
 
 # Y. Performance
 
-- [ ] RouteBlock lookup indexed.
+- [x] RouteBlock lookup indexed.
 - [ ] Driver country lookup indexed.
 - [ ] Driver route lookup indexed.
 - [ ] Candidate lookup indexed.
 - [ ] Open request lookup indexed.
 - [ ] No global driver scan.
 - [ ] No global request scan.
-- [ ] Route policy does not enumerate allowed routes.
+- [x] Route policy does not enumerate allowed routes.
 
 # Z. Backward compatibility
 

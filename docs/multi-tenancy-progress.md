@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -220,7 +220,7 @@ All 68 migrations applied to isolated PostgreSQL 16. Reproducible new command:
 empty disposable `_test` database only). Existing unrelated lint/mobile baseline
 limitations still apply. No production migration, deployment, commit or push.
 
-## Exact next task: M5 — Admin Next.js/Refine route-block UI
+## M5 implementation scope (completed below)
 
 Reuse existing admin resources/provider/auth. Add Route Blocks menu, paginated
 list and filters, create/edit forms, active toggle, clear FROM -> TO and all-type
@@ -230,3 +230,34 @@ Use M4 endpoints above. Keep existing completed API work and follow M6 afterward
 
 Checklist progress: 125/316 checked (39.6%); 191 remain. Milestones M0–M4: 5/15
 (33.3%), unweighted. Full feature and production rollout remain incomplete.
+
+## M5 checkpoint — Admin route-block UI (2026-09-24)
+
+Implemented in `admin/Transpo_24`, preserving completed API/mobile code:
+
+- Refine resource, sidebar/home navigation, authenticated ADMIN list/create/edit.
+- Existing custom provider/Axios auth; M4 server pagination and four exact filters.
+- ISO country selectors, explicit direction/type, status, reason, timestamps,
+  creator ID, reviewed create/edit/activation/deactivation and duplicate conflict UX.
+- Reverse direction unchanged; accepted/in-progress jobs not auto-cancelled.
+  UI explicitly warns that matching/offer enforcement remains pending M7–M9.
+- Regression verification: 97 existing API tests / 5 suites passed. Admin typecheck,
+  changed-file lint, production build, 12 web-push tests and 7 mocked-API browser
+  scenario groups passed (including mobile-width layout and no runtime errors).
+- Browser test and reproducible commands: `admin/Transpo_24/docs/route-blocks.md`.
+  No live backend/browser integration, production changes, commit or push.
+
+Current checklist: **145/316 (45.9%)**, unweighted. M0–M5 implemented for
+their stated scope; production rollout and full feature acceptance remain pending.
+
+## Exact next task: M6 — Driver operational coverage
+
+Read roadmap/decisions/current checklist and preserve M0–M5. Inspect existing
+DriverProfile, operational areas/country data and admin driver approval conventions.
+Implement operational-country coverage with pickup/dropoff permissions, explicit
+approval statuses and driver/country uniqueness, plus directional route permissions
+with driver/from/to uniqueness. Home-country initialization must be explicit and
+compatible with reviewed tenant backfills; foreign coverage is never auto-approved
+and GPS never grants permissions. Add additive migrations and meaningful API/DB
+regressions. Follow with centralized eligibility/candidates in M7; driver mobile
+management UI remains M11. Do not enable cross-market production rollout yet.
