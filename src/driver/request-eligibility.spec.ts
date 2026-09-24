@@ -320,8 +320,10 @@ describe('dispatch, Jobs and map consistency', () => {
       const r = {
         ...request(),
         id: 'request',
+        pickupCountryCode: 'CH',
+        destinationCountryCode: 'CH',
         service: { key: 'GOODS_TRANSPORT', nameEn: 'Goods' },
-        driverAlerts: [],
+        driverAlerts: [{ driverId: 'driver', isActive: true }],
         createdAt: now,
         submittedAt: now,
       };
@@ -344,21 +346,35 @@ describe('dispatch, Jobs and map consistency', () => {
         status: 'NEW',
         createdAt: now,
       });
+      const matchingDriver = {
+        id: 'driver',
+        userId: 'user',
+        availability: a,
+        vehicles,
+        operationalCountries: [
+          { countryCode: 'CH', canPickup: true, canDropoff: true },
+        ],
+        routePermissions: [{ fromCountryCode: 'CH', toCountryCode: 'CH' }],
+      };
       const prisma = {
+        routeBlock: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
         driverProfile: {
-          findMany: jest
-            .fn()
-            .mockResolvedValue([
-              { id: 'driver', userId: 'user', availability: a, vehicles },
-            ]),
+          findMany: jest.fn().mockResolvedValue([matchingDriver]),
         },
         driverAvailability: { findUnique: jest.fn().mockResolvedValue(a) },
         transportRequest: { findMany: jest.fn().mockResolvedValue([r]) },
         driverRequestAlert: {
           findMany: jest.fn().mockResolvedValue([]),
           create,
+          upsert: create,
         },
       };
+      Object.assign(prisma.driverProfile, {
+        findFirst: jest.fn().mockResolvedValue(matchingDriver),
+      });
       const gateway = {
         getDriverConnectionCount: jest.fn().mockReturnValue(1),
         emitRequestNew: jest.fn(),
@@ -380,11 +396,17 @@ describe('dispatch, Jobs and map consistency', () => {
           ): Promise<{ driverNotifications: unknown[] }>;
         }
       ).dispatchSubmittedRequestToEligibleDrivers(r);
+      prisma.driverRequestAlert.findMany.mockResolvedValue(
+        scenario === 'offline' ? [] : [{ requestId: r.id }],
+      );
       const driver = new DriverService(
         prisma as never,
         {} as never,
         gateway as never,
       );
+      Object.assign((driver as unknown as { matching: object }).matching, {
+        refreshDriver: jest.fn(),
+      });
       Object.assign(driver, {
         ensureDriverProfile: async () => ({
           id: 'driver',

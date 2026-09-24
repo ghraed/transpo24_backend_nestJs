@@ -1,3 +1,5 @@
+import { RequestMatchingQueueService } from './request-matching-queue.service';
+import { MatchingModule } from '../matching/matching.module';
 import { RoutePolicyModule } from '../route-policy/route-policy.module';
 import { RequestGeographyService } from './request-geography.service';
 import { Module, forwardRef } from '@nestjs/common';
@@ -17,6 +19,7 @@ import { CustomerPlacesService } from './customer-places.service';
 
 @Module({
   imports: [
+    MatchingModule,
     RoutePolicyModule,
     AuthModule,
     forwardRef(() => ChatModule),
@@ -30,6 +33,7 @@ import { CustomerPlacesService } from './customer-places.service';
     CustomerRequestsController,
   ],
   providers: [
+    RequestMatchingQueueService,
     RequestGeographyService,
     CustomerPlacesService,
     CustomerRequestsService,

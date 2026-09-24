@@ -31,7 +31,8 @@
     "test:geography:integration": "npm run build && node --test scripts/test-request-geography.cjs",
     "test:route-policy:integration": "npm run build && node --test scripts/test-route-policy.cjs",
     "test:route-block-admin:integration": "npm run build && node --test scripts/test-route-block-admin.cjs",
-    "test:driver-coverage:integration": "npm run build && node --test scripts/test-driver-coverage.cjs"
+    "test:driver-coverage:integration": "npm run build && node --test scripts/test-driver-coverage.cjs",
+    "test:matching:integration": "npm run build && node --test scripts/test-request-matching.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",

@@ -47,6 +47,14 @@ function setup(isOnline = true) {
     {} as never,
   );
   Object.assign(service, {
+    matching: {
+      refreshDriver: jest.fn(),
+      discoverable: jest
+        .fn()
+        .mockImplementation(
+          (rows: { id: string }[]) => new Set(rows.map((r) => r.id)),
+        ),
+    },
     ensureDriverProfile: jest.fn().mockResolvedValue({ id: 'driver' }),
     ensureDriverOnboardingForAlerts: jest.fn(),
     getApprovedDriverVehicles: jest.fn().mockResolvedValue([]),
@@ -106,9 +114,9 @@ describe('unresolved driver job requests', () => {
       expect(query.where.assignedDriverId).toBeNull();
       expect(query.where.acceptedOfferId).toBeNull();
       expect(query.where.offers).toBeUndefined();
-      expect(query.where.driverAlerts).toEqual(
-        online ? undefined : { some: { driverId: 'driver' } },
-      );
+      expect(query.where.driverAlerts).toEqual({
+        some: { driverId: 'driver', isActive: true },
+      });
     },
   );
 

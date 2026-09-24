@@ -1,3 +1,4 @@
+import { MatchingModule } from '../matching/matching.module';
 import { DriverCoverageModule } from '../driver-coverage/driver-coverage.module';
 import { Module } from '@nestjs/common';
 
@@ -11,6 +12,7 @@ import { DriverService } from './driver.service';
 
 @Module({
   imports: [
+    MatchingModule,
     DriverCoverageModule,
     AuthModule,
     TripsModule,

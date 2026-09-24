@@ -1,7 +1,6 @@
-# CHECKLIST.md — Transpo24 Multi-Tenancy + Default-Allow Route Blocks
+<!-- Snapshot of the authoritative transpo24-multitenancy-default-allow-docs/CHECKLIST.md, captured after M7 on 2026-09-24. -->
 
-> Versioned snapshot of `transpo24-multitenancy-default-allow-docs/CHECKLIST.md`
-> after M5 completion (2026-09-24). The shared source checklist remains outside Git.
+# CHECKLIST.md — Transpo24 Multi-Tenancy + Default-Allow Route Blocks
 
 Use this checklist across API, client mobile, driver mobile and admin.
 
@@ -9,11 +8,11 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6–M14 remain pending; **next task: M6 — Driver operational coverage**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8–M14 remain pending; **next task: M8 — Socket/push targeting**.
 
-- [Implementation handoff and exact next task](multi-tenancy-progress.md)
-- [Architecture and installed versions](multi-tenancy-discovery.md)
-- [Migration, backfill and rollout settings](multi-tenancy-rollout.md)
+- [Implementation handoff and exact next task](../backend/api/docs/multi-tenancy-progress.md)
+- [Architecture and installed versions](../backend/api/docs/multi-tenancy-discovery.md)
+- [Migration, backfill and rollout settings](../backend/api/docs/multi-tenancy-rollout.md)
 - M2: server-resolved request country codes, customer/origin tenant separation,
   existing request currency reuse, all creation/edit/submission paths and responses.
   New migration: `20260924150000_add_request_geography`; no historical data guessed.
@@ -108,6 +107,49 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
   No production changes, migration/backfill, commit or push. M6–M14 remain pending.
 - Current progress: **145/316 checklist items (45.9%)**; counts are
   unweighted and do not indicate production readiness.
+
+## M6 checkpoint — 2026-09-24
+
+- Separate operational-country pickup/dropoff permissions and directional route
+  permissions, approval statuses, uniqueness, indexes and additive migration.
+- Driver-owned pending requests; ADMIN review with reviewer/time. Repeat requests
+  cannot reset suspension/rejection or expand approved permissions.
+- Explicit, idempotent home initialization uses reviewed Tenant assignment and
+  creates PENDING rows. Foreign coverage is not auto-approved; GPS grants nothing.
+- Shared approved-country/exact-route predicate prepared for M7 integration.
+  Matching/offer enforcement remains M7–M9; mobile management remains M11.
+- Validation: **515 API tests / 46 suites with coverage**, **14 HTTP e2e tests**,
+  **30 PostgreSQL tests**, build, typecheck, schema validation and changed-file lint.
+  All **69 migrations** applied to isolated PostgreSQL 16. No production changes.
+- Current progress: **160/316 checklist items (50.6%)**, unweighted.
+  M0–M6 implemented for their stated scope; next milestone is **M7**.
+
+## M7 checkpoint — 2026-09-24
+
+- Verified completed behavior with 30 M1–M6 PostgreSQL regression scenarios and
+  the full API suite; continued from M7 without rewriting completed milestones.
+- Reused `DriverRequestAlert` as the persisted RequestCandidate bridge, adding
+  independent active/matched state and candidate/open-route indexes. Existing
+  alerts remain inactive until authorized matching; unique request/driver upserts.
+- Centralized current platform policy, approved operational countries/direction,
+  driver state, vehicle/documents, capacity, radius, schedule and offer rules.
+  Home tenant is not a matching boundary. Discovery requires an active candidate
+  and current authorization; unrelated jobs remain hidden.
+- Driver refresh pages only approved directions (100/page); discovery batches
+  policy/approval reads. Existing selected-driver details remain available.
+- Opt-in ID-only BullMQ worker reloads/locks current requests and respects blocks
+  added before processing. Synchronous publication remains the default/fallback.
+- Validation: **519 API tests / 47 suites with coverage**, **14 HTTP tests**,
+  **38 integration scenarios** (30 existing + 8 matching, including isolated real
+  Redis delivery), build, TypeScript and schema validation. All **70 migrations**
+  applied to isolated PostgreSQL 16. New/changed code lint checked; existing driver
+  nickname/formatting lint errors preserved. Full repository lint is not green.
+- No production migration/backfill, deployment, mobile/admin changes, commit or
+  push. Reviewed driver coverage is required before enforcing live matching.
+  M8 notification delivery and M9 direct offer/currency/lifecycle checks remain.
+- Details: [M7 contract and verification](../backend/api/docs/request-matching.md).
+- Current progress: **205/316 checklist items (64.9%)**,
+  unweighted. Next milestone: **M8 — Socket/push targeting**.
 
 # A. Verify projects
 
@@ -211,7 +253,7 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 - [x] Origin tenant resolved.
 - [x] Currency persisted.
 - [x] Request persisted.
-- [ ] Matching queued.
+- [x] Matching queued.
 - [x] Same-country request works.
 - [x] Cross-border request works.
 - [x] Customer may create request outside home tenant.
@@ -219,63 +261,63 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 
 # H. Driver coverage
 
-- [ ] Operational-country model added/reused.
-- [ ] Pickup permission exists.
-- [ ] Dropoff permission exists.
-- [ ] Approval status exists.
-- [ ] Driver/country uniqueness exists.
-- [ ] Home-country coverage initialized appropriately.
-- [ ] Foreign coverage is not auto-approved.
-- [ ] GPS does not grant permission.
+- [x] Operational-country model added/reused.
+- [x] Pickup permission exists.
+- [x] Dropoff permission exists.
+- [x] Approval status exists.
+- [x] Driver/country uniqueness exists.
+- [x] Home-country coverage initialized appropriately.
+- [x] Foreign coverage is not auto-approved.
+- [x] GPS does not grant permission.
 
 # I. Driver route permissions
 
-- [ ] Directional route permission exists.
-- [ ] Approval status exists.
-- [ ] Unique driver/from/to exists.
-- [ ] FR -> CH differs from CH -> FR.
-- [ ] Pending/rejected/suspended do not authorize.
+- [x] Directional route permission exists.
+- [x] Approval status exists.
+- [x] Unique driver/from/to exists.
+- [x] FR -> CH differs from CH -> FR.
+- [x] Pending/rejected/suspended do not authorize.
 
 # J. RequestCandidate
 
-- [ ] Candidate model added/reused.
-- [ ] Request relation exists.
-- [ ] Driver relation exists.
-- [ ] Active state exists.
-- [ ] Unique request/driver exists.
-- [ ] Indexes exist.
-- [ ] Upsert is idempotent.
-- [ ] Access is request-specific only.
+- [x] Candidate model added/reused.
+- [x] Request relation exists.
+- [x] Driver relation exists.
+- [x] Active state exists.
+- [x] Unique request/driver exists.
+- [x] Indexes exist.
+- [x] Upsert is idempotent.
+- [x] Access is request-specific only.
 
 # K. Matching
 
-- [ ] Central eligibility service exists.
-- [ ] Driver active check.
-- [ ] Driver approval check.
-- [ ] Online check if applicable.
-- [ ] Request state check.
-- [ ] Current route-block check.
-- [ ] Operational-country check.
-- [ ] Directional driver-route check.
-- [ ] Vehicle/type check.
-- [ ] Capacity check.
-- [ ] Document checks.
-- [ ] Location/radius check.
-- [ ] Schedule check if applicable.
-- [ ] Existing-offer checks.
-- [ ] Driver tenant equality is NOT mandatory.
-- [ ] Cross-tenant candidate works.
-- [ ] Matching avoids global scans/N+1.
+- [x] Central eligibility service exists.
+- [x] Driver active check.
+- [x] Driver approval check.
+- [x] Online check if applicable.
+- [x] Request state check.
+- [x] Current route-block check.
+- [x] Operational-country check.
+- [x] Directional driver-route check.
+- [x] Vehicle/type check.
+- [x] Capacity check.
+- [x] Document checks.
+- [x] Location/radius check.
+- [x] Schedule check if applicable.
+- [x] Existing-offer checks.
+- [x] Driver tenant equality is NOT mandatory.
+- [x] Cross-tenant candidate works.
+- [x] Matching avoids global scans/N+1.
 
 # L. Blocking existing open work
 
-- [ ] New request rejected immediately after block activation.
-- [ ] Open unassigned requests get no new candidates.
+- [x] New request rejected immediately after block activation.
+- [x] Open unassigned requests get no new candidates.
 - [ ] New offers denied after route becomes blocked.
 - [ ] Accepted/in-progress jobs continue.
 - [x] Admin UI warns about this.
-- [ ] Queue worker rechecks current route block.
-- [ ] Stale queue job cannot bypass block.
+- [x] Queue worker rechecks current route block.
+- [x] Stale queue job cannot bypass block.
 
 # M. Socket.IO
 
@@ -423,20 +465,20 @@ For selected cross-tenant driver:
 - [x] CH customer can create LB -> LB.
 - [x] Request customer tenant remains CH.
 - [x] Request origin tenant resolves LB.
-- [ ] Matching finds eligible drivers.
+- [x] Matching finds eligible drivers.
 - [x] Customer does not become LB tenant.
 - [x] Client cannot forge LB tenant in request body.
 
 # W. Border-driver test
 
-- [ ] FR driver remains home tenant FR.
-- [ ] CH operational coverage approved.
-- [ ] CH -> CH route approved.
-- [ ] Driver near Swiss pickup.
-- [ ] CH request creates candidate.
+- [x] FR driver remains home tenant FR.
+- [x] CH operational coverage approved.
+- [x] CH -> CH route approved.
+- [x] Driver near Swiss pickup.
+- [x] CH request creates candidate.
 - [ ] Driver receives `requestNew`.
 - [ ] Driver submits offer.
-- [ ] Driver cannot browse unrelated CH requests.
+- [x] Driver cannot browse unrelated CH requests.
 - [ ] GPS crossing border never changes tenant.
 
 # X. Security
@@ -445,24 +487,24 @@ For selected cross-tenant driver:
 - [ ] Query tenant override denied.
 - [x] Wrong-market login denied.
 - [ ] Customer ownership enforced.
-- [ ] Arbitrary driver request access denied.
-- [ ] Candidate-specific access allowed.
-- [ ] Candidate does not expose unrelated tenant data.
+- [x] Arbitrary driver request access denied.
+- [x] Candidate-specific access allowed.
+- [x] Candidate does not expose unrelated tenant data.
 - [x] Admin route-block permission enforced.
 - [ ] Socket room spoofing denied.
 - [ ] Stale notification denied.
-- [ ] Queue cannot bypass route block.
+- [x] Queue cannot bypass route block.
 - [ ] Direct offer endpoint cannot bypass route block.
 
 # Y. Performance
 
 - [x] RouteBlock lookup indexed.
-- [ ] Driver country lookup indexed.
-- [ ] Driver route lookup indexed.
-- [ ] Candidate lookup indexed.
-- [ ] Open request lookup indexed.
-- [ ] No global driver scan.
-- [ ] No global request scan.
+- [x] Driver country lookup indexed.
+- [x] Driver route lookup indexed.
+- [x] Candidate lookup indexed.
+- [x] Open request lookup indexed.
+- [x] No global driver scan.
+- [x] No global request scan.
 - [x] Route policy does not enumerate allowed routes.
 
 # Z. Backward compatibility

@@ -78,6 +78,7 @@ function setup() {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
       create: jest.fn(),
+      upsert: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -312,10 +313,12 @@ describe('editing submitted requests', () => {
       { id: 'ineligible', userId: 'user3', availability: null },
     ]);
     Object.assign(instance, {
-      isEligibleForRealtimeDispatch: (
-        _request: unknown,
-        driver: { id: string },
-      ) => driver.id !== 'ineligible',
+      matching: {
+        driversForRequest: jest.fn().mockResolvedValue([
+          { id: 'existing', userId: 'user1', availability: null },
+          { id: 'new', userId: 'user2', availability: null },
+        ]),
+      },
     });
     db.driverRequestAlert.findMany.mockResolvedValue([
       {
@@ -331,7 +334,7 @@ describe('editing submitted requests', () => {
       status: 'NEW',
       createdAt: new Date(),
     });
-    db.driverRequestAlert.create.mockResolvedValue({
+    db.driverRequestAlert.upsert.mockResolvedValue({
       id: 'new-alert',
       driverId: 'new',
       status: 'NEW',

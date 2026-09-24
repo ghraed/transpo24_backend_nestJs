@@ -570,6 +570,7 @@ model TransportRequest {
   pickupCountryCode String? @db.VarChar(2)
   destinationCountryCode String? @db.VarChar(2)
 
+  @@index([pickupCountryCode, destinationCountryCode, status, id], map: "transport_requests_matching_route_idx")
   @@index([customerTenantId])
   @@index([originTenantId])
   @@index([pickupCountryCode, destinationCountryCode])
@@ -910,6 +911,9 @@ model DriverDocument {
 }
 
 model DriverRequestAlert {
+  // Persisted RequestCandidate; independent from notification/read status.
+  isActive   Boolean @default(false)
+  matchedAt  DateTime?
   id         String                   @id @default(cuid())
   requestId  String
   driverId   String
@@ -925,6 +929,8 @@ model DriverRequestAlert {
   offers  DriverOffer[]
 
   @@unique([requestId, driverId])
+  @@index([driverId, isActive])
+  @@index([requestId, isActive])
   @@index([driverId, status])
   @@index([requestId])
   @@map("driver_request_alerts")

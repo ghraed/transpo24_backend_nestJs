@@ -1,3 +1,5 @@
+import { RequestMatchingQueueService } from './request-matching-queue.service';
+import { MatchingService } from '../matching/matching.service';
 import { RoutePolicyService } from '../route-policy/route-policy.service';
 import { RequestGeographyService } from './request-geography.service';
 import {
@@ -6,10 +8,7 @@ import {
 } from './dto/edit-customer-request.dto';
 import {
   APPROVED_MATCHING_VEHICLE_WHERE,
-  MATCHING_AVAILABILITY_SELECT,
-  MatchingAvailability,
   coverageDistance,
-  isEligibleRequest,
 } from '../driver/request-eligibility';
 import {
   BadRequestException,
@@ -19,6 +18,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { unlink } from 'node:fs/promises';
@@ -42,8 +42,6 @@ import {
   TransportProofPhotoType,
   TransportRequestStatus,
   VehicleCondition,
-  VehicleCargoType,
-  VehicleType,
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -516,27 +514,6 @@ type DispatchResult = {
   }>;
 };
 
-type EligibleDriverDispatchCandidate = {
-  id: string;
-  userId: string;
-  nickname?: string | null;
-  firstName: string;
-  lastName: string;
-  status: DriverStatus;
-  isProfileCompleted: boolean;
-  availability: MatchingAvailability | null;
-  vehicles: Array<{
-    vehicleType: VehicleType;
-    capacityKg: number | null;
-    lengthCm: number | null;
-    widthCm: number | null;
-    heightCm: number | null;
-    dimensionsAreStandard: boolean;
-    allowedCargoTypes: VehicleCargoType[];
-    workingSchedule: Prisma.JsonValue | null;
-  }>;
-};
-
 type DriverRequestAlertSummaryPayload = {
   customerNickname: string;
   alertId: string;
@@ -831,6 +808,10 @@ export class CustomerRequestsService {
     private readonly routePolicy: RoutePolicyService = new RoutePolicyService(
       prisma,
     ),
+    private readonly matching: MatchingService = new MatchingService(prisma),
+    @Optional()
+    @Inject(forwardRef(() => RequestMatchingQueueService))
+    private readonly matchingQueue?: RequestMatchingQueueService,
   ) {}
 
   async createDraftRequest(
@@ -2214,6 +2195,7 @@ export class CustomerRequestsService {
           await tx.driverRequestAlert.updateMany({
             where: { requestId },
             data: {
+              isActive: false,
               status: DriverRequestAlertStatus.EXPIRED,
               acceptedAt: null,
               seenAt: null,
@@ -2339,6 +2321,9 @@ export class CustomerRequestsService {
       })
       .catch(this.rethrowRequestWriteConflict);
 
+    if (await this.matchingQueue?.enqueue(updatedRequest.id)) {
+      return this.toResponseDto(updatedRequest);
+    }
     const dispatchResult =
       await this.dispatchSubmittedRequestToEligibleDrivers(updatedRequest);
 
@@ -4057,6 +4042,43 @@ export class CustomerRequestsService {
     };
   }
 
+  async matchPublishedRequest(requestId: string): Promise<void> {
+    const events: (() => void)[] = [];
+    const result = await this.prisma.$transaction(
+      async (db) => {
+        await db.$queryRaw`SELECT "id" FROM "transport_requests" WHERE "id" = ${requestId} FOR UPDATE`;
+        const request = await db.transportRequest.findUnique({
+          where: { id: requestId },
+          select: {
+            ...REQUEST_SELECT,
+            service: {
+              select: {
+                id: true,
+                key: true,
+                nameEn: true,
+                nameAr: true,
+                icon: true,
+              },
+            },
+          },
+        });
+        if (!request) return null;
+        return this.dispatchSubmittedRequestToEligibleDrivers(
+          request,
+          false,
+          db,
+          events,
+        );
+      },
+      { timeout: 30000 },
+    );
+    if (!result) return;
+    events.forEach((emit) => emit());
+    await this.notificationsService.notifyDriversAboutNewTransportRequest({
+      drivers: result.driverNotifications,
+    });
+  }
+
   private async dispatchSubmittedRequestToEligibleDrivers(
     request: TransportRequestResponseSource & {
       service: {
@@ -4084,43 +4106,7 @@ export class CustomerRequestsService {
       };
     }
 
-    const eligibleDrivers = await db.driverProfile.findMany({
-      where: {
-        status: DriverStatus.APPROVED,
-        isProfileCompleted: true,
-        availability: { is: { isOnline: true } },
-        vehicles: {
-          some: APPROVED_MATCHING_VEHICLE_WHERE,
-        },
-      },
-      select: {
-        id: true,
-        userId: true,
-        nickname: true,
-        firstName: true,
-        lastName: true,
-        status: true,
-        isProfileCompleted: true,
-        availability: { select: MATCHING_AVAILABILITY_SELECT },
-        vehicles: {
-          where: APPROVED_MATCHING_VEHICLE_WHERE,
-          select: {
-            vehicleType: true,
-            capacityKg: true,
-            lengthCm: true,
-            widthCm: true,
-            heightCm: true,
-            dimensionsAreStandard: true,
-            allowedCargoTypes: true,
-            workingSchedule: true,
-          },
-        },
-      },
-    });
-
-    const filteredDrivers = eligibleDrivers.filter((driver) =>
-      this.isEligibleForRealtimeDispatch(request, driver),
-    );
+    const filteredDrivers = await this.matching.driversForRequest(request, db);
     const driverNotifications: DispatchResult['driverNotifications'] = [];
 
     const existingAlerts = await db.driverRequestAlert.findMany({
@@ -4133,6 +4119,7 @@ export class CustomerRequestsService {
         driverId: true,
         status: true,
         createdAt: true,
+        isActive: true,
       },
     });
     const existingAlertByDriverId = new Map(
@@ -4145,11 +4132,14 @@ export class CustomerRequestsService {
 
     for (const driver of filteredDrivers) {
       const existingAlert = existingAlertByDriverId.get(driver.id);
+      if (existingAlert?.isActive && !refreshAlerts) continue;
       const alert =
-        (existingAlert && refreshAlerts
+        (existingAlert
           ? await db.driverRequestAlert.update({
               where: { id: existingAlert.id },
               data: {
+                isActive: true,
+                matchedAt: new Date(),
                 status: DriverRequestAlertStatus.NEW,
                 acceptedAt: null,
                 seenAt: null,
@@ -4164,10 +4154,16 @@ export class CustomerRequestsService {
               },
             })
           : existingAlert) ??
-        (await db.driverRequestAlert.create({
-          data: {
+        (await db.driverRequestAlert.upsert({
+          where: {
+            requestId_driverId: { requestId: request.id, driverId: driver.id },
+          },
+          update: { isActive: true, matchedAt: new Date() },
+          create: {
             requestId: request.id,
             driverId: driver.id,
+            isActive: true,
+            matchedAt: new Date(),
             status: DriverRequestAlertStatus.NEW,
           },
           select: {
@@ -4218,15 +4214,6 @@ export class CustomerRequestsService {
       },
       driverNotifications,
     };
-  }
-
-  private isEligibleForRealtimeDispatch(
-    request: TransportRequestResponseSource & {
-      service: { key: ServiceKey } | null;
-    },
-    driver: EligibleDriverDispatchCandidate,
-  ): boolean {
-    return isEligibleRequest(request, driver.availability, driver.vehicles);
   }
 
   private toDriverRequestAlertSummaryPayload(

@@ -1,3 +1,4 @@
+import { MatchingService } from '../matching/matching.service';
 import {
   requestDetailsVersion,
   REQUEST_VERSION_SELECT,
@@ -452,6 +453,7 @@ const DRIVER_ONBOARDING_ALL_DOCUMENT_TYPES: DriverDocumentType[] = [
 ];
 
 type RequestAlertSource = {
+  isActive?: boolean;
   id: string;
   requestId: string;
   driverId: string;
@@ -510,6 +512,8 @@ type DriverRatingSource = {
 };
 
 type RequestDetailsSource = RequestVersionSource & {
+  pickupCountryCode?: string | null;
+  destinationCountryCode?: string | null;
   createdAt: Date;
   acceptedOfferId: string | null;
   id: string;
@@ -716,6 +720,7 @@ const DRIVER_DOCUMENT_SELECT = {
 } satisfies Prisma.DriverDocumentSelect;
 
 const DRIVER_REQUEST_ALERT_SELECT = {
+  isActive: true,
   id: true,
   requestId: true,
   driverId: true,
@@ -728,6 +733,8 @@ const DRIVER_REQUEST_ALERT_SELECT = {
 } satisfies Prisma.DriverRequestAlertSelect;
 
 const DRIVER_REQUEST_DETAILS_SELECT = {
+  pickupCountryCode: true,
+  destinationCountryCode: true,
   ...REQUEST_VERSION_SELECT,
   createdAt: true,
   acceptedOfferId: true,
@@ -884,6 +891,7 @@ export class DriverService {
     private readonly prisma: PrismaService,
     private readonly tripsGateway: TripsGateway,
     private readonly notificationsService: NotificationsService,
+    private readonly matching: MatchingService = new MatchingService(prisma),
   ) {}
 
   async getMe(input: GetDriverMeInput): Promise<DriverMeResponseDto> {
@@ -1733,6 +1741,8 @@ export class DriverService {
       );
     }
 
+    await this.matching.refreshDriver(profile.id);
+
     const requests = await this.prisma.transportRequest.findMany({
       where: {
         status: {
@@ -1743,11 +1753,7 @@ export class DriverService {
         },
         assignedDriverId: null,
         acceptedOfferId: null,
-        // Seen, dismissed, and previously quoted requests remain in Jobs until
-        // the customer completes a booking. Offline drivers retain known jobs.
-        ...(!availability.isOnline
-          ? { driverAlerts: { some: { driverId: profile.id } } }
-          : {}),
+        driverAlerts: { some: { driverId: profile.id, isActive: true } },
         pickupLatitude: { not: null },
         pickupLongitude: { not: null },
         dropoffLatitude: { not: null },
@@ -1762,19 +1768,17 @@ export class DriverService {
 
     const vehicles = await this.getApprovedDriverVehicles(profile.id);
     const alerts: DriverRequestAlertSummaryDto[] = [];
+    const discoverable = await this.matching.discoverable(requests, profile.id);
 
     for (const request of requests as RequestDetailsSource[]) {
       const existingAlert = request.driverAlerts.find(
         (alert) => alert.driverId === profile.id,
       );
       const eligible = isEligibleRequest(request, availability, vehicles);
-      if (!existingAlert && !eligible) continue;
+      if (!existingAlert || !discoverable.has(request.id)) continue;
       const distanceKm = coverageDistance(request, availability);
 
-      const alert = await this.ensureDriverRequestAlert({
-        requestId: request.id,
-        driverId: profile.id,
-      });
+      const alert = existingAlert;
 
       alerts.push({
         ...this.toRequestAlertSummary(request, alert, distanceKm),
@@ -1828,7 +1832,14 @@ export class DriverService {
       request.driverAlerts.find((alert) => alert.driverId === profile.id) ??
       null;
     const hasOfferAccess = Boolean(offer);
-    const hasAlertAccess = existingAlert !== null;
+    const hasAlertAccess = existingAlert?.isActive === true;
+
+    if (
+      !isSelectedDriver &&
+      !(await this.matching.canDiscover(request, profile.id))
+    ) {
+      throw new NotFoundException('Request not available for this driver.');
+    }
 
     if (!hasAlertAccess && !hasOfferAccess && !isSelectedDriver) {
       throw new NotFoundException('Request not available for this driver.');
@@ -1843,7 +1854,7 @@ export class DriverService {
       ? coverageDistance(request, availability)
       : null;
 
-    let alert = existingAlert;
+    let alert: RequestAlertSource | null = existingAlert;
     if (!alert && (hasOfferAccess || isSelectedDriver)) {
       alert = await this.ensureDriverRequestAlert({
         requestId: request.id,
@@ -4214,82 +4225,34 @@ export class DriverService {
   private async syncOpenRequestAlertsForDriver(
     driverId: string,
   ): Promise<void> {
+    const requestIds = await this.matching.refreshDriver(driverId);
+    if (
+      !requestIds.length ||
+      this.tripsGateway.getDriverConnectionCount(driverId) === 0
+    )
+      return;
+    const requests = await this.prisma.transportRequest.findMany({
+      where: { id: { in: requestIds } },
+      select: DRIVER_REQUEST_DETAILS_SELECT,
+    });
+    const allowed = await this.matching.discoverable(requests, driverId);
     const availability = await this.prisma.driverAvailability.findUnique({
       where: { driverId },
       select: MATCHING_AVAILABILITY_SELECT,
     });
-
-    if (!availability?.isOnline) {
-      return;
-    }
-
-    const vehicles = await this.prisma.driverVehicle.findMany({
-      where: {
-        driverId,
-        ...APPROVED_MATCHING_VEHICLE_WHERE,
-      },
-      select: DRIVER_VEHICLE_SELECT,
-    });
-
-    if (vehicles.length === 0) {
-      return;
-    }
-
-    const requests = await this.prisma.transportRequest.findMany({
-      where: {
-        status: {
-          in: [
-            TransportRequestStatus.PENDING_QUOTES,
-            TransportRequestStatus.QUOTED,
-          ],
-        },
-        assignedDriverId: null,
-        acceptedOfferId: null,
-        pickupLatitude: { not: null },
-        pickupLongitude: { not: null },
-        dropoffLatitude: { not: null },
-        dropoffLongitude: { not: null },
-        itemTitle: { not: null },
-        itemType: { not: null },
-        OR: [{ isImmediate: true }, { scheduledPickupAt: { not: null } }],
-      },
-      select: DRIVER_REQUEST_DETAILS_SELECT,
-      orderBy: { submittedAt: 'desc' },
-      take: 50,
-    });
-
-    for (const request of requests as RequestDetailsSource[]) {
-      const existingAlert = request.driverAlerts.find(
-        (alert) => alert.driverId === driverId,
+    for (const request of requests) {
+      const alert = request.driverAlerts.find(
+        (a) => a.driverId === driverId && a.isActive,
       );
-      if (
-        existingAlert &&
-        (existingAlert.status === DriverRequestAlertStatus.IGNORED ||
-          existingAlert.status === DriverRequestAlertStatus.ACCEPTED ||
-          existingAlert.status === DriverRequestAlertStatus.EXPIRED)
-      ) {
-        continue;
-      }
-
-      if (!isEligibleRequest(request, availability, vehicles)) continue;
-      const distanceKm = coverageDistance(request, availability);
-
-      const alert =
-        existingAlert ??
-        (await this.ensureDriverRequestAlert({
-          requestId: request.id,
-          driverId,
-        }));
-
-      if (
-        !existingAlert &&
-        this.tripsGateway.getDriverConnectionCount(driverId) > 0
-      ) {
-        this.tripsGateway.emitRequestNew(
-          driverId,
-          this.toRequestAlertSummary(request, alert, distanceKm),
-        );
-      }
+      if (!alert || !allowed.has(request.id)) continue;
+      this.tripsGateway.emitRequestNew(
+        driverId,
+        this.toRequestAlertSummary(
+          request,
+          alert,
+          availability ? coverageDistance(request, availability) : null,
+        ),
+      );
     }
   }
 
