@@ -458,8 +458,46 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 - **277/316 complete (87.7%); 39/316 remaining (12.3%)**, unweighted.
   No deployment, migration, commit or push.
 
+## M11 partial checkpoint — Offer-flow regression verification (2026-09-24)
+
+- Continued the first incomplete milestone, preserving completed implementation.
+- Repaired three outdated offer-version tests whose API mock omitted the existing
+  authoritative request reload. No application behavior changes were necessary.
+- Added invalid-price, optional timing/message, pending-submission protection,
+  network-failure retry and success-screen navigation checks. Verified request
+  currency/version submission and changed-details recovery alongside existing
+  cross-tenant currency, stale-offer, detail and discovery tests.
+- Validation: **35 rendered driver tests / 5 suites**, **530 backend tests / 49
+  suites**, driver TypeScript/privacy checks, changed-test ESLint and driver diff
+  whitespace checks passed. Mobile APIs are mocked; no physical-device, native
+  build, live offer/customer-selection or active-job lifecycle acceptance claimed.
+- Marked driver offer flow complete at automated-test level. Active-job lifecycle
+  verification remains the next M11 item. M12–M14 and final acceptance remain open.
+- **278/316 complete (88.0%); 38/316 remaining (12.0%)**, unweighted, not an effort
+  estimate. No deployment, migration, commit or push.
+
+## M11 partial checkpoint — Accepted-job navigation and recovery (2026-09-24)
+
+- Continued active-job verification without redoing completed offer/auth work.
+- Accepted-job details now invalidate prior loads on focus cleanup/navigation,
+  ignore superseded success/error responses, and clear prior job/map/photo state
+  before reload. Failed loads offer a return to the accepted jobs list and retry.
+- Added 13 rendered tests for seven pickup/delivery stages, three terminal states,
+  denied-access recovery, stale job responses and late authentication failures.
+  Verified server-authorized Swiss-job navigation and CHF display for an FR driver.
+- Validation: **56 driver tests / 7 suites**, **38 backend trip/delivery/eligibility
+  tests / 3 suites**, driver TypeScript/privacy checks, changed-file ESLint and
+  diff whitespace checks passed. APIs and native components are mocked.
+- Full active-job lifecycle remains unchecked: pickup/delivery action submission,
+  proof photos, tracking, chat, expenses and payout still need mobile acceptance;
+  no device/native-build or live-payment acceptance is claimed.
+- Progress remains **278/316 complete (88.0%); 38/316 remaining (12.0%)**,
+  unweighted. No deployment, migration, commit or push.
+
 ## Exact next task: continue M11 — Driver mobile
 
-Preserve implemented market, coverage, currency, discovery, detail and stale-offer
-recovery. Continue complete offer-flow verification and selected-driver lifecycle
-UI acceptance. M12–M14 and final acceptance remain open.
+Preserve implemented market, coverage, currency, discovery, detail and offer flow,
+and the accepted-job navigation/recovery fixes. Continue mobile pickup/delivery
+confirmation, proof-photo, tracking, chat, expense and payout verification.
+M11 active-job lifecycle, live/device acceptance, M12–M14 and final acceptance
+remain open.

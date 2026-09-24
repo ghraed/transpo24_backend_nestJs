@@ -334,6 +334,59 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
   full offer-flow and active-job lifecycle verification remain open in M11.
   M12–M14 and final acceptance remain open. No deployment, migration, commit or push.
 
+## M11 partial checkpoint — Stale offer recovery (2026-09-24)
+
+- Verified existing discovery/detail recovery and backend eligibility, offer and
+  route-policy behavior without redoing completed milestones.
+- Offer submission now invalidates the loaded currency/submission permission when
+  the server reports a removed, blocked, inaccessible or no-longer-approved job.
+  Retry reloads authorized request details; failed reload keeps submission disabled.
+  Both initial-load and submission denials provide a return to available requests.
+- Validation: 23 rendered driver tests / 3 suites, including six new rejection and
+  recovery cases; 106 backend tests / 4 suites; driver TypeScript/privacy checks,
+  changed-file ESLint and diff whitespace checks passed.
+- Marked removed/blocked request handling complete at automated-test level.
+  Mobile APIs are mocked; full offer-flow and active-job lifecycle acceptance,
+  native/device acceptance, M12–M14 and final acceptance remain open.
+- **277/316 complete (87.7%); 39/316 remaining (12.3%)**, unweighted.
+  No deployment, migration, commit or push.
+
+## M11 partial checkpoint — Offer-flow regression verification (2026-09-24)
+
+- Continued the first incomplete milestone, preserving completed implementation.
+- Repaired three outdated offer-version tests whose API mock omitted the existing
+  authoritative request reload. No application behavior changes were necessary.
+- Added invalid-price, optional timing/message, pending-submission protection,
+  network-failure retry and success-screen navigation checks. Verified request
+  currency/version submission and changed-details recovery alongside existing
+  cross-tenant currency, stale-offer, detail and discovery tests.
+- Validation: **35 rendered driver tests / 5 suites**, **530 backend tests / 49
+  suites**, driver TypeScript/privacy checks, changed-test ESLint and driver diff
+  whitespace checks passed. Mobile APIs are mocked; no physical-device, native
+  build, live offer/customer-selection or active-job lifecycle acceptance claimed.
+- Marked driver offer flow complete at automated-test level. Active-job lifecycle
+  verification remains the next M11 item. M12–M14 and final acceptance remain open.
+- **278/316 complete (88.0%); 38/316 remaining (12.0%)**, unweighted, not an effort
+  estimate. No deployment, migration, commit or push.
+
+## M11 partial checkpoint — Accepted-job navigation and recovery (2026-09-24)
+
+- Continued active-job verification without redoing completed offer/auth work.
+- Accepted-job details now invalidate prior loads on focus cleanup/navigation,
+  ignore superseded success/error responses, and clear prior job/map/photo state
+  before reload. Failed loads offer a return to the accepted jobs list and retry.
+- Added 13 rendered tests for seven pickup/delivery stages, three terminal states,
+  denied-access recovery, stale job responses and late authentication failures.
+  Verified server-authorized Swiss-job navigation and CHF display for an FR driver.
+- Validation: **56 driver tests / 7 suites**, **38 backend trip/delivery/eligibility
+  tests / 3 suites**, driver TypeScript/privacy checks, changed-file ESLint and
+  diff whitespace checks passed. APIs and native components are mocked.
+- Full active-job lifecycle remains unchecked: pickup/delivery action submission,
+  proof photos, tracking, chat, expenses and payout still need mobile acceptance;
+  no device/native-build or live-payment acceptance is claimed.
+- Progress remains **278/316 complete (88.0%); 38/316 remaining (12.0%)**,
+  unweighted. No deployment, migration, commit or push.
+
 # A. Verify projects
 
 - [x] API confirmed NestJS + TypeScript.
@@ -584,8 +637,8 @@ For selected cross-tenant driver:
 - [x] Cross-border route displayed.
 - [x] Request currency displayed.
 - [x] Cross-tenant request opens normally.
-- [ ] Removed/blocked request handled gracefully.
-- [ ] Offer flow works.
+- [x] Removed/blocked request handled gracefully.
+- [x] Offer flow works.
 - [ ] Active-job lifecycle still works.
 
 # S. Admin — Next.js + Refine
