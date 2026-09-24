@@ -404,11 +404,27 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 - **268/316 complete (84.8%); 48/316 remaining (15.2%)**, unweighted.
   M11 remains in progress. No production changes, migration, commit or push.
 
+## M11 partial checkpoint — Request detail recovery (2026-09-24)
+
+- Continued the first incomplete milestone without redoing completed work.
+- Verified request details reload by authorized request ID without a mobile home-
+  tenant filter and continue to the same request's offer screen. Existing backend
+  candidate authorization remains authoritative.
+- Detail loading now clears prior data and ignores superseded responses. Failed
+  acceptance clears stale details/actions and presents retry plus return to the
+  request list; retry performs a fresh authorized load.
+- Validation: 17 rendered driver tests across 3 suites (5 new detail tests),
+  105 backend tests across 4 suites, driver TypeScript/privacy checks, changed-file
+  ESLint and diff whitespace checks pass. Mobile API calls are mocked; no device,
+  native-build, production or live lifecycle acceptance is claimed.
+- **276/316 complete (87.3%); 40/316 remaining (12.7%)**, unweighted.
+  Only cross-tenant request opening is newly checked. Broader stale-job handling,
+  full offer-flow and active-job lifecycle verification remain open in M11.
+  M12–M14 and final acceptance remain open. No deployment, migration, commit or push.
+
 ## Exact next task: continue M11 — Driver mobile
 
-Preserve M0–M10 and the verified M11 market-auth portion. Start with operational
-country and directional route-permission screens using the existing M6 endpoints.
-Then finish candidate-backed request geography/currency and stale-job handling.
-`send-price-offer.tsx` still derives currency from driver country; use the request's
-API currency instead. Verify cross-tenant offer and selected-driver lifecycle UI.
-M12–M14 and final acceptance remain open; production rollout has not occurred.
+Preserve implemented market, coverage, currency, discovery and detail screens.
+Cross-tenant detail opening and offer navigation are verified. Continue broader
+stale-job handling, complete offer-flow verification, and selected-driver lifecycle
+UI acceptance. M12–M14 and final acceptance remain open.
