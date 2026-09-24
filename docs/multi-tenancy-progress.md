@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8 implemented** (checkpoint below); **M9 implemented** (checkpoint below); **M10–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8 implemented** (checkpoint below); **M9 implemented** (checkpoint below); **M10 implemented** (checkpoint below); **M11–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -347,12 +347,44 @@ See [offer/lifecycle contract and verification](offer-lifecycle.md).
 
 Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 
-## Exact next task: M10 — Client mobile
+## M10 checkpoint — Client mobile (2026-09-24)
 
-Preserve completed M0–M9. Add API-driven market selection/persistence, market-aware
-auth and mismatch handling, read-only home market, cross-border/outside-home request
-UX, generic route-block handling and API currency presentation. Verify logout and
-account-switch cache isolation. Fix the legacy token expiry decoder before enabling
-JWT issuance. Read the mandated Expo v56 docs and applicable AGENTS.md first.
-M11 driver mobile, M12 security/performance acceptance, M13 compatibility and M14
-production rollout remain pending. Do not enable multi-market production yet.
+- Verified the existing backend with **527 tests / 47 suites**; preserved M0–M9.
+- API-driven market selector with loading, empty/error/retry states and persisted
+  explicit selection; phone login/registration, OTP verification/resend and password
+  login carry market context. Trusted continuation rejects a different selected market.
+  Removed/inactive saved markets are not silently selected. GPS grants no tenancy.
+- Profile displays server-provided home market read-only. Existing place search and
+  address submission remain unrestricted by home market; cross-border payload tests
+  preserve coordinates/place IDs and never inject a tenant. API geography/currency
+  survives request mapping; displayed financial amounts use API currency, with no
+  invented USD/CHF for missing historical display currency. Wallet top-up's existing
+  currency selection/payment behavior is unchanged.
+- Stable error-code handling includes generic ROUTE_BLOCKED text (including vehicle
+  submission), with internal reasons hidden, and actionable TENANT_MISMATCH text.
+- Account changes disconnect sockets, clear owner drafts/photos, private document
+  previews and translation cache, and remount navigation state. Stale refresh/fetch
+  results cannot restore a signed-out account or retry with a new account's token.
+  Explicit trusted-device continuation remains available by existing product design.
+- Expiry decoding supports both released two-segment tokens and standard JWTs.
+  No backend auth flags or production behavior were changed.
+- Validation: **248 client tests / 45 suites pass**, TypeScript/privacy checks,
+  changed-file ESLint and Android production JS/Hermes export pass. The existing
+  `src/requests/edit-request.test.js` suite stalls (also observed before edits);
+  full-suite runs were stopped and it was explicitly excluded from the passing run.
+  Selector rendering and API/storage behavior use mocks. No physical-device,
+  live-geocoder, native APK/AAB or payment-provider acceptance is claimed.
+- Checklist: **264/316 complete (83.5%); 52/316 remaining (16.5%)**, unweighted.
+  Next milestone: **M11 — Driver mobile**. M12–M14 and final acceptance remain open.
+  No production deployment/backfill, commit or push.
+
+## Exact next task: M11 — Driver mobile
+
+Preserve completed M0–M10. Implement API-driven market selection/auth, read-only home
+market, operational-country and directional route-permission screens/statuses,
+candidate-backed jobs, route/country/currency presentation, and graceful stale-job
+handling. Verify cross-tenant offers and selected-driver lifecycle in the client.
+Read the driver AGENTS.md and mandated Expo v56 docs before editing.
+M12 security/performance acceptance, M13 compatibility and M14 production rollout
+remain pending. Resolve the documented client Jest stall before claiming full final
+acceptance. Do not enable multi-market production yet.

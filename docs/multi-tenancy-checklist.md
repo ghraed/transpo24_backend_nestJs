@@ -6,7 +6,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10–M14 remain pending; **next task: M10 — Client mobile**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11–M14 remain pending; **next task: M11 — Driver mobile**.
 
 - [Implementation handoff and exact next task](../backend/api/docs/multi-tenancy-progress.md)
 - [Architecture and installed versions](../backend/api/docs/multi-tenancy-discovery.md)
@@ -195,6 +195,37 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 - [M9 offer/lifecycle contract](../backend/api/docs/offer-lifecycle.md).
 - Current progress: **250/316 (79.1%) complete; 66/316 (20.9%) remaining**,
   unweighted. Next milestone: **M10 — Client mobile**. No commit or push.
+
+## M10 checkpoint — Client mobile (2026-09-24)
+
+- Verified the existing backend with **527 tests / 47 suites**; preserved M0–M9.
+- API-driven market selector with loading, empty/error/retry states and persisted
+  explicit selection; phone login/registration, OTP verification/resend and password
+  login carry market context. Trusted continuation rejects a different selected market.
+  Removed/inactive saved markets are not silently selected. GPS grants no tenancy.
+- Profile displays server-provided home market read-only. Existing place search and
+  address submission remain unrestricted by home market; cross-border payload tests
+  preserve coordinates/place IDs and never inject a tenant. API geography/currency
+  survives request mapping; displayed financial amounts use API currency, with no
+  invented USD/CHF for missing historical display currency. Wallet top-up's existing
+  currency selection/payment behavior is unchanged.
+- Stable error-code handling includes generic ROUTE_BLOCKED text (including vehicle
+  submission), with internal reasons hidden, and actionable TENANT_MISMATCH text.
+- Account changes disconnect sockets, clear owner drafts/photos, private document
+  previews and translation cache, and remount navigation state. Stale refresh/fetch
+  results cannot restore a signed-out account or retry with a new account's token.
+  Explicit trusted-device continuation remains available by existing product design.
+- Expiry decoding supports both released two-segment tokens and standard JWTs.
+  No backend auth flags or production behavior were changed.
+- Validation: **248 client tests / 45 suites pass**, TypeScript/privacy checks,
+  changed-file ESLint and Android production JS/Hermes export pass. The existing
+  `src/requests/edit-request.test.js` suite stalls (also observed before edits);
+  full-suite runs were stopped and it was explicitly excluded from the passing run.
+  Selector rendering and API/storage behavior use mocks. No physical-device,
+  live-geocoder, native APK/AAB or payment-provider acceptance is claimed.
+- Checklist: **264/316 complete (83.5%); 52/316 remaining (16.5%)**, unweighted.
+  Next milestone: **M11 — Driver mobile**. M12–M14 and final acceptance remain open.
+  No production deployment/backfill, commit or push.
 
 # A. Verify projects
 
@@ -417,20 +448,20 @@ For selected cross-tenant driver:
 
 # Q. Client mobile — React Native + Expo
 
-- [ ] Fetch markets.
-- [ ] Market selection screen.
-- [ ] Persist selected market.
-- [ ] Send market on registration/login.
-- [ ] Handle `TENANT_MISMATCH`.
-- [ ] Show home market read-only.
-- [ ] Cross-border pickup/destination works.
-- [ ] Request outside home tenant works.
-- [ ] Handle `ROUTE_BLOCKED`.
-- [ ] Show generic unavailable message.
-- [ ] Display API currency.
-- [ ] No hard-coded currency symbol.
-- [ ] Logout clears private caches.
-- [ ] Account switching cannot leak prior data.
+- [x] Fetch markets.
+- [x] Market selection screen.
+- [x] Persist selected market.
+- [x] Send market on registration/login.
+- [x] Handle `TENANT_MISMATCH`.
+- [x] Show home market read-only.
+- [x] Cross-border pickup/destination works.
+- [x] Request outside home tenant works.
+- [x] Handle `ROUTE_BLOCKED`.
+- [x] Show generic unavailable message.
+- [x] Display API currency.
+- [x] No hard-coded currency symbol.
+- [x] Logout clears private caches.
+- [x] Account switching cannot leak prior data.
 
 # R. Driver mobile — React Native + Expo
 
