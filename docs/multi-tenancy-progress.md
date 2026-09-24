@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -250,7 +250,7 @@ Implemented in `admin/Transpo_24`, preserving completed API/mobile code:
 Current checklist: **145/316 (45.9%)**, unweighted. M0–M5 implemented for
 their stated scope; production rollout and full feature acceptance remain pending.
 
-## Exact next task: M6 — Driver operational coverage
+## M6 implementation scope (completed below)
 
 Read roadmap/decisions/current checklist and preserve M0–M5. Inspect existing
 DriverProfile, operational areas/country data and admin driver approval conventions.
@@ -261,3 +261,43 @@ compatible with reviewed tenant backfills; foreign coverage is never auto-approv
 and GPS never grants permissions. Add additive migrations and meaningful API/DB
 regressions. Follow with centralized eligibility/candidates in M7; driver mobile
 management UI remains M11. Do not enable cross-market production rollout yet.
+
+
+## M6 checkpoint — Driver operational coverage (2026-09-24)
+
+- Added `DriverOperationalCountry` and directional `DriverRoutePermission`, using
+  DriverProfile IDs, unique compound keys, lookup indexes and PENDING / APPROVED /
+  REJECTED / SUSPENDED states. Country coverage separates pickup and dropoff.
+  Additive migration: `20260924180000_add_driver_operational_coverage`.
+- Driver-owned endpoints list coverage and request countries/routes as PENDING.
+  Existing entries are returned unchanged: repeated requests cannot self-approve,
+  expand approved flags, or reset rejection/suspension. ADMIN endpoints review
+  permissions and retain reviewer identity/time. Auth/profile IDs come from server
+  identity; DTOs reject forged ownership, review and status fields.
+- Explicit ADMIN home initialization derives country only from assigned Tenant,
+  creates pending home-country and domestic-route rows atomically, and preserves
+  existing decisions. No production assignments, bulk approval, inferred profile
+  country, or GPS-based permission grants. Reviewed tenant backfill must happen first.
+- Shared `assertApproved` checks approved pickup/dropoff and exact directional route
+  with stable country/route error codes. M7 must compose it into eligibility; this
+  milestone does not change existing matching, offers, sockets or active jobs.
+- Verification: **515 tests / 46 suites with coverage**, **14 HTTP e2e tests**,
+  **30 PostgreSQL tests** (3 M6 scenario groups + 27 existing regressions), build,
+  TypeScript, schema validation and changed-file lint passed. All **69 migrations**
+  applied to isolated PostgreSQL 16. M0–M5 implementation preserved.
+- API contract and reproduction: [driver coverage](driver-operational-coverage.md).
+  No production migration/backfill, deployment, mobile changes, commit or push.
+
+## Exact next task: M7 — Matching refactor
+
+Read the source roadmap/decisions/checklist and preserve M0–M6. Inspect the existing
+DriverRequestAlert bridge and matching/dispatch paths before choosing how to add
+RequestCandidate. Centralize current driver approval, availability, vehicle,
+capacity, documents, distance/schedule and offer checks with current route policy
+and DriverCoverageService.assertApproved. Do not require home-tenant equality.
+Persist request-specific candidate authorization idempotently and avoid global
+scans/N+1. Workers must reload current database state. M8 handles candidate-targeted
+socket/push and M9 handles offer/lifecycle authorization and request currency.
+Home initialization creates PENDING rows; arrange explicitly reviewed coverage
+approval before enforcing it on existing drivers. Do not enable production
+cross-market rollout until the remaining milestones and acceptance checks pass.

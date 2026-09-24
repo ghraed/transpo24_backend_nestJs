@@ -787,6 +787,8 @@ model DriverProfile {
   vehicles      DriverVehicle[]
   documents     DriverDocument[]
   availability  DriverAvailability?
+  operationalCountries DriverOperationalCountry[]
+  routePermissions DriverRoutePermission[]
   requestAlerts DriverRequestAlert[]
   offers        DriverOffer[]
   assignedRequests TransportRequest[] @relation("AssignedDriverForRequest")
@@ -1436,4 +1438,47 @@ model RouteBlockAudit {
 
   @@index([routeBlockId, createdAt])
   @@map("route_block_audits")
+}
+
+
+enum CoverageApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model DriverOperationalCountry {
+  id String @id @default(cuid())
+  driverId String
+  countryCode String
+  canPickup Boolean @default(true)
+  canDropoff Boolean @default(true)
+  status CoverageApprovalStatus @default(PENDING)
+  reviewedByAdminId String?
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  driver DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@unique([driverId, countryCode])
+  @@index([countryCode, status, canPickup])
+  @@map("driver_operational_countries")
+}
+
+model DriverRoutePermission {
+  id String @id @default(cuid())
+  driverId String
+  fromCountryCode String
+  toCountryCode String
+  status CoverageApprovalStatus @default(PENDING)
+  reviewedByAdminId String?
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  driver DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@unique([driverId, fromCountryCode, toCountryCode])
+  @@index([fromCountryCode, toCountryCode, status])
+  @@map("driver_route_permissions")
 }

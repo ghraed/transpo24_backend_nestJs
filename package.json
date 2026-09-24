@@ -30,7 +30,8 @@
     "test:tenants:integration": "npm run build && node --test scripts/test-tenant-foundation.cjs",
     "test:geography:integration": "npm run build && node --test scripts/test-request-geography.cjs",
     "test:route-policy:integration": "npm run build && node --test scripts/test-route-policy.cjs",
-    "test:route-block-admin:integration": "npm run build && node --test scripts/test-route-block-admin.cjs"
+    "test:route-block-admin:integration": "npm run build && node --test scripts/test-route-block-admin.cjs",
+    "test:driver-coverage:integration": "npm run build && node --test scripts/test-driver-coverage.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",

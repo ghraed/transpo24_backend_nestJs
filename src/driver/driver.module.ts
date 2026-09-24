@@ -1,3 +1,4 @@
+import { DriverCoverageModule } from '../driver-coverage/driver-coverage.module';
 import { Module } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
@@ -9,7 +10,13 @@ import { DriverController } from './driver.controller';
 import { DriverService } from './driver.service';
 
 @Module({
-  imports: [AuthModule, TripsModule, PaymentsModule, NotificationsModule],
+  imports: [
+    DriverCoverageModule,
+    AuthModule,
+    TripsModule,
+    PaymentsModule,
+    NotificationsModule,
+  ],
   controllers: [DriverController],
   providers: [DriverService, PrismaService],
 })
