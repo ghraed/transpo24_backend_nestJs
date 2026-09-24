@@ -170,3 +170,12 @@ M2's errors. Drafts can still be saved. Route denials return generic `ROUTE_BLOC
 No accepted/in-progress request is cancelled by this migration or policy service.
 Admin management/auditing and matching/offer rechecks remain later milestones;
 do not treat M3 alone as ready for multi-market production enforcement.
+
+## M4 admin route-block audit migration
+
+Apply `20260924170000_add_route_block_audits` before deploying M4 API code. Admin
+mutations require the audit table and fail atomically if audit persistence fails.
+DELETE soft-deactivates a block; PATCH can reactivate it. Audit history records
+actor, timestamp and complete policy snapshots. M4 does not yet stop matching or
+new offers on newly blocked open requests; those checks remain M7–M9. Do not treat
+this API milestone as completion of the multi-market rollout.

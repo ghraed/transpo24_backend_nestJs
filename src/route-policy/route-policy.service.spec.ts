@@ -25,7 +25,11 @@ describe('RoutePolicyService', () => {
           { transportType: ServiceKey.FURNITURE_TRANSPORT },
         ],
       },
-      select: { id: true },
+      select: { id: true, reason: true },
+      orderBy: [
+        { transportType: { sort: 'asc', nulls: 'first' } },
+        { id: 'asc' },
+      ],
     });
   });
   it('rejects a matching block without exposing its reason', async () => {

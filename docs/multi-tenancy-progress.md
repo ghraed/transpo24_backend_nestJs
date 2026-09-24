@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -176,7 +176,7 @@ by the deployment owner; the code does not guess one.
   Existing unrelated full-lint/mobile limitations still apply. No deployment,
   production backfill, commit or push.
 
-## Exact next task: M4 — Admin route-block API
+## M4 implementation scope (completed below)
 
 Reuse existing ADMIN authentication/permissions. Add list/create/update/activate/
 deactivate and effective route check endpoints; validate ISO countries and existing
@@ -184,3 +184,49 @@ ServiceKey, handle active-duplicate database errors (including reactivation), an
 record actor/direction/type/reason/old-new state through existing audit patterns.
 Use the shared policy service; no cache invalidation is necessary currently.
 Do not expose internal reasons to mobile or cancel accepted jobs. M5 adds the UI.
+
+## M4 checkpoint — Admin route-block API (2026-09-24)
+
+Implemented existing ADMIN-guarded endpoints:
+
+- `GET /admin/route-blocks`: `{ items, total, page, limit }`; optional
+  `fromCountryCode`, `toCountryCode`, `transportType`, `isActive` filters.
+- `GET /admin/route-blocks/:id`: block detail for editing.
+- `POST /admin/route-blocks`: normalized ISO countries, optional existing ServiceKey
+  (null = all types), nullable reason up to 1000 characters, optional active boolean.
+- `PATCH /admin/route-blocks/:id`: partial edits including activation/deactivation.
+- `DELETE /admin/route-blocks/:id`: audited soft deactivation; no destructive delete.
+- `GET /admin/route-policy/check?from=LB&to=SY&type=VEHICLE_TRANSPORT`:
+  normalized direction/type, `allowed`, and admin-only `blockedBy` ID/reason.
+
+Active duplicates return 409 `ROUTE_BLOCK_DUPLICATE`, including concurrent creates
+and reactivation. Missing records return 404. Unknown fields/forged creator are
+rejected. Authenticated ADMIN identity is the audit actor. The central policy
+lookup deterministically reports an all-types rule before a type-specific rule;
+public blocked-route errors still omit internal reasons.
+
+No shared audit facility existed. New additive migration
+`20260924170000_add_route_block_audits` persists actor/time/old-new snapshots in the
+same transaction as each mutation. Updates lock the row before reading the old
+state. Audit insert failure rolls back the mutation. Actor IDs are retained as
+historical identifiers independently of account deletion. No allowed-route rows,
+cache, request cancellation, or matching changes were introduced.
+
+Validation: 499 Jest tests / 45 suites with coverage thresholds, 14 HTTP e2e tests,
+27 PostgreSQL integration tests (6 admin + 3 policy + 8 geography + 10 tenant),
+build, TypeScript, Prisma validation, changed-file lint and diff whitespace check.
+All 68 migrations applied to isolated PostgreSQL 16. Reproducible new command:
+`TENANT_TEST_DATABASE_URL=... npm run test:route-block-admin:integration` (local
+empty disposable `_test` database only). Existing unrelated lint/mobile baseline
+limitations still apply. No production migration, deployment, commit or push.
+
+## Exact next task: M5 — Admin Next.js/Refine route-block UI
+
+Reuse existing admin resources/provider/auth. Add Route Blocks menu, paginated
+list and filters, create/edit forms, active toggle, clear FROM -> TO and all-type
+labels, reason/timestamps/creator, duplicate warnings, and explicit block
+confirmation. Warn that accepted/in-progress transports are not auto-cancelled.
+Use M4 endpoints above. Keep existing completed API work and follow M6 afterward.
+
+Checklist progress: 125/316 checked (39.6%); 191 remain. Milestones M0–M4: 5/15
+(33.3%), unweighted. Full feature and production rollout remain incomplete.

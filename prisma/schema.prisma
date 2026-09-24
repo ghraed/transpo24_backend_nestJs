@@ -1418,5 +1418,22 @@ model RouteBlock {
   updatedAt DateTime @updatedAt
 
   @@index([fromCountryCode, toCountryCode, isActive])
+  audits RouteBlockAudit[]
+
   @@map("route_blocks")
+}
+
+// Immutable policy snapshots committed atomically with each admin mutation.
+model RouteBlockAudit {
+  id String @id @default(cuid())
+  routeBlockId String
+  routeBlock RouteBlock @relation(fields: [routeBlockId], references: [id], onDelete: Restrict)
+  actorAdminId String
+  action String
+  before Json?
+  after Json
+  createdAt DateTime @default(now())
+
+  @@index([routeBlockId, createdAt])
+  @@map("route_block_audits")
 }

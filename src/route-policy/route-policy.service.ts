@@ -21,23 +21,29 @@ export class RoutePolicyService {
     route: Route,
     db: Prisma.TransactionClient = this.prisma,
   ): Promise<boolean> {
+    return (await this.findBlock(route, db)) !== null;
+  }
+
+  async findBlock(route: Route, db: Prisma.TransactionClient = this.prisma) {
     const fromCountryCode = this.country(route.fromCountryCode);
     const toCountryCode = this.country(route.toCountryCode);
     if (!Object.values(ServiceKey).includes(route.transportType)) {
       throw new BadRequestException('Invalid transport type.');
     }
     // Read current policy every time; no stale cache and no allow-list fallback.
-    return (
-      (await db.routeBlock.findFirst({
-        where: {
-          fromCountryCode,
-          toCountryCode,
-          isActive: true,
-          OR: [{ transportType: null }, { transportType: route.transportType }],
-        },
-        select: { id: true },
-      })) !== null
-    );
+    return db.routeBlock.findFirst({
+      where: {
+        fromCountryCode,
+        toCountryCode,
+        isActive: true,
+        OR: [{ transportType: null }, { transportType: route.transportType }],
+      },
+      select: { id: true, reason: true },
+      orderBy: [
+        { transportType: { sort: 'asc', nulls: 'first' } },
+        { id: 'asc' },
+      ],
+    });
   }
 
   async assertAllowed(
