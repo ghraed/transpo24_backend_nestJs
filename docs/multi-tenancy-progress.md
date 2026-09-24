@@ -441,9 +441,25 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
   full offer-flow and active-job lifecycle verification remain open in M11.
   M12–M14 and final acceptance remain open. No deployment, migration, commit or push.
 
+## M11 partial checkpoint — Stale offer recovery (2026-09-24)
+
+- Verified existing discovery/detail recovery and backend eligibility, offer and
+  route-policy behavior without redoing completed milestones.
+- Offer submission now invalidates the loaded currency/submission permission when
+  the server reports a removed, blocked, inaccessible or no-longer-approved job.
+  Retry reloads authorized request details; failed reload keeps submission disabled.
+  Both initial-load and submission denials provide a return to available requests.
+- Validation: 23 rendered driver tests / 3 suites, including six new rejection and
+  recovery cases; 106 backend tests / 4 suites; driver TypeScript/privacy checks,
+  changed-file ESLint and diff whitespace checks passed.
+- Marked removed/blocked request handling complete at automated-test level.
+  Mobile APIs are mocked; full offer-flow and active-job lifecycle acceptance,
+  native/device acceptance, M12–M14 and final acceptance remain open.
+- **277/316 complete (87.7%); 39/316 remaining (12.3%)**, unweighted.
+  No deployment, migration, commit or push.
+
 ## Exact next task: continue M11 — Driver mobile
 
-Preserve implemented market, coverage, currency, discovery and detail screens.
-Cross-tenant detail opening and offer navigation are verified. Continue broader
-stale-job handling, complete offer-flow verification, and selected-driver lifecycle
+Preserve implemented market, coverage, currency, discovery, detail and stale-offer
+recovery. Continue complete offer-flow verification and selected-driver lifecycle
 UI acceptance. M12–M14 and final acceptance remain open.
