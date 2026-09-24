@@ -49,8 +49,8 @@ and routes before deploying enforcement. M6 initialization creates PENDING rows,
 which do not authorize matching. Historical geography must be reviewed/backfilled;
 missing countries fail closed. This milestone alone is not production readiness.
 
-M8 still owns socket room identity verification, end-to-end candidate targeting,
-reconnect behavior and notification delivery reliability. Current post-commit
+M8 now verifies socket room identity, candidate targeting and reconnect behavior;
+see [notification delivery and recovery](request-notifications.md). Current post-commit
 notifications have no durable outbox: a delivery failure after candidate commit
 is not retried by candidate creation. M9 still owns direct offer/current-policy
 and currency enforcement plus full selected-driver lifecycle authorization.

@@ -2005,7 +2005,7 @@ export class CustomerRequestsService {
     dto: EditCustomerRequestDto,
     files: MulterFile[],
   ) {
-    const pendingEvents: (() => void)[] = [];
+    const pendingEvents: (() => Promise<void>)[] = [];
     const removedStorageKeys: string[] = [];
     let dispatch!: DispatchResult;
     let updatedRequest: TransportRequestResponseSource & {
@@ -2221,7 +2221,7 @@ export class CustomerRequestsService {
         unlink(`${process.cwd()}/${key}`).catch(() => undefined),
       ),
     );
-    pendingEvents.forEach((emit) => emit());
+    await Promise.all(pendingEvents.map((emit) => emit()));
     void this.notificationsService
       .notifyDriversAboutNewTransportRequest({
         drivers: dispatch.driverNotifications,
@@ -4043,7 +4043,7 @@ export class CustomerRequestsService {
   }
 
   async matchPublishedRequest(requestId: string): Promise<void> {
-    const events: (() => void)[] = [];
+    const events: (() => Promise<void>)[] = [];
     const result = await this.prisma.$transaction(
       async (db) => {
         await db.$queryRaw`SELECT "id" FROM "transport_requests" WHERE "id" = ${requestId} FOR UPDATE`;
@@ -4073,7 +4073,7 @@ export class CustomerRequestsService {
       { timeout: 30000 },
     );
     if (!result) return;
-    events.forEach((emit) => emit());
+    await Promise.all(events.map((emit) => emit()));
     await this.notificationsService.notifyDriversAboutNewTransportRequest({
       drivers: result.driverNotifications,
     });
@@ -4091,7 +4091,7 @@ export class CustomerRequestsService {
     },
     refreshAlerts = false,
     db: Prisma.TransactionClient = this.prisma,
-    pendingEvents?: (() => void)[],
+    pendingEvents?: (() => Promise<void>)[],
   ): Promise<DispatchResult> {
     if (!request.service) {
       return {
@@ -4200,7 +4200,7 @@ export class CustomerRequestsService {
             this.toDriverRequestAlertSummaryPayload(request, alert, distanceKm),
           );
         if (pendingEvents) pendingEvents.push(emit);
-        else emit();
+        else await emit();
       }
     }
 

@@ -1,3 +1,4 @@
+import { MatchingService } from '../matching/matching.service';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -43,6 +44,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly webPushProvider: WebPushProvider,
+    private readonly matching: MatchingService = new MatchingService(prisma),
   ) {}
 
   async sendTestToDevice(
@@ -325,25 +327,41 @@ export class NotificationsService {
     }>;
   }): Promise<void> {
     for (const driver of input.drivers) {
-      const distanceLabel =
-        driver.distanceKm === null
-          ? 'Distance available in app'
-          : `${driver.distanceKm.toFixed(1)} km away`;
+      try {
+        const profile = await this.prisma.driverProfile.findUnique({
+          where: { userId: driver.userId },
+          select: { id: true },
+        });
+        if (
+          !profile ||
+          !(await this.matching.canNotify(driver.requestId, profile.id))
+        )
+          continue;
+        const distanceLabel =
+          driver.distanceKm === null
+            ? 'Distance available in app'
+            : `${driver.distanceKm.toFixed(1)} km away`;
 
-      await this.sendToUsers({
-        userIds: [driver.userId],
-        app: PushApp.DRIVER,
-        title: input.updated
-          ? 'Transport request updated'
-          : 'New transport request',
-        body: `${driver.serviceType} · ${distanceLabel}`,
-        type: 'NEW_TRANSPORT_REQUEST',
-        data: {
-          requestId: driver.requestId,
-          serviceType: driver.serviceType,
-          distanceKm: driver.distanceKm,
-        },
-      });
+        await this.sendToUsers({
+          userIds: [driver.userId],
+          app: PushApp.DRIVER,
+          title: input.updated
+            ? 'Transport request updated'
+            : 'New transport request',
+          body: `${driver.serviceType} · ${distanceLabel}`,
+          type: 'NEW_TRANSPORT_REQUEST',
+          data: {
+            requestId: driver.requestId,
+            serviceType: driver.serviceType,
+            distanceKm: driver.distanceKm,
+          },
+        });
+      } catch {
+        // One failed recipient must not suppress delivery to the remaining candidates.
+        this.logger.error(
+          `Request push authorization/delivery failed: ${driver.requestId}`,
+        );
+      }
     }
   }
 

@@ -1,3 +1,4 @@
+import { MatchingModule } from '../matching/matching.module';
 import { Module } from '@nestjs/common';
 
 import { AdminRoleGuard } from '../admin/guards/admin-role.guard';
@@ -13,7 +14,7 @@ import { WebPushProvider } from './web-push.provider';
 import { WebPushSubscriptionsService } from './web-push-subscriptions.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MatchingModule],
   controllers: [NotificationsController, CustomerNotificationsController],
   providers: [
     NotificationsService,

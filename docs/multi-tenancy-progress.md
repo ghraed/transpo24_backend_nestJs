@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8 implemented** (checkpoint below); **M9–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -313,14 +313,24 @@ management UI remains M11. Do not enable cross-market production rollout yet.
   legacy alerts default inactive. No production mutation, mobile/admin changes,
   commit or push. See [matching contract and tests](request-matching.md).
 
-## Exact next task: M8 — Socket/push targeting
+## M8 checkpoint — Socket/push targeting (2026-09-24)
 
-Read the source roadmap/decisions/checklist and preserve M0–M7. Audit authenticated
-user/driver room identity (the existing user-ID versus profile-ID discrepancy),
-requestNew candidate-only emission, cross-tenant targeting, reconnect and arbitrary
-room joins. Verify push recipients and stale deep-link authorization through the
-candidate-backed API. Preserve event contracts and selected-job behavior. Address
-post-commit notification failure/retry semantics; M7 queue retries deliberately
-avoid duplicate candidate notifications. M9 follows with direct offer/current
-policy/currency checks and the full selected-driver lifecycle. Do not deploy or
-enable live cross-market enforcement before the remaining acceptance checks pass.
+Fixed server-resolved driver profile rooms and added current candidate/policy
+checks for request socket and push delivery. Preserved participant event contracts,
+reconnect authorization and API-authorized notification detail loading. Recipient
+failures are isolated; best-effort delivery and candidate-list recovery are explicit,
+without a durable outbox or guaranteed push retry.
+
+Validation: 527 API tests (526 coverage + one focused addition), 14 HTTP tests,
+39 isolated PostgreSQL/Redis scenarios, build, TypeScript and gateway/matching/
+notification lint. All 70 migrations applied only to disposable PostgreSQL.
+No production changes or mobile builds. Contract: [request notifications](request-notifications.md).
+
+Checklist: **223/316 complete (70.6%); 93 remain (29.4%)**.
+
+## Exact next task: M9 — Offer/lifecycle authorization
+
+Preserve M0–M8. Recheck current candidate/eligibility and route policy on direct
+offers, enforce persisted request currency, and verify the selected cross-tenant
+driver's full existing lifecycle. Accepted/in-progress jobs must continue after
+route blocks. Mobile market/coverage UX remains M10/M11; rollout remains pending.

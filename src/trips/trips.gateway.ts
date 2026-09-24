@@ -14,6 +14,8 @@ import { UserRole } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
 
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { PrismaService } from '../prisma/prisma.service';
+import { MatchingService } from '../matching/matching.service';
 import { AuthService } from '../auth/auth.service';
 import { ChatService } from '../chat/chat.service';
 import {
@@ -81,6 +83,8 @@ export class TripsGateway
     private readonly tripsService: TripsService,
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
+    private readonly prisma: PrismaService,
+    private readonly matching: MatchingService = new MatchingService(prisma),
   ) {}
 
   afterInit(server: Server): void {
@@ -100,8 +104,19 @@ export class TripsGateway
     if (!user || !(await this.authService.isUserActive(user))) {
       throw new Error('Unauthorized socket connection.');
     }
-    const socketData = client.data as { user?: SocketUser };
+    const driver =
+      user.role === UserRole.DRIVER
+        ? await this.prisma.driverProfile.findUnique({
+            where: { userId: user.id },
+            select: { id: true },
+          })
+        : null;
+    if (user.role === UserRole.DRIVER && !driver) {
+      throw new Error('Unauthorized socket connection.');
+    }
+    const socketData = client.data as { user?: SocketUser; driverId?: string };
     socketData.user = user;
+    if (driver) socketData.driverId = driver.id;
   }
 
   handleConnection(client: Socket): void {
@@ -113,7 +128,16 @@ export class TripsGateway
     this.logger.log(
       `Socket connected: socketId=${client.id}, userId=${user.id}, role=${user.role}`,
     );
-    void client.join(this.getUserRoom(user));
+    if (user.role === UserRole.CUSTOMER) {
+      void client.join(this.getCustomerRoom(user.id));
+    } else if (user.role === UserRole.DRIVER) {
+      const driverId = (client.data as { driverId?: string }).driverId;
+      if (!driverId) {
+        client.disconnect();
+        return;
+      }
+      void client.join(this.getDriverRoom(driverId));
+    }
   }
 
   handleDisconnect(client: Socket): void {
@@ -328,8 +352,19 @@ export class TripsGateway
     }
   }
 
-  emitRequestNew(driverId: string, payload: RequestNewPayload): void {
-    this.server.to(this.getDriverRoom(driverId)).emit('requestNew', payload);
+  async emitRequestNew(
+    driverId: string,
+    payload: RequestNewPayload,
+  ): Promise<void> {
+    try {
+      if (!(await this.matching.canNotify(payload.requestId, driverId))) return;
+      this.server.to(this.getDriverRoom(driverId)).emit('requestNew', payload);
+    } catch {
+      // Fail closed without undoing an already committed request/candidate.
+      this.logger.error(
+        `Request notification authorization failed: ${payload.requestId}`,
+      );
+    }
   }
 
   emitRequestDeleted(driverId: string, payload: RequestDeletedPayload): void {
@@ -518,14 +553,6 @@ export class TripsGateway
 
   private getCustomerRoom(customerId: string): string {
     return `customer_${customerId}`;
-  }
-
-  private getUserRoom(user: SocketUser): string {
-    if (user.role === UserRole.CUSTOMER) {
-      return this.getCustomerRoom(user.id);
-    }
-
-    return this.getDriverRoom(user.id);
   }
 
   private toWsException(error: unknown): WsException {

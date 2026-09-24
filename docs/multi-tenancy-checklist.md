@@ -1,5 +1,3 @@
-<!-- Snapshot of the authoritative transpo24-multitenancy-default-allow-docs/CHECKLIST.md, captured after M7 on 2026-09-24. -->
-
 # CHECKLIST.md — Transpo24 Multi-Tenancy + Default-Allow Route Blocks
 
 Use this checklist across API, client mobile, driver mobile and admin.
@@ -8,7 +6,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8–M14 remain pending; **next task: M8 — Socket/push targeting**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9–M14 remain pending; **next task: M9 — Offer/lifecycle authorization**.
 
 - [Implementation handoff and exact next task](../backend/api/docs/multi-tenancy-progress.md)
 - [Architecture and installed versions](../backend/api/docs/multi-tenancy-discovery.md)
@@ -150,6 +148,31 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 - Details: [M7 contract and verification](../backend/api/docs/request-matching.md).
 - Current progress: **205/316 checklist items (64.9%)**,
   unweighted. Next milestone: **M8 — Socket/push targeting**.
+
+## M8 checkpoint — 2026-09-24
+
+- Verified prior API behavior and continued notification targeting without redoing
+  M0–M7. Fixed account-ID/profile-ID socket room mismatch: authenticated drivers
+  join the database-resolved profile room; customers retain account rooms.
+- Socket and push delivery reload current request/candidate eligibility, policy,
+  coverage and request state. Missing/inactive/dismissed candidates and existing
+  offers cannot produce request notifications. No tenant-wide broadcast.
+- Preserved offer/selection event contracts and participant targeting. Tested
+  handshake spoofing, missing profiles, denied trip/chat joins and reconnect
+  validation. Driver notification navigation already reloads details through API;
+  blocked stale deep links are denied by the existing candidate authorization.
+- Post-commit socket checks are awaited. Recipient errors fail closed and are
+  isolated. Delivery remains best effort, with candidate-list recovery; there is
+  no durable outbox or guaranteed push retry. See the delivery contract below.
+- Validation: **527 API tests / 47 suites** (526 with coverage, plus one focused
+  failure-isolation test), **14 HTTP tests**, **39 PostgreSQL/Redis scenarios**,
+  API build, TypeScript and changed gateway/matching/notification lint passed.
+  All 70 migrations applied only to disposable PostgreSQL 16; no schema change.
+  Mobile deep-link code inspected, not device-tested. Existing unrelated lint
+  issues remain. No production deployment/backfill, commit or push.
+- [M8 delivery contract](../backend/api/docs/request-notifications.md).
+- Current progress: **223/316 (70.6%) complete; 93/316
+  (29.4%) remaining**, unweighted. Next milestone: **M9**.
 
 # A. Verify projects
 
@@ -321,24 +344,24 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 
 # M. Socket.IO
 
-- [ ] Authenticated user rooms.
-- [ ] Authenticated driver rooms.
-- [ ] `requestNew` only to candidates.
-- [ ] Cross-tenant candidate receives event.
-- [ ] Ineligible driver receives nothing.
-- [ ] `offerNew` targets customer.
-- [ ] `offerRejected` targets participant.
-- [ ] `requestDriverSelected` targets participant.
-- [ ] Arbitrary room join denied.
-- [ ] Reconnect restores only authorized subscriptions.
+- [x] Authenticated user rooms.
+- [x] Authenticated driver rooms.
+- [x] `requestNew` only to candidates.
+- [x] Cross-tenant candidate receives event.
+- [x] Ineligible driver receives nothing.
+- [x] `offerNew` targets customer.
+- [x] `offerRejected` targets participant.
+- [x] `requestDriverSelected` targets participant.
+- [x] Arbitrary room join denied.
+- [x] Reconnect restores only authorized subscriptions.
 
 # N. Push notifications
 
-- [ ] Candidate-specific request push.
-- [ ] No tenant-wide broadcast as authorization.
-- [ ] Deep link reloads through API.
-- [ ] Stale push cannot bypass current authorization.
-- [ ] Blocked route creates no new request push.
+- [x] Candidate-specific request push.
+- [x] No tenant-wide broadcast as authorization.
+- [x] Deep link reloads through API.
+- [x] Stale push cannot bypass current authorization.
+- [x] Blocked route creates no new request push.
 
 # O. Offers
 
@@ -476,7 +499,7 @@ For selected cross-tenant driver:
 - [x] CH -> CH route approved.
 - [x] Driver near Swiss pickup.
 - [x] CH request creates candidate.
-- [ ] Driver receives `requestNew`.
+- [x] Driver receives `requestNew`.
 - [ ] Driver submits offer.
 - [x] Driver cannot browse unrelated CH requests.
 - [ ] GPS crossing border never changes tenant.
@@ -491,8 +514,8 @@ For selected cross-tenant driver:
 - [x] Candidate-specific access allowed.
 - [x] Candidate does not expose unrelated tenant data.
 - [x] Admin route-block permission enforced.
-- [ ] Socket room spoofing denied.
-- [ ] Stale notification denied.
+- [x] Socket room spoofing denied.
+- [x] Stale notification denied.
 - [x] Queue cannot bypass route block.
 - [ ] Direct offer endpoint cannot bypass route block.
 

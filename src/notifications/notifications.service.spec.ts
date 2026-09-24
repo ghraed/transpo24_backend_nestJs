@@ -393,3 +393,91 @@ describe('NotificationsService', () => {
     );
   });
 });
+
+describe('candidate request push', () => {
+  it('resolves account to profile, authorizes each recipient, and keeps the API deep-link ID', async () => {
+    const prisma = {
+      driverProfile: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({ id: 'fr-profile' })
+          .mockResolvedValueOnce({ id: 'unrelated' })
+          .mockResolvedValueOnce(null),
+      },
+    };
+    const matching = {
+      canNotify: jest
+        .fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false),
+    };
+    const service = new NotificationsService(
+      prisma as never,
+      {} as never,
+      matching as never,
+    );
+    const send = jest
+      .spyOn(service, 'sendToUsers')
+      .mockResolvedValue(undefined);
+    await service.notifyDriversAboutNewTransportRequest({
+      drivers: ['fr-account', 'other', 'deleted'].map((userId) => ({
+        userId,
+        requestId: 'ch-job',
+        serviceType: 'Goods',
+        distanceKm: 2,
+      })),
+    });
+    expect(matching.canNotify).toHaveBeenNthCalledWith(
+      1,
+      'ch-job',
+      'fr-profile',
+    );
+    expect(matching.canNotify).toHaveBeenNthCalledWith(
+      2,
+      'ch-job',
+      'unrelated',
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userIds: ['fr-account'],
+        app: PushApp.DRIVER,
+        type: 'NEW_TRANSPORT_REQUEST',
+        data: { requestId: 'ch-job', serviceType: 'Goods', distanceKm: 2 },
+      }),
+    );
+  });
+  it('fails closed for an authorization error and continues with other recipients', async () => {
+    const prisma = {
+      driverProfile: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile' }),
+      },
+    };
+    const matching = {
+      canNotify: jest
+        .fn()
+        .mockRejectedValueOnce(new Error('Temporary failure'))
+        .mockResolvedValueOnce(true),
+    };
+    const service = new NotificationsService(
+      prisma as never,
+      {} as never,
+      matching as never,
+    );
+    const send = jest
+      .spyOn(service, 'sendToUsers')
+      .mockResolvedValue(undefined);
+    await service.notifyDriversAboutNewTransportRequest({
+      drivers: ['first', 'second'].map((userId) => ({
+        userId,
+        requestId: 'job',
+        serviceType: 'Goods',
+        distanceKm: null,
+      })),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ userIds: ['second'] }),
+    );
+  });
+});

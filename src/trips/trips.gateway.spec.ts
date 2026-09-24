@@ -17,6 +17,7 @@ describe('driver location acknowledgement', () => {
       {} as never,
       service as never,
       {} as never,
+      {} as never,
     );
     gateway.server = { to: jest.fn(() => ({ emit })) } as unknown as Server;
     const socket = {
@@ -65,7 +66,7 @@ describe('socket tenant identity', () => {
       id: 'customer',
       name: 'Customer',
       email: 'customer@example.com',
-      role: UserRole.CUSTOMER,
+      role: UserRole.CUSTOMER as UserRole,
       hasDriverProfile: false,
       tenantId: 'fr',
     };
@@ -73,7 +74,17 @@ describe('socket tenant identity', () => {
       getUserFromAccessToken: jest.fn().mockReturnValue(user),
       isUserActive: jest.fn().mockResolvedValue(true),
     };
-    const gateway = new TripsGateway(auth as never, {} as never, {} as never);
+    const prisma = {
+      driverProfile: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-id' }),
+      },
+    };
+    const gateway = new TripsGateway(
+      auth as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+    );
     const socket = {
       id: 'socket',
       handshake: {
@@ -105,7 +116,7 @@ describe('socket tenant identity', () => {
           }
         }),
       );
-    return { gateway, auth, socket, user, connect };
+    return { gateway, auth, socket, user, connect, prisma };
   }
   it('uses the DB-verified identity and ignores handshake room/tenant spoofing', async () => {
     const { auth, socket, user, connect } = setup();
@@ -127,6 +138,32 @@ describe('socket tenant identity', () => {
       expect(socket.data).not.toHaveProperty('user');
     },
   );
+  it('joins the server-resolved driver profile room, not the account or supplied room', async () => {
+    const { user, socket, connect, prisma } = setup();
+    user.role = UserRole.DRIVER;
+    await connect();
+    expect(prisma.driverProfile.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'customer' },
+      select: { id: true },
+    });
+    expect(socket.join).toHaveBeenCalledTimes(1);
+    expect(socket.join).toHaveBeenCalledWith('driver_profile-id');
+  });
+  it('rejects a driver without a server profile', async () => {
+    const { user, socket, connect, prisma } = setup();
+    user.role = UserRole.DRIVER;
+    prisma.driverProfile.findUnique.mockResolvedValue(null);
+    await expect(connect()).rejects.toThrow('Unauthorized socket connection.');
+    expect(socket.join).not.toHaveBeenCalled();
+  });
+  it('revalidates a reconnect and does not restore revoked rooms', async () => {
+    const { auth, socket, connect } = setup();
+    await connect();
+    socket.join.mockClear();
+    auth.isUserActive.mockResolvedValue(false);
+    await expect(connect()).rejects.toThrow();
+    expect(socket.join).not.toHaveBeenCalled();
+  });
   it('waits for the database check before acknowledging the connection', async () => {
     const { auth, socket, connect } = setup();
     let approve!: (value: boolean) => void;
@@ -142,5 +179,87 @@ describe('socket tenant identity', () => {
     approve(true);
     await pending;
     expect(socket.join).toHaveBeenCalledWith('customer_customer');
+  });
+});
+
+describe('candidate event delivery', () => {
+  it('targets only the authorized driver profile and suppresses stale or failed authorization', async () => {
+    const matching = { canNotify: jest.fn().mockResolvedValue(true) };
+    const gateway = new TripsGateway(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      matching as never,
+    );
+    const emit = jest.fn();
+    const to = jest.fn(() => ({ emit }));
+    gateway.server = { to } as unknown as Server;
+    const payload = { requestId: 'swiss-request' } as never;
+    await gateway.emitRequestNew('french-profile', payload);
+    expect(matching.canNotify).toHaveBeenCalledWith(
+      'swiss-request',
+      'french-profile',
+    );
+    expect(to).toHaveBeenCalledWith('driver_french-profile');
+    expect(emit).toHaveBeenCalledWith('requestNew', payload);
+    matching.canNotify.mockResolvedValue(false);
+    await gateway.emitRequestNew('unrelated-profile', payload);
+    matching.canNotify.mockRejectedValue(new Error('Database unavailable'));
+    await gateway.emitRequestNew('french-profile', payload);
+    expect(emit).toHaveBeenCalledTimes(1);
+  });
+  it('denies arbitrary trip/chat joins before subscribing', async () => {
+    const denied = jest.fn().mockRejectedValue(new Error('Access denied'));
+    const gateway = new TripsGateway(
+      {} as never,
+      { joinTripRoom: denied } as never,
+      { assertCanAccessRoom: denied } as never,
+      {} as never,
+    );
+    const socket = {
+      data: { user: { id: 'account', role: UserRole.DRIVER } },
+      join: jest.fn(),
+    };
+    await expect(
+      gateway.joinTripRoom(socket as never, { tripId: 'foreign-job' }),
+    ).rejects.toThrow('Access denied');
+    await expect(
+      gateway.joinChatRoom(socket as never, { roomId: 'foreign-chat' }),
+    ).rejects.toThrow('Access denied');
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(denied).toHaveBeenCalledWith({
+      userId: 'account',
+      role: UserRole.DRIVER,
+      tripId: 'foreign-job',
+    });
+  });
+  it('preserves participant targets for offer and selection events', () => {
+    const gateway = new TripsGateway(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const deliveries: unknown[] = [];
+    gateway.server = {
+      to: (room: string) => ({
+        emit: (event: string, payload: unknown) =>
+          deliveries.push({ room, event, payload }),
+      }),
+    } as unknown as Server;
+    const offer = { driverId: 'profile', requestId: 'job' } as never;
+    gateway.emitOfferNew('owner', offer);
+    gateway.emitOfferRejected(offer);
+    gateway.emitRequestDriverSelected('owner', offer);
+    expect(deliveries).toEqual([
+      { room: 'customer_owner', event: 'offerNew', payload: offer },
+      { room: 'driver_profile', event: 'offerRejected', payload: offer },
+      {
+        room: 'customer_owner',
+        event: 'requestDriverSelected',
+        payload: offer,
+      },
+    ]);
   });
 });

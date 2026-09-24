@@ -321,6 +321,27 @@ export class MatchingService {
     );
   }
 
+  // Reload after candidate commit: a queued notification is not authorization.
+  async canNotify(requestId: string, driverId: string): Promise<boolean> {
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        service: true,
+        offers: { where: { driverId }, select: { id: true } },
+        driverAlerts: {
+          where: { driverId, isActive: true, status: { in: ['NEW', 'SEEN'] } },
+          select: { id: true },
+        },
+      },
+    });
+    return (
+      !!request &&
+      !request.offers.length &&
+      !!request.driverAlerts.length &&
+      this.canDiscover(request, driverId)
+    );
+  }
+
   async canDiscover(
     request: Request,
     driverId: string,

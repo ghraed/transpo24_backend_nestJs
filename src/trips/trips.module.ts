@@ -1,3 +1,4 @@
+import { MatchingModule } from '../matching/matching.module';
 import { Module, forwardRef } from '@nestjs/common';
 
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -13,6 +14,7 @@ import { TripsService } from './trips.service';
 @Module({
   imports: [
     AuthModule,
+    MatchingModule,
     NotificationsModule,
     forwardRef(() => ChatModule),
     forwardRef(() => CustomerRequestsModule),

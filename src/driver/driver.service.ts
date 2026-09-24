@@ -4245,7 +4245,7 @@ export class DriverService {
         (a) => a.driverId === driverId && a.isActive,
       );
       if (!alert || !allowed.has(request.id)) continue;
-      this.tripsGateway.emitRequestNew(
+      await this.tripsGateway.emitRequestNew(
         driverId,
         this.toRequestAlertSummary(
           request,

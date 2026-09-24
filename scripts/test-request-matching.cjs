@@ -184,3 +184,43 @@ test('BullMQ delivers ID-only work through a real isolated Redis worker', { skip
     assert.equal(await matching.canDiscover(row, driver.id), true);
   } finally { clearTimeout(timer); await live.onModuleDestroy(); }
 });
+
+
+test('M8: resolved profile room receives cross-tenant event/push; revoked and stale candidates receive nothing', async () => {
+  const { TripsGateway } = require('../dist/src/trips/trips.gateway');
+  const { NotificationsService } = require('../dist/src/notifications/notifications.service');
+  const row = await request();
+  await matching.activate(row.id, driver.id);
+  const user = { id: driver.userId, role: 'DRIVER', tenantId: tenants[0].id };
+  const gateway = new TripsGateway({ getUserFromAccessToken: () => user, isUserActive: async () => true }, {}, {}, db, matching);
+  let middleware;
+  gateway.afterInit({ use: handler => { middleware = handler; } });
+  const rooms = [], delivered = [], sent = [];
+  const socket = { id: 'test', handshake: { auth: { token: 'test', room: 'driver_victim' }, headers: {} }, data: {}, join: room => rooms.push(room) };
+  await new Promise((resolve, reject) => middleware(socket, error => error ? reject(error) : resolve()));
+  gateway.handleConnection(socket);
+  assert.deepEqual(rooms, [`driver_${driver.id}`]);
+  gateway.server = { to: room => ({ emit: (event, payload) => delivered.push({ room, event, payload }) }) };
+  const notifications = new NotificationsService(db, {}, matching);
+  notifications.sendToUsers = async input => sent.push(input);
+  const notify = async () => {
+    await gateway.emitRequestNew(driver.id, { requestId: row.id });
+    await notifications.notifyDriversAboutNewTransportRequest({ drivers: [{ userId: driver.userId, requestId: row.id, serviceType: 'Goods', distanceKm: 1 }] });
+  };
+  await notify();
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].room, rooms[0]);
+  assert.deepEqual(sent[0].userIds, [driver.userId]);
+  const block = await db.routeBlock.create({ data: { ...route } }); blocks.push(block.id);
+  await notify();
+  assert.equal(delivered.length, 1); assert.equal(sent.length, 1);
+  await assert.rejects(driverService.getDriverRequestDetails({ userId: driver.userId, requestId: row.id }), /not available/);
+  await db.routeBlock.update({ where: { id: block.id }, data: { isActive: false } });
+  await db.driverRequestAlert.updateMany({ where: { requestId: row.id }, data: { isActive: false } });
+  await notify();
+  assert.equal(delivered.length, 1); assert.equal(sent.length, 1);
+  await matching.activate(row.id, driver.id);
+  await db.transportRequest.update({ where: { id: row.id }, data: { status: 'ACCEPTED', assignedDriverId: driver.id } });
+  await notify();
+  assert.equal(delivered.length, 1); assert.equal(sent.length, 1);
+});
