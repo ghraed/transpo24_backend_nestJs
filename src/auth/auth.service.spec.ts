@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { DriverStatus, Prisma, UserRole } from '@prisma/client';
 
+import { TenantsService } from '../tenants/tenants.service';
 import { AuthService } from './auth.service';
 
 const customer = {
@@ -43,6 +44,7 @@ function createHarness() {
     prisma as never,
     twilio as never,
     rateLimit as never,
+    new TenantsService(prisma as never),
   );
   return { prisma, twilio, rateLimit, service };
 }
@@ -498,12 +500,18 @@ describe('AuthService phone authentication', () => {
   });
 });
 
-
 describe('customer nickname profiles', () => {
   it('requires a nonblank nickname before completing a profile', async () => {
     const { service, prisma } = createHarness();
     for (const nickname of ['', '  ', 'a', 'x'.repeat(41), 'ab\ncd']) {
-      await expect(service.completeCustomerProfile('customer-1', 'Private Name', 'LB', nickname)).rejects.toThrow('Nickname');
+      await expect(
+        service.completeCustomerProfile(
+          'customer-1',
+          'Private Name',
+          'LB',
+          nickname,
+        ),
+      ).rejects.toThrow('Nickname');
     }
     expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
@@ -511,14 +519,42 @@ describe('customer nickname profiles', () => {
   it('stores and returns the trimmed nickname separately from the full name', async () => {
     const { service, prisma } = createHarness();
     prisma.user.updateMany.mockResolvedValue({ count: 1 });
-    const result = await service.completeCustomerProfile('customer-1', 'Private Name', 'lb', '  Road Runner  ');
-    expect(result).toEqual({ success: true, name: 'Private Name', nickname: 'Road Runner', countryCode: 'LB' });
-    expect(prisma.user.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: {
-      name: 'Private Name', nickname: 'Road Runner', countryCode: 'LB', isProfileCompleted: true,
-    } }));
-    await service.updateCustomerProfile('customer-1', 'Private Name', 'LB', 'New Nickname');
-    expect(prisma.user.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: {
-      name: 'Private Name', nickname: 'New Nickname', countryCode: 'LB',
-    } }));
+    const result = await service.completeCustomerProfile(
+      'customer-1',
+      'Private Name',
+      'lb',
+      '  Road Runner  ',
+    );
+    expect(result).toEqual({
+      success: true,
+      name: 'Private Name',
+      nickname: 'Road Runner',
+      countryCode: 'LB',
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          name: 'Private Name',
+          nickname: 'Road Runner',
+          countryCode: 'LB',
+          isProfileCompleted: true,
+        },
+      }),
+    );
+    await service.updateCustomerProfile(
+      'customer-1',
+      'Private Name',
+      'LB',
+      'New Nickname',
+    );
+    expect(prisma.user.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: {
+          name: 'Private Name',
+          nickname: 'New Nickname',
+          countryCode: 'LB',
+        },
+      }),
+    );
   });
 });

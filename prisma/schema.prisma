@@ -364,7 +364,30 @@ enum ChatReportStatus {
   DISMISSED
 }
 
+// Nullable ownership is temporary for the additive rollout. Existing identities
+// must be assigned using an explicit reviewed mapping before enforcement.
+model Tenant {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  countryCode     String   @unique @db.VarChar(2)
+  name            String
+  defaultCurrency String   @db.VarChar(3)
+  timezone        String
+  defaultLocale   String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  users           User[]
+  refreshSessions RefreshSession[]
+
+  @@index([isActive, code])
+  @@map("tenants")
+}
+
 model User {
+  tenantId      String?
+  tenant        Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
   savedPlaces SavedPlace[]
   nickname      String?            @db.VarChar(40)
   id            String             @id @default(cuid())
@@ -399,11 +422,15 @@ model User {
   chatReportsReceived ChatReport[]    @relation("ChatReportReportedUser")
   refreshSessions RefreshSession[]
 
+  @@index([tenantId, role, deletedAt])
   @@index([deletedAt])
   @@index([role, deletedAt])
 }
 
 model RefreshSession {
+  tenantId     String?
+  tenant       Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
   id           String    @id @default(cuid())
   userId       String
   tokenHash    String    @unique

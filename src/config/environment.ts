@@ -25,6 +25,30 @@ function isMissing(value: unknown): boolean {
 export function validateEnvironment(
   environment: Record<string, unknown>,
 ): Record<string, unknown> {
+  if (
+    environment.TENANT_AUTH_REQUIRED !== undefined &&
+    environment.TENANT_AUTH_REQUIRED !== 'true' &&
+    environment.TENANT_AUTH_REQUIRED !== 'false'
+  ) {
+    throw new Error('TENANT_AUTH_REQUIRED must be true or false.');
+  }
+  if (
+    environment.ACCESS_TOKEN_FORMAT !== undefined &&
+    environment.ACCESS_TOKEN_FORMAT !== 'legacy' &&
+    environment.ACCESS_TOKEN_FORMAT !== 'jwt'
+  ) {
+    throw new Error('ACCESS_TOKEN_FORMAT must be legacy or jwt.');
+  }
+  const legacyMarket = environment.LEGACY_REGISTRATION_MARKET_CODE;
+  if (
+    legacyMarket !== undefined &&
+    (typeof legacyMarket !== 'string' ||
+      !/^[A-Z][A-Z0-9_-]{1,31}$/.test(legacyMarket.trim().toUpperCase()))
+  ) {
+    throw new Error(
+      'LEGACY_REGISTRATION_MARKET_CODE must be a valid market code.',
+    );
+  }
   const isProduction = environment.NODE_ENV === 'production';
   const requiredKeys = isProduction
     ? [...REQUIRED_KEYS, ...REQUIRED_PRODUCTION_KEYS]

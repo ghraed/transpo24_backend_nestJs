@@ -1,3 +1,4 @@
+import { TenantsModule } from '../tenants/tenants.module';
 import { Module } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +10,7 @@ import { CustomerAuthGuard } from './guards/customer-auth.guard';
 import { TestingOnlyGuard } from './guards/testing-only.guard';
 
 @Module({
+  imports: [TenantsModule],
   controllers: [AuthController],
   providers: [
     AuthService,

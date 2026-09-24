@@ -1,0 +1,8 @@
+{
+  "tenants": [
+    {"code":"FR","countryCode":"FR","name":"France","defaultCurrency":"EUR","timezone":"Europe/Paris","defaultLocale":"fr-FR","isActive":true},
+    {"code":"CH","countryCode":"CH","name":"Switzerland","defaultCurrency":"CHF","timezone":"Europe/Zurich","defaultLocale":"de-CH","isActive":true},
+    {"code":"LB","countryCode":"LB","name":"Lebanon","defaultCurrency":"USD","timezone":"Asia/Beirut","defaultLocale":"ar-LB","isActive":true}
+  ],
+  "assignments": []
+}

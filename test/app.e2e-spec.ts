@@ -180,6 +180,7 @@ describe('API HTTP contract (e2e)', () => {
   it('accepts a valid public registration contract', async () => {
     const payload = {
       name: 'Test Customer',
+      nickname: 'Customer',
       email: 'customer@example.com',
       password: 'strong-password',
     };
@@ -225,6 +226,7 @@ describe('API HTTP contract (e2e)', () => {
       .post('/auth/register')
       .send({
         name: 'Test Customer',
+        nickname: 'Customer',
         email: 'customer@example.com',
         password: 'strong-password',
       })
@@ -278,6 +280,7 @@ describe('API HTTP contract (e2e)', () => {
         token: 'ExponentPushToken[abc123]',
         app: PushApp.DRIVER,
         platform: PushPlatform.android,
+        applicationId: 'com.transpo24.driver',
         deviceName: 'Pixel',
       })
       .expect(201, { success: true });
@@ -289,6 +292,7 @@ describe('API HTTP contract (e2e)', () => {
       token: 'ExponentPushToken[abc123]',
       app: PushApp.DRIVER,
       platform: PushPlatform.android,
+      applicationId: 'com.transpo24.driver',
       deviceName: 'Pixel',
     });
   });

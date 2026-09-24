@@ -8,6 +8,26 @@ describe('validateEnvironment', () => {
     TWILIO_VERIFY_SERVICE_SID: 'VA_test',
   };
 
+  it.each([
+    { TENANT_AUTH_REQUIRED: 'yes' },
+    { TENANT_AUTH_REQUIRED: true },
+    { ACCESS_TOKEN_FORMAT: 'JWT' },
+    { LEGACY_REGISTRATION_MARKET_CODE: {} },
+    { LEGACY_REGISTRATION_MARKET_CODE: '' },
+  ])('rejects malformed tenant rollout settings: %p', (settings) => {
+    expect(() => validateEnvironment({ ...configured, ...settings })).toThrow();
+  });
+
+  it('accepts explicit tenant enforcement and JWT rollout settings', () => {
+    const settings = {
+      ...configured,
+      TENANT_AUTH_REQUIRED: 'true',
+      ACCESS_TOKEN_FORMAT: 'jwt',
+      LEGACY_REGISTRATION_MARKET_CODE: 'FR',
+    };
+    expect(validateEnvironment(settings)).toBe(settings);
+  });
+
   it('accepts the required Twilio configuration', () => {
     expect(validateEnvironment(configured)).toBe(configured);
   });

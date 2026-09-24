@@ -23,6 +23,9 @@ import {
 import { unlink } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 
+import { TenantsService } from '../tenants/tenants.service';
+import { publicTenant, type TenantIdentity } from '../tenants/tenant.types';
+
 import type { AuthenticatedUser } from './auth.types';
 import { hashPassword, verifyPassword } from '../common/security/password.util';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +44,8 @@ import { TwilioVerifyService } from './twilio-verify.service';
 import { normalizeCountryCode } from '../common/currency/country-currency.util';
 
 type AccessTokenPayload = {
+  tenantId?: string | null;
+  tenantCode?: string | null;
   sub: string;
   name: string;
   email: string;
@@ -86,6 +91,8 @@ const ACTIVE_ACCOUNT_DELETION_REQUEST_STATUSES: TransportRequestStatus[] = [
 @Injectable()
 export class AuthService {
   private readonly customerSessionUserSelect = {
+    tenantId: true,
+    tenant: true,
     nickname: true,
     id: true,
     name: true,
@@ -98,6 +105,8 @@ export class AuthService {
   } as const;
 
   private readonly driverSessionUserSelect = {
+    tenantId: true,
+    tenant: true,
     id: true,
     name: true,
     email: true,
@@ -124,12 +133,16 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly twilioVerify: TwilioVerifyService,
     private readonly phoneRateLimit: PhoneAuthRateLimitService,
+    private readonly tenants: TenantsService,
   ) {}
 
   async sendPhoneCode(
     dto: SendPhoneCodeDto,
     ipAddress: string,
   ): Promise<{ success: true; message: string }> {
+    if (dto.marketCode !== undefined)
+      await this.tenants.resolveMarket(dto.marketCode);
+    else if (this.tenants.authRequired) await this.tenants.registrationTenant();
     const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
     await this.phoneRateLimit.assertCanSend(phoneNumber, ipAddress);
     await this.twilioVerify.sendCode(phoneNumber);
@@ -204,9 +217,11 @@ export class AuthService {
     let user = existing;
     let isNewUser = false;
     if (!user) {
+      const tenant = await this.tenants.registrationTenant(dto.marketCode);
       try {
         user = await this.prisma.user.create({
           data: {
+            tenantId: tenant?.id ?? null,
             name: 'Customer',
             email: this.createCustomerPlaceholderEmail(phoneNumber),
             passwordHash: hashPassword(randomBytes(32).toString('base64url')),
@@ -235,6 +250,7 @@ export class AuthService {
       throw new ForbiddenException('Customer access is required.');
     }
 
+    await this.tenants.assertLoginMarket(user, dto.marketCode);
     return this.issueCustomerSession(user, isNewUser);
   }
 
@@ -278,8 +294,10 @@ export class AuthService {
     });
 
     if (!user) {
+      const tenant = await this.tenants.registrationTenant(dto.marketCode);
       user = await this.prisma.user.create({
         data: {
+          tenantId: tenant?.id ?? null,
           name: 'Driver',
           email: this.createDriverPlaceholderEmail(phoneNumber),
           passwordHash: hashPassword(randomBytes(32).toString('base64url')),
@@ -302,10 +320,14 @@ export class AuthService {
       });
     }
 
+    await this.tenants.assertLoginMarket(user, dto.marketCode);
     return this.buildDriverAuthResponse(user);
   }
 
-  async continueDriverSession(accessToken: string): Promise<LoginResponseDto> {
+  async continueDriverSession(
+    accessToken: string,
+    marketCode?: string,
+  ): Promise<LoginResponseDto> {
     // The token is held in Expo SecureStore and acts as this phone's trusted
     // credential. Its normal expiry is intentionally ignored here so a driver
     // can return on the same device without another SMS verification.
@@ -323,6 +345,11 @@ export class AuthService {
       throw new UnauthorizedException('Trusted driver session is invalid.');
     }
 
+    this.tenants.assertIdentity(user, trustedUser.tenantId);
+    // Continuing a trusted session uses its stored home market; a supplied market
+    // still must match. It never assigns or transfers account ownership.
+    if (marketCode !== undefined)
+      await this.tenants.assertLoginMarket(user, marketCode);
     return this.buildDriverAuthResponse(user);
   }
 
@@ -346,6 +373,7 @@ export class AuthService {
       throw new UnauthorizedException('Refresh session is invalid or expired.');
     }
 
+    this.tenants.assertIdentity(session.user, session.tenantId);
     const replacement = this.createRefreshToken();
     const replacementId = randomUUID();
     await this.prisma.$transaction(async (tx) => {
@@ -370,6 +398,7 @@ export class AuthService {
         data: {
           id: replacementId,
           userId: session.userId,
+          tenantId: session.user.tenantId ?? null,
           tokenHash: this.hashRefreshToken(replacement),
           expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
         },
@@ -529,8 +558,16 @@ export class AuthService {
 
   private normalizeNickname(nickname: string): string {
     const value = typeof nickname === 'string' ? nickname.trim() : '';
-    if (value.length < 2 || value.length > 40 || /[\u0000-\u001f\u007f]/u.test(value)) {
-      throw new BadRequestException('Nickname must be between 2 and 40 characters.');
+    if (
+      value.length < 2 ||
+      value.length > 40 ||
+      // Public nicknames deliberately exclude control characters.
+      // eslint-disable-next-line no-control-regex
+      /[\u0000-\u001f\u007f]/u.test(value)
+    ) {
+      throw new BadRequestException(
+        'Nickname must be between 2 and 40 characters.',
+      );
     }
     return value;
   }
@@ -540,7 +577,12 @@ export class AuthService {
     name: string,
     countryCode: string,
     nickname: string,
-  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
+  ): Promise<{
+    success: true;
+    name: string;
+    nickname: string;
+    countryCode: string;
+  }> {
     const normalizedName = name.trim();
     const normalizedNickname = this.normalizeNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
@@ -574,7 +616,12 @@ export class AuthService {
     name: string,
     countryCode: string,
     nickname: string,
-  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
+  ): Promise<{
+    success: true;
+    name: string;
+    nickname: string;
+    countryCode: string;
+  }> {
     const normalizedName = name.trim();
     const normalizedNickname = this.normalizeNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
@@ -585,7 +632,11 @@ export class AuthService {
     }
     const updated = await this.prisma.user.updateMany({
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
-      data: { name: normalizedName, nickname: normalizedNickname, countryCode: normalizedCountryCode },
+      data: {
+        name: normalizedName,
+        nickname: normalizedNickname,
+        countryCode: normalizedCountryCode,
+      },
     });
     if (updated.count !== 1) {
       throw new ForbiddenException('Customer access is required.');
@@ -631,6 +682,7 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
+    const tenant = await this.tenants.registrationTenant(dto.marketCode);
     const normalizedEmail = dto.email.trim().toLowerCase();
 
     const existingUser = await this.prisma.user.findUnique({
@@ -644,6 +696,7 @@ export class AuthService {
 
     const user = await this.prisma.user.create({
       data: {
+        tenantId: tenant?.id ?? null,
         name: dto.name.trim(),
         nickname: this.normalizeNickname(dto.nickname),
         email: normalizedEmail,
@@ -651,6 +704,8 @@ export class AuthService {
         role: UserRole.CUSTOMER,
       },
       select: {
+        tenantId: true,
+        tenant: true,
         id: true,
         name: true,
         email: true,
@@ -660,7 +715,7 @@ export class AuthService {
 
     return {
       message: 'Registration successful.',
-      user,
+      user: { ...user, tenant: publicTenant(user.tenant) },
     };
   }
 
@@ -694,10 +749,13 @@ export class AuthService {
       this.prisma.user.findUnique({
         where: { email: input.email },
         select: {
+          tenantId: true,
+          tenant: true,
           id: true,
           name: true,
           email: true,
           role: true,
+          deletedAt: true,
           passwordHash: true,
           driverProfile: {
             select: {
@@ -719,26 +777,30 @@ export class AuthService {
       throw new ConflictException('Phone is already in use.');
     }
 
-    let created: {
-      id: string;
-      email: string;
-      role: UserRole;
-      driverProfile: {
-        id: string;
-        nickname?: string | null;
-        firstName: string;
-        lastName: string;
-        phone: string;
-        countryCode: string | null;
-        countryCodes: string[];
-        city: string | null;
-        cities: string[];
-        status: DriverStatus;
-        isProfileCompleted: boolean;
-      } | null;
-    } | null = null;
+    let created:
+      | (TenantIdentity & {
+          id: string;
+          email: string;
+          role: UserRole;
+          driverProfile: {
+            id: string;
+            nickname?: string | null;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            countryCode: string | null;
+            countryCodes: string[];
+            city: string | null;
+            cities: string[];
+            status: DriverStatus;
+            isProfileCompleted: boolean;
+          } | null;
+        })
+      | null = null;
 
     if (existingUser) {
+      if (existingUser.deletedAt)
+        throw new ForbiddenException('This account is no longer active.');
       if (existingUser.driverProfile) {
         throw new ConflictException(
           'Driver profile already exists for this account. Log in instead.',
@@ -751,6 +813,7 @@ export class AuthService {
         );
       }
 
+      await this.tenants.assertLoginMarket(existingUser, dto.marketCode);
       created = await this.prisma.user.update({
         where: { id: existingUser.id },
         data: {
@@ -772,6 +835,8 @@ export class AuthService {
           },
         },
         select: {
+          tenantId: true,
+          tenant: true,
           id: true,
           email: true,
           role: true,
@@ -793,8 +858,10 @@ export class AuthService {
         },
       });
     } else {
+      const tenant = await this.tenants.registrationTenant(dto.marketCode);
       created = await this.prisma.user.create({
         data: {
+          tenantId: tenant?.id ?? null,
           name: `${input.firstName} ${input.lastName}`.trim(),
           email: input.email,
           passwordHash: hashPassword(input.password),
@@ -815,6 +882,8 @@ export class AuthService {
           },
         },
         select: {
+          tenantId: true,
+          tenant: true,
           id: true,
           email: true,
           role: true,
@@ -842,6 +911,8 @@ export class AuthService {
     }
 
     const accessToken = this.createAccessToken({
+      tenantId: created.tenantId ?? null,
+      tenantCode: created.tenant?.code ?? null,
       id: created.id,
       name: `${created.driverProfile.firstName} ${created.driverProfile.lastName}`.trim(),
       email: created.email,
@@ -852,6 +923,8 @@ export class AuthService {
     return {
       accessToken,
       user: {
+        tenantId: created.tenantId ?? null,
+        tenant: publicTenant(created.tenant),
         id: created.id,
         email: created.email,
         role: created.role,
@@ -879,10 +952,13 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: {
+        tenantId: true,
+        tenant: true,
         id: true,
         name: true,
         email: true,
         role: true,
+        deletedAt: true,
         passwordHash: true,
         driverProfile: {
           select: {
@@ -902,7 +978,7 @@ export class AuthService {
       },
     });
 
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
@@ -912,7 +988,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
+    await this.tenants.assertLoginMarket(user, dto.marketCode);
     const accessToken = this.createAccessToken({
+      tenantId: user.tenantId,
+      tenantCode: user.tenant?.code ?? null,
       id: user.id,
       name: user.name,
       email: user.email,
@@ -931,6 +1010,8 @@ export class AuthService {
     return {
       accessToken,
       user: {
+        tenantId: user.tenantId,
+        tenant: publicTenant(user.tenant),
         id: user.id,
         name: user.name,
         email: user.email,
@@ -1028,7 +1109,7 @@ export class AuthService {
   }
 
   private async issueCustomerSession(
-    user: {
+    user: TenantIdentity & {
       id: string;
       name: string;
       nickname?: string | null;
@@ -1041,10 +1122,12 @@ export class AuthService {
     },
     isNewUser: boolean,
   ): Promise<PhoneAuthResponseDto> {
+    this.tenants.assertIdentity(user);
     const refreshToken = this.createRefreshToken();
     await this.prisma.refreshSession.create({
       data: {
         userId: user.id,
+        tenantId: user.tenantId ?? null,
         tokenHash: this.hashRefreshToken(refreshToken),
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
       },
@@ -1053,7 +1136,7 @@ export class AuthService {
   }
 
   private buildCustomerSessionResponse(
-    user: {
+    user: TenantIdentity & {
       id: string;
       name: string;
       nickname?: string | null;
@@ -1080,11 +1163,15 @@ export class AuthService {
           email: user.email,
           role: user.role,
           hasDriverProfile: false,
+          tenantId: user.tenantId ?? null,
+          tenantCode: user.tenant?.code ?? null,
         },
         CUSTOMER_ACCESS_TOKEN_TTL_SECONDS,
       ),
       refreshToken,
       user: {
+        tenantId: user.tenantId ?? null,
+        tenant: publicTenant(user.tenant),
         nickname: user.nickname ?? null,
         id: user.id,
         name: user.name,
@@ -1133,26 +1220,28 @@ export class AuthService {
     }
   }
 
-  private buildDriverAuthResponse(user: {
-    id: string;
-    name: string;
-    email: string;
-    role: UserRole;
-    deletedAt: Date | null;
-    driverProfile: {
+  private buildDriverAuthResponse(
+    user: TenantIdentity & {
       id: string;
-      nickname?: string | null;
-      firstName: string;
-      lastName: string;
-      phone: string;
-      countryCode: string | null;
-      countryCodes: string[];
-      city: string | null;
-      cities: string[];
-      status: DriverStatus;
-      isProfileCompleted: boolean;
-    } | null;
-  }): LoginResponseDto {
+      name: string;
+      email: string;
+      role: UserRole;
+      deletedAt: Date | null;
+      driverProfile: {
+        id: string;
+        nickname?: string | null;
+        firstName: string;
+        lastName: string;
+        phone: string;
+        countryCode: string | null;
+        countryCodes: string[];
+        city: string | null;
+        cities: string[];
+        status: DriverStatus;
+        isProfileCompleted: boolean;
+      } | null;
+    },
+  ): LoginResponseDto {
     if (
       user.role !== UserRole.DRIVER ||
       user.deletedAt ||
@@ -1161,6 +1250,7 @@ export class AuthService {
       throw new ForbiddenException('Driver access is required.');
     }
 
+    this.tenants.assertIdentity(user);
     const nextStep = this.getDriverLoginNextStep({
       status: user.driverProfile.status,
       isProfileCompleted: user.driverProfile.isProfileCompleted,
@@ -1173,8 +1263,12 @@ export class AuthService {
         email: user.email,
         role: user.role,
         hasDriverProfile: true,
+        tenantId: user.tenantId ?? null,
+        tenantCode: user.tenant?.code ?? null,
       }),
       user: {
+        tenantId: user.tenantId ?? null,
+        tenant: publicTenant(user.tenant),
         id: user.id,
         name: user.name,
         email: user.email,
@@ -1261,22 +1355,46 @@ export class AuthService {
   async isUserActive(user: AuthenticatedUser): Promise<boolean> {
     const account = await this.prisma.user.findFirst({
       where: { id: user.id, role: user.role, deletedAt: null },
-      select: { id: true },
+      select: { id: true, role: true, tenantId: true, tenant: true },
     });
-    return Boolean(account);
+    if (!account) return false;
+    this.tenants.assertIdentity(account, user.tenantId);
+    user.tenantId = account.tenantId ?? null;
+    user.tenantCode = account.tenant?.code ?? null;
+    return true;
   }
 
   private getUserFromSignedAccessToken(
     token: string,
     allowExpired: boolean,
   ): AuthenticatedUser | null {
-    const [encodedPayload, providedSignature] = token.split('.');
-    if (!encodedPayload || !providedSignature) {
-      return null;
+    const parts = token.split('.');
+    if (parts.length !== 2 && parts.length !== 3) return null;
+    const isJwt = parts.length === 3;
+    const encodedPayload = parts[isJwt ? 1 : 0];
+    const providedSignature = parts[isJwt ? 2 : 1];
+    const signingInput = isJwt
+      ? `${parts[0]}.${encodedPayload}`
+      : encodedPayload;
+    if (!encodedPayload || !providedSignature) return null;
+    if (isJwt) {
+      try {
+        const header = JSON.parse(
+          Buffer.from(parts[0], 'base64url').toString('utf8'),
+        ) as { alg?: unknown; typ?: unknown; crit?: unknown };
+        if (
+          header.alg !== 'HS256' ||
+          header.typ !== 'JWT' ||
+          header.crit !== undefined
+        )
+          return null;
+      } catch {
+        return null;
+      }
     }
 
     const expectedSignature = createHmac('sha256', ACCESS_TOKEN_SECRET)
-      .update(encodedPayload)
+      .update(signingInput)
       .digest('base64url');
 
     const providedBuffer = Buffer.from(providedSignature);
@@ -1298,7 +1416,10 @@ export class AuthService {
         typeof payload.name !== 'string' ||
         typeof payload.email !== 'string' ||
         typeof payload.role !== 'string' ||
-        typeof payload.exp !== 'number'
+        typeof payload.exp !== 'number' ||
+        !Number.isFinite(payload.exp) ||
+        (payload.tenantId != null && typeof payload.tenantId !== 'string') ||
+        (payload.tenantCode != null && typeof payload.tenantCode !== 'string')
       ) {
         return null;
       }
@@ -1312,6 +1433,8 @@ export class AuthService {
       }
 
       return {
+        tenantId: payload.tenantId ?? null,
+        tenantCode: payload.tenantCode ?? null,
         id: payload.sub,
         name: payload.name,
         email: payload.email,
@@ -1331,6 +1454,8 @@ export class AuthService {
     ttlSeconds = ACCESS_TOKEN_TTL_SECONDS,
   ): string {
     const payload: AccessTokenPayload = {
+      tenantId: user.tenantId ?? null,
+      tenantCode: user.tenantCode ?? null,
       sub: user.id,
       name: user.name,
       email: user.email,
@@ -1342,10 +1467,16 @@ export class AuthService {
     const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
       'base64url',
     );
+    // Released customer apps decode the first segment. Keep legacy issuance
+    // until those apps support JWT; verification accepts both signed formats.
+    const signingInput =
+      process.env.ACCESS_TOKEN_FORMAT === 'jwt'
+        ? `${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${encodedPayload}`
+        : encodedPayload;
     const signature = createHmac('sha256', ACCESS_TOKEN_SECRET)
-      .update(encodedPayload)
+      .update(signingInput)
       .digest('base64url');
 
-    return `${encodedPayload}.${signature}`;
+    return `${signingInput}.${signature}`;
   }
 }

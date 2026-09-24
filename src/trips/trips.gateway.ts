@@ -3,6 +3,7 @@ import {
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -12,6 +13,7 @@ import { Inject, Logger, forwardRef } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
 
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { AuthService } from '../auth/auth.service';
 import { ChatService } from '../chat/chat.service';
 import {
@@ -47,13 +49,7 @@ import {
   TripStatusUpdatedPayload,
 } from './trips.types';
 
-type SocketUser = {
-  id: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  hasDriverProfile: boolean;
-};
+type SocketUser = AuthenticatedUser;
 
 type SocketDebugPingPayload = {
   timestamp?: string;
@@ -72,7 +68,9 @@ type SocketDebugPongPayload = {
 };
 
 @WebSocketGateway({ cors: { origin: true, credentials: true } })
-export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class TripsGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
+{
   private readonly logger = new Logger(TripsGateway.name);
 
   @WebSocketServer()
@@ -85,29 +83,33 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly chatService: ChatService,
   ) {}
 
-  handleConnection(client: Socket): void {
+  afterInit(server: Server): void {
+    // Authenticate before Socket.IO sends the connect acknowledgement. Doing
+    // the database read in handleConnection races the client's first room join.
+    server.use((client, next) => {
+      void this.authenticateSocket(client).then(
+        () => next(),
+        () => next(new Error('Unauthorized socket connection.')),
+      );
+    });
+  }
+
+  private async authenticateSocket(client: Socket): Promise<void> {
     const token = this.getSocketToken(client);
-
-    if (!token) {
-      this.logger.warn(
-        `Socket connection rejected: missing token (socketId=${client.id})`,
-      );
-      client.disconnect();
-      return;
+    const user = token ? this.authService.getUserFromAccessToken(token) : null;
+    if (!user || !(await this.authService.isUserActive(user))) {
+      throw new Error('Unauthorized socket connection.');
     }
-
-    const user = this.authService.getUserFromAccessToken(token);
-
-    if (!user) {
-      this.logger.warn(
-        `Socket connection rejected: invalid token (socketId=${client.id})`,
-      );
-      client.disconnect();
-      return;
-    }
-
     const socketData = client.data as { user?: SocketUser };
     socketData.user = user;
+  }
+
+  handleConnection(client: Socket): void {
+    const user = (client.data as { user?: SocketUser }).user;
+    if (!user) {
+      client.disconnect();
+      return;
+    }
     this.logger.log(
       `Socket connected: socketId=${client.id}, userId=${user.id}, role=${user.role}`,
     );

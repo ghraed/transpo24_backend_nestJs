@@ -24,7 +24,10 @@
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "prisma:seed": "node prisma/seed.js",
     "prisma:validate": "prisma validate",
-    "test:documents:integration": "npm run build && node scripts/test-request-documents.cjs"
+    "test:documents:integration": "npm run build && node scripts/test-request-documents.cjs",
+    "tenants:backfill": "node scripts/tenant-backfill.cjs",
+    "tenants:seed:dev": "node scripts/seed-development-tenants.cjs",
+    "test:tenants:integration": "npm run build && node --test scripts/test-tenant-foundation.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",

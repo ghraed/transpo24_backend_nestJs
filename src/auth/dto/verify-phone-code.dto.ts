@@ -1,6 +1,7 @@
+import { MarketContextDto } from './market-context.dto';
 import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 
-export class VerifyPhoneCodeDto {
+export class VerifyPhoneCodeDto extends MarketContextDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(32)

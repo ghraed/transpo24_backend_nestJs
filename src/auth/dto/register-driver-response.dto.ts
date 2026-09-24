@@ -1,6 +1,9 @@
+import type { PublicTenant } from '../../tenants/tenant.types';
 export interface RegisterDriverResponseDto {
   accessToken: string;
   user: {
+    tenantId?: string | null;
+    tenant?: PublicTenant | null;
     id: string;
     email: string;
     role: 'CUSTOMER' | 'DRIVER' | 'ADMIN';

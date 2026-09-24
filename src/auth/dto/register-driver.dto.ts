@@ -1,6 +1,9 @@
+import { Transform } from 'class-transformer';
 import { UpdateDriverNicknameDto } from '../../driver/dto/update-driver-nickname.dto';
 import {
   ArrayUnique,
+  Matches,
+  ValidateIf,
   IsEmail,
   IsArray,
   IsNotEmpty,
@@ -10,6 +13,14 @@ import {
 } from 'class-validator';
 
 export class RegisterDriverDto extends UpdateDriverNicknameDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @Matches(/^[A-Z][A-Z0-9_-]{1,31}$/)
+  marketCode?: string;
+
   @IsOptional()
   @IsString()
   firstName!: string;

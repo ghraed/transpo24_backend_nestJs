@@ -1,3 +1,4 @@
+import { MarketContextDto } from './market-context.dto';
 import {
   IsEmail,
   IsNotEmpty,
@@ -6,7 +7,7 @@ import {
   MaxLength,
 } from 'class-validator';
 
-export class RegisterDto {
+export class RegisterDto extends MarketContextDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
