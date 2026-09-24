@@ -1,3 +1,4 @@
+import { RoutePolicyModule } from '../route-policy/route-policy.module';
 import { RequestGeographyService } from './request-geography.service';
 import { Module, forwardRef } from '@nestjs/common';
 
@@ -16,6 +17,7 @@ import { CustomerPlacesService } from './customer-places.service';
 
 @Module({
   imports: [
+    RoutePolicyModule,
     AuthModule,
     forwardRef(() => ChatModule),
     NotificationsModule,

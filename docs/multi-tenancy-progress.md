@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -111,7 +111,7 @@ currency, price/status and null new fields. Google responses were mocked; no liv
 Google/provider validation, production deployment or backfill was performed.
 Previous unrelated full-lint/mobile baseline limitations above still apply.
 
-## Exact next task: M3 — RouteBlock default-allow policy
+## M3 implementation scope (completed below)
 
 1. Read the source roadmap/decisions/checklist and this handoff. Keep M0–M2 intact.
 2. Add directional `RouteBlock` using existing `ServiceKey` conventions, nullable
@@ -146,3 +146,41 @@ final ownership constraints in M13. Keep `TENANT_AUTH_REQUIRED=false` and
 `ACCESS_TOKEN_FORMAT=legacy` until the required compatibility and authorization
 work is complete. A legacy registration market, if used, must be explicitly chosen
 by the deployment owner; the code does not guess one.
+
+## M3 checkpoint — RouteBlock default-allow policy (2026-09-24)
+
+- Added `RouteBlock` with directional ISO country fields, optional existing
+  `ServiceKey` (null means all types), internal reason, active flag, creator User
+  relation and timestamps. New additive migration `20260924160000_add_route_blocks`.
+- Indexed direction/active lookup; two PostgreSQL partial unique indexes reject
+  equivalent active rules, including all-type/null rules and concurrent creates.
+  Inactive history and simultaneous all-type/type-specific rules are supported.
+- Exported `RoutePolicyModule` / `RoutePolicyService.isBlocked/assertAllowed`.
+  One current DB lookup; no cache, allowlist, normal-route rows or tenant coupling.
+  Invalid/unresolved countries fail closed; public `ROUTE_BLOCKED` omits reasons.
+- All four dedicated creation paths are drafts, without matching/notification.
+  They retain existing incomplete-draft behavior. Submission re-resolves countries
+  and checks the DB service type before any publish/write/dispatch. Open request
+  edits check the resulting route inside the existing transaction before changes.
+  Existing ownership/status/version checks and persisted currency are preserved.
+- Accepted/in-progress lifecycle code is unchanged. Later matching/offer policy
+  rechecks remain M7–M9; M3 alone is not complete live route enforcement.
+- **Deployment prerequisite:** publication/open edits now reject null geography
+  even with `REQUEST_GEOGRAPHY_REQUIRED=false`, including an empty block table.
+  Configure and verify the Google server geocoder before deploying this API.
+  Draft saving and historical reads remain compatible; no country is guessed.
+- Validation: **481 tests / 44 suites with coverage thresholds**, **14 HTTP tests**,
+  **21 PostgreSQL tests** (3 policy, 8 geography, 10 tenant), build, TypeScript,
+  schema validation and changed-file ESLint passed. All **67 migrations** applied
+  to isolated PostgreSQL 16. Provider responses mocked; no live provider/device QA.
+  Existing unrelated full-lint/mobile limitations still apply. No deployment,
+  production backfill, commit or push.
+
+## Exact next task: M4 — Admin route-block API
+
+Reuse existing ADMIN authentication/permissions. Add list/create/update/activate/
+deactivate and effective route check endpoints; validate ISO countries and existing
+ServiceKey, handle active-duplicate database errors (including reactivation), and
+record actor/direction/type/reason/old-new state through existing audit patterns.
+Use the shared policy service; no cache invalidation is necessary currently.
+Do not expose internal reasons to mobile or cancel accepted jobs. M5 adds the UI.

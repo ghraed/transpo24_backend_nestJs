@@ -1,3 +1,4 @@
+import { RoutePolicyService } from '../route-policy/route-policy.service';
 import { RequestGeographyService } from './request-geography.service';
 import {
   EditCustomerRequestDto,
@@ -825,6 +826,9 @@ export class CustomerRequestsService {
     private readonly tripsGateway: TripsGateway,
     private readonly notificationsService: NotificationsService,
     private readonly geography: RequestGeographyService = new RequestGeographyService(
+      prisma,
+    ),
+    private readonly routePolicy: RoutePolicyService = new RoutePolicyService(
       prisma,
     ),
   ) {}
@@ -2075,18 +2079,27 @@ export class CustomerRequestsService {
           });
           if (!service?.isActive)
             throw new BadRequestException('Service is unavailable.');
+          const geography = await this.geography.route(
+            customerId,
+            dto.pickupLocation,
+            dto.dropoffLocation,
+            tx,
+          );
+          await this.routePolicy.assertAllowed(
+            {
+              fromCountryCode: geography.pickupCountryCode,
+              toCountryCode: geography.destinationCountryCode,
+              transportType: service.key,
+            },
+            tx,
+          );
           const data: Prisma.TransportRequestUncheckedUpdateInput = {
             ...Object.fromEntries(
               EDITABLE_REQUEST_FIELDS.filter(
                 (key) => key !== 'serviceId' && dto[key] !== undefined,
               ).map((key) => [key, dto[key]]),
             ),
-            ...(await this.geography.route(
-              customerId,
-              dto.pickupLocation,
-              dto.dropoffLocation,
-              tx,
-            )),
+            ...geography,
             ...(request.currency ? { currency: request.currency } : {}),
             pickupLatitude: dto.pickupLocation.latitude,
             pickupLongitude: dto.pickupLocation.longitude,
@@ -2277,6 +2290,26 @@ export class CustomerRequestsService {
 
     await this.validateSubmittedRequest(request);
 
+    const service = await this.prisma.service.findUnique({
+      where: { id: request.serviceId },
+      select: { key: true, isActive: true },
+    });
+    if (!service?.isActive)
+      throw new BadRequestException('Service is unavailable.');
+    const geography = await this.geography.route(
+      input.customerId,
+      { latitude: request.pickupLatitude, longitude: request.pickupLongitude },
+      {
+        latitude: request.dropoffLatitude,
+        longitude: request.dropoffLongitude,
+      },
+    );
+    await this.routePolicy.assertAllowed({
+      fromCountryCode: geography.pickupCountryCode,
+      toCountryCode: geography.destinationCountryCode,
+      transportType: service.key,
+    });
+
     const updatedRequest = await this.prisma.transportRequest
       .update({
         where: {
@@ -2285,17 +2318,7 @@ export class CustomerRequestsService {
           updatedAt: request.updatedAt,
         },
         data: {
-          ...(await this.geography.route(
-            input.customerId,
-            {
-              latitude: request.pickupLatitude,
-              longitude: request.pickupLongitude,
-            },
-            {
-              latitude: request.dropoffLatitude,
-              longitude: request.dropoffLongitude,
-            },
-          )),
+          ...geography,
           ...(request.currency ? { currency: request.currency } : {}),
           status: TransportRequestStatus.PENDING_QUOTES,
           submittedAt: new Date(),

@@ -156,6 +156,7 @@ describe('request geography write paths', () => {
   let service: CustomerRequestsService;
   function makeDb() {
     return {
+      routeBlock: { findFirst: jest.fn().mockResolvedValue(null) },
       user: {
         findUnique: jest.fn().mockResolvedValue({ tenantId: 'tenant-ch' }),
       },
@@ -311,6 +312,47 @@ describe('request geography write paths', () => {
       status: 'PENDING_QUOTES',
     });
   });
+  it.each([
+    'VEHICLE_TRANSPORT',
+    'MOTORCYCLE_TRANSPORT',
+    'GOODS_TRANSPORT',
+    'FURNITURE_TRANSPORT',
+  ])(
+    'rejects blocked %s submission before writing or dispatching',
+    async (key) => {
+      db.service.findUnique.mockResolvedValue({
+        id: 'service',
+        isActive: true,
+        key,
+      });
+      db.routeBlock.findFirst.mockResolvedValue({ id: 'block' });
+      await expect(
+        service.submitCustomerRequest({
+          customerId: 'customer',
+          requestId: 'request',
+        }),
+      ).rejects.toMatchObject({ response: { code: 'ROUTE_BLOCKED' } });
+      expect(db.transportRequest.update).not.toHaveBeenCalled();
+      expect(
+        service['dispatchSubmittedRequestToEligibleDrivers'],
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it('cannot publish unresolved compatibility geography even with zero blocks', async () => {
+    delete process.env.GOOGLE_MAPS_API_KEY;
+    process.env.REQUEST_GEOGRAPHY_REQUIRED = 'false';
+    await expect(
+      service.submitCustomerRequest({
+        customerId: 'customer',
+        requestId: 'request',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'REQUEST_COUNTRY_UNRESOLVED' },
+    });
+    expect(db.transportRequest.update).not.toHaveBeenCalled();
+  });
+
   it('does not mutate or dispatch a request when geography fails', async () => {
     fetchMock.mockRejectedValue(new Error('timeout'));
     await expect(

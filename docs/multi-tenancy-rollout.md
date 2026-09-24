@@ -158,3 +158,15 @@ currency presentation remains M10/M11. No FX conversion is implemented.
 Verification: `npm run test:geography:integration` requires a disposable migrated
 local `_test` database via `TENANT_TEST_DATABASE_URL`. Its Google responses are
 mocked; separately verify the deployed server's Google key before enforcement.
+
+## M3 publication prerequisite
+
+Apply `20260924160000_add_route_blocks` before this API version. It creates an empty
+block table; ordinary routes require no records. Configure and verify the existing
+Google server geocoder before deploying: submission and open-request edits now
+require resolved ISO countries even when `REQUEST_GEOGRAPHY_REQUIRED=false`.
+Unresolved geography returns `REQUEST_COUNTRY_UNRESOLVED`; provider failures retain
+M2's errors. Drafts can still be saved. Route denials return generic `ROUTE_BLOCKED`.
+No accepted/in-progress request is cancelled by this migration or policy service.
+Admin management/auditing and matching/offer rechecks remain later milestones;
+do not treat M3 alone as ready for multi-market production enforcement.

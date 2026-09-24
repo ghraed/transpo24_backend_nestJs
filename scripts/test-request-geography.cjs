@@ -114,3 +114,22 @@ test('location resolution cannot overwrite a concurrently submitted draft', asyn
     assert.equal(row.pickupLatitude, null);
   } finally { global.fetch = provider; }
 });
+
+test('route block rejects publication and later edits without mutating an open request', async () => {
+  const request = await service.createGoodsTransportRequest({ customerId: customer.id, pickupLocation, deliveryLocation, isImmediate: true, shipmentSize: 'S', goodsDescription: 'Boxes', approximateWeightKg: 20, numberOfPieces: 2, isFragile: false, requiresRefrigeration: false });
+  const block = await prisma.routeBlock.create({ data: { fromCountryCode: 'LB', toCountryCode: 'LB', transportType: 'GOODS_TRANSPORT' } });
+  try {
+    await assert.rejects(service.submitCustomerRequest({ customerId: customer.id, requestId: request.id }), e => e.getResponse().code === 'ROUTE_BLOCKED');
+    assert.equal((await prisma.transportRequest.findUniqueOrThrow({ where: { id: request.id } })).status, 'DRAFT');
+    await prisma.routeBlock.update({ where: { id: block.id }, data: { isActive: false } });
+    await service.submitCustomerRequest({ customerId: customer.id, requestId: request.id });
+    const row = await prisma.transportRequest.findUniqueOrThrow({ where: { id: request.id } });
+    await prisma.routeBlock.update({ where: { id: block.id }, data: { isActive: true } });
+    await assert.rejects(service.editCustomerRequest(customer.id, request.id, { serviceId: row.serviceId, updatedAt: row.updatedAt.toISOString(), retainedPhotoIds: [], pickupLocation, dropoffLocation: deliveryLocation, isImmediate: true, requiresLoadingHelp: false }, []), e => e.getResponse().code === 'ROUTE_BLOCKED');
+    const unchanged = await prisma.transportRequest.findUniqueOrThrow({ where: { id: request.id } });
+    assert.equal(unchanged.updatedAt.toISOString(), row.updatedAt.toISOString());
+    assert.equal(unchanged.status, 'PENDING_QUOTES');
+  } finally {
+    await prisma.routeBlock.delete({ where: { id: block.id } });
+  }
+});

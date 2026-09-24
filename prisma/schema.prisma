@@ -390,6 +390,7 @@ model User {
   tenantId      String?
   tenant        Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  createdRouteBlocks RouteBlock[]
   savedPlaces SavedPlace[]
   nickname      String?            @db.VarChar(40)
   id            String             @id @default(cuid())
@@ -1401,4 +1402,21 @@ model SavedPlace {
 
   @@unique([customerId, locationKey])
   @@index([customerId, updatedAt])
+}
+
+// Allowed routes are implicit. Partial active uniqueness is enforced in SQL.
+model RouteBlock {
+  id String @id @default(cuid())
+  fromCountryCode String @db.VarChar(2)
+  toCountryCode String @db.VarChar(2)
+  transportType ServiceKey?
+  reason String?
+  isActive Boolean @default(true)
+  createdByAdminId String?
+  createdByAdmin User? @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fromCountryCode, toCountryCode, isActive])
+  @@map("route_blocks")
 }

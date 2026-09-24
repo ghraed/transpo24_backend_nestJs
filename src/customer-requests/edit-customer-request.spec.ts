@@ -51,6 +51,8 @@ function setup() {
     icon: null,
   };
   const db = {
+    routeBlock: { findFirst: jest.fn().mockResolvedValue(null) },
+    tenant: { findUnique: jest.fn().mockResolvedValue(null) },
     user: { findUnique: jest.fn().mockResolvedValue({ tenantId: null }) },
     $queryRaw: jest.fn().mockResolvedValue([]),
     transportRequest: {
@@ -111,6 +113,37 @@ function setup() {
 }
 
 describe('editing submitted requests', () => {
+  let oldKey: string | undefined;
+  beforeEach(() => {
+    oldKey = process.env.GOOGLE_MAPS_API_KEY;
+    process.env.GOOGLE_MAPS_API_KEY = 'test-only';
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'OK',
+        results: [
+          { address_components: [{ types: ['country'], short_name: 'CH' }] },
+        ],
+      }),
+    } as Response);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    if (oldKey === undefined) delete process.env.GOOGLE_MAPS_API_KEY;
+    else process.env.GOOGLE_MAPS_API_KEY = oldKey;
+  });
+  it('rejects a newly blocked route before editing or notifying', async () => {
+    const { instance, db, notifications, gateway } = setup();
+    db.routeBlock.findFirst.mockResolvedValue({ id: 'block' });
+    await expect(
+      instance.editCustomerRequest('customer', 'request', payload(), []),
+    ).rejects.toMatchObject({ response: { code: 'ROUTE_BLOCKED' } });
+    expect(db.transportRequest.update).not.toHaveBeenCalled();
+    expect(
+      notifications.notifyDriversAboutNewTransportRequest,
+    ).not.toHaveBeenCalled();
+    expect(gateway.emitRequestNew).not.toHaveBeenCalled();
+  });
   it('saves the original request atomically and synchronizes matching fields', async () => {
     const { instance, db, row } = setup();
     await instance.editCustomerRequest('customer', 'request', payload(), []);

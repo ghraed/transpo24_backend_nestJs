@@ -28,7 +28,8 @@
     "tenants:backfill": "node scripts/tenant-backfill.cjs",
     "tenants:seed:dev": "node scripts/seed-development-tenants.cjs",
     "test:tenants:integration": "npm run build && node --test scripts/test-tenant-foundation.cjs",
-    "test:geography:integration": "npm run build && node --test scripts/test-request-geography.cjs"
+    "test:geography:integration": "npm run build && node --test scripts/test-request-geography.cjs",
+    "test:route-policy:integration": "npm run build && node --test scripts/test-route-policy.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",
