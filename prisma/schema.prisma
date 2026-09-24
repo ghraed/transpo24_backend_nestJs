@@ -379,6 +379,8 @@ model Tenant {
   updatedAt       DateTime @updatedAt
   users           User[]
   refreshSessions RefreshSession[]
+  customerRequests TransportRequest[] @relation("RequestCustomerTenant")
+  originRequests TransportRequest[] @relation("RequestOriginTenant")
 
   @@index([isActive, code])
   @@map("tenants")
@@ -560,6 +562,16 @@ model Service {
 }
 
 model TransportRequest {
+  customerTenantId String?
+  customerTenant Tenant? @relation("RequestCustomerTenant", fields: [customerTenantId], references: [id], onDelete: Restrict)
+  originTenantId String?
+  originTenant Tenant? @relation("RequestOriginTenant", fields: [originTenantId], references: [id], onDelete: Restrict)
+  pickupCountryCode String? @db.VarChar(2)
+  destinationCountryCode String? @db.VarChar(2)
+
+  @@index([customerTenantId])
+  @@index([originTenantId])
+  @@index([pickupCountryCode, destinationCountryCode])
   id                  String                 @id @default(cuid())
   customerId          String
   serviceId           String

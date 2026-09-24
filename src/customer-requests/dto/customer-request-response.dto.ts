@@ -8,6 +8,12 @@ import {
 } from '@prisma/client';
 
 export class CustomerRequestResponseDto {
+  customerTenantId!: string | null;
+  originTenantId!: string | null;
+  pickupCountryCode!: string | null;
+  destinationCountryCode!: string | null;
+  currency!: string | null;
+
   id!: string;
   serviceId!: string;
   status!: TransportRequestStatus;

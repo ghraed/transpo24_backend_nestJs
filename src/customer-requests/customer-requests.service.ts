@@ -1,3 +1,4 @@
+import { RequestGeographyService } from './request-geography.service';
 import {
   EditCustomerRequestDto,
   EDITABLE_REQUEST_FIELDS,
@@ -324,6 +325,12 @@ type RequestPhotoResponse = {
 };
 
 type TransportRequestResponseSource = {
+  customerTenantId?: string | null;
+  originTenantId?: string | null;
+  pickupCountryCode?: string | null;
+  destinationCountryCode?: string | null;
+  currency?: string | null;
+
   createdAt: Date;
   customer?: { nickname: string | null } | null;
   assignedDriverId: string | null;
@@ -589,6 +596,13 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/webp',
 ]);
 const REQUEST_SELECT = {
+  updatedAt: true,
+  customerTenantId: true,
+  originTenantId: true,
+  pickupCountryCode: true,
+  destinationCountryCode: true,
+  currency: true,
+
   createdAt: true,
   customer: { select: { nickname: true } },
   assignedDriverId: true,
@@ -810,6 +824,9 @@ export class CustomerRequestsService {
     @Inject(forwardRef(() => TripsGateway))
     private readonly tripsGateway: TripsGateway,
     private readonly notificationsService: NotificationsService,
+    private readonly geography: RequestGeographyService = new RequestGeographyService(
+      prisma,
+    ),
   ) {}
 
   async createDraftRequest(
@@ -830,6 +847,7 @@ export class CustomerRequestsService {
     });
 
     const data: Prisma.TransportRequestUncheckedCreateInput = {
+      customerTenantId: await this.geography.customerTenant(input.customerId),
       clientDraftId: input.clientDraftId ?? null,
       customerId: input.customerId,
       serviceId: input.serviceId,
@@ -926,6 +944,11 @@ export class CustomerRequestsService {
     const request = await this.prisma.transportRequest.create({
       data: {
         customerId: input.customerId,
+        ...(await this.geography.route(
+          input.customerId,
+          input.pickupLocation,
+          input.deliveryLocation,
+        )),
         serviceId: service.id,
         status: TransportRequestStatus.DRAFT,
         submittedAt: null,
@@ -1024,6 +1047,11 @@ export class CustomerRequestsService {
     const request = await this.prisma.transportRequest.create({
       data: {
         customerId: input.customerId,
+        ...(await this.geography.route(
+          input.customerId,
+          input.pickupLocation,
+          input.deliveryLocation,
+        )),
         serviceId: service.id,
         status: TransportRequestStatus.DRAFT,
         isImmediate: input.isImmediate ?? true,
@@ -1177,6 +1205,11 @@ export class CustomerRequestsService {
       const request = await this.prisma.transportRequest.create({
         data: {
           customerId: input.customerId,
+          ...(await this.geography.route(
+            input.customerId,
+            input.pickupLocation,
+            input.deliveryLocation,
+          )),
           serviceId: service.id,
           status: TransportRequestStatus.DRAFT,
           submittedAt: null,
@@ -1229,6 +1262,7 @@ export class CustomerRequestsService {
         id: true,
         customerId: true,
         status: true,
+        updatedAt: true,
       },
     });
 
@@ -1248,16 +1282,23 @@ export class CustomerRequestsService {
       );
     }
 
-    const updatedRequest = await this.prisma.transportRequest.update({
-      where: { id: input.requestId },
-      data: {
-        pickupLatitude: input.latitude,
-        pickupLongitude: input.longitude,
-        pickupAddress: input.address ?? null,
-        pickupPlaceId: input.placeId ?? null,
-      },
-      select: REQUEST_SELECT,
-    });
+    const updatedRequest = await this.prisma.transportRequest
+      .update({
+        where: {
+          id: input.requestId,
+          status: TransportRequestStatus.DRAFT,
+          updatedAt: existingRequest.updatedAt,
+        },
+        data: {
+          ...(await this.geography.pickup(input)),
+          pickupLatitude: input.latitude,
+          pickupLongitude: input.longitude,
+          pickupAddress: input.address ?? null,
+          pickupPlaceId: input.placeId ?? null,
+        },
+        select: REQUEST_SELECT,
+      })
+      .catch(this.rethrowRequestWriteConflict);
 
     return this.toResponseDto(updatedRequest);
   }
@@ -1275,6 +1316,7 @@ export class CustomerRequestsService {
         id: true,
         customerId: true,
         status: true,
+        updatedAt: true,
         pickupLatitude: true,
         pickupLongitude: true,
       },
@@ -1315,16 +1357,23 @@ export class CustomerRequestsService {
       );
     }
 
-    const updatedRequest = await this.prisma.transportRequest.update({
-      where: { id: input.requestId },
-      data: {
-        dropoffLatitude: input.latitude,
-        dropoffLongitude: input.longitude,
-        dropoffAddress: input.address ?? null,
-        dropoffPlaceId: input.placeId ?? null,
-      },
-      select: REQUEST_SELECT,
-    });
+    const updatedRequest = await this.prisma.transportRequest
+      .update({
+        where: {
+          id: input.requestId,
+          status: TransportRequestStatus.DRAFT,
+          updatedAt: existingRequest.updatedAt,
+        },
+        data: {
+          destinationCountryCode: await this.geography.country(input),
+          dropoffLatitude: input.latitude,
+          dropoffLongitude: input.longitude,
+          dropoffAddress: input.address ?? null,
+          dropoffPlaceId: input.placeId ?? null,
+        },
+        select: REQUEST_SELECT,
+      })
+      .catch(this.rethrowRequestWriteConflict);
 
     return this.toResponseDto(updatedRequest);
   }
@@ -2032,6 +2081,13 @@ export class CustomerRequestsService {
                 (key) => key !== 'serviceId' && dto[key] !== undefined,
               ).map((key) => [key, dto[key]]),
             ),
+            ...(await this.geography.route(
+              customerId,
+              dto.pickupLocation,
+              dto.dropoffLocation,
+              tx,
+            )),
+            ...(request.currency ? { currency: request.currency } : {}),
             pickupLatitude: dto.pickupLocation.latitude,
             pickupLongitude: dto.pickupLocation.longitude,
             pickupAddress: dto.pickupLocation.address ?? null,
@@ -2221,26 +2277,44 @@ export class CustomerRequestsService {
 
     await this.validateSubmittedRequest(request);
 
-    const updatedRequest = await this.prisma.transportRequest.update({
-      where: { id: input.requestId },
-      data: {
-        status: TransportRequestStatus.PENDING_QUOTES,
-        submittedAt: new Date(),
-        customerNote: input.customerNote?.trim() || request.customerNote,
-      },
-      select: {
-        ...REQUEST_SELECT,
-        service: {
-          select: {
-            id: true,
-            key: true,
-            nameEn: true,
-            nameAr: true,
-            icon: true,
+    const updatedRequest = await this.prisma.transportRequest
+      .update({
+        where: {
+          id: input.requestId,
+          status: TransportRequestStatus.DRAFT,
+          updatedAt: request.updatedAt,
+        },
+        data: {
+          ...(await this.geography.route(
+            input.customerId,
+            {
+              latitude: request.pickupLatitude,
+              longitude: request.pickupLongitude,
+            },
+            {
+              latitude: request.dropoffLatitude,
+              longitude: request.dropoffLongitude,
+            },
+          )),
+          ...(request.currency ? { currency: request.currency } : {}),
+          status: TransportRequestStatus.PENDING_QUOTES,
+          submittedAt: new Date(),
+          customerNote: input.customerNote?.trim() || request.customerNote,
+        },
+        select: {
+          ...REQUEST_SELECT,
+          service: {
+            select: {
+              id: true,
+              key: true,
+              nameEn: true,
+              nameAr: true,
+              icon: true,
+            },
           },
         },
-      },
-    });
+      })
+      .catch(this.rethrowRequestWriteConflict);
 
     const dispatchResult =
       await this.dispatchSubmittedRequestToEligibleDrivers(updatedRequest);
@@ -2256,6 +2330,18 @@ export class CustomerRequestsService {
       });
 
     return this.toResponseDto(updatedRequest, dispatchResult.summary);
+  }
+
+  private rethrowRequestWriteConflict(this: void, error: unknown): never {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
+    ) {
+      throw new ConflictException(
+        'This request changed. Reopen it before saving again.',
+      );
+    }
+    throw error;
   }
 
   async getCustomerRequestStatus(
@@ -3605,6 +3691,12 @@ export class CustomerRequestsService {
 
     return {
       id: request.id,
+      customerTenantId: request.customerTenantId ?? null,
+      originTenantId: request.originTenantId ?? null,
+      pickupCountryCode: request.pickupCountryCode ?? null,
+      destinationCountryCode: request.destinationCountryCode ?? null,
+      currency: request.currency ?? null,
+
       serviceId: request.serviceId,
       status: request.status,
       submittedAt: request.submittedAt

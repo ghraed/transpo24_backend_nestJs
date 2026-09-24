@@ -1,3 +1,4 @@
+import { RequestGeographyService } from './request-geography.service';
 import { Module, forwardRef } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
@@ -26,7 +27,12 @@ import { CustomerPlacesService } from './customer-places.service';
     CustomerHomeController,
     CustomerRequestsController,
   ],
-  providers: [CustomerPlacesService, CustomerRequestsService, PrismaService],
+  providers: [
+    RequestGeographyService,
+    CustomerPlacesService,
+    CustomerRequestsService,
+    PrismaService,
+  ],
   exports: [CustomerRequestsService],
 })
 export class CustomerRequestsModule {}

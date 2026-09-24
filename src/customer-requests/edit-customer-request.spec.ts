@@ -51,6 +51,7 @@ function setup() {
     icon: null,
   };
   const db = {
+    user: { findUnique: jest.fn().mockResolvedValue({ tenantId: null }) },
     $queryRaw: jest.fn().mockResolvedValue([]),
     transportRequest: {
       findUnique: jest.fn().mockImplementation(() => Promise.resolve(row)),
@@ -106,7 +107,7 @@ function setup() {
     notifications as never,
   );
   Object.assign(instance, { toResponseDto: (value: unknown) => value });
-  return { db, instance, notifications, gateway, row: () => row };
+  return { db, instance, notifications, gateway, serviceRow, row: () => row };
 }
 
 describe('editing submitted requests', () => {
@@ -375,4 +376,62 @@ describe('edit request input validation', () => {
       BadRequestException,
     );
   });
+});
+
+describe('geography on submitted request edits', () => {
+  it.each([
+    'VEHICLE_TRANSPORT',
+    'MOTORCYCLE_TRANSPORT',
+    'GOODS_TRANSPORT',
+    'FURNITURE_TRANSPORT',
+  ])(
+    're-resolves %s geography independently from ownership and preserves currency',
+    async (key) => {
+      const { instance, db, serviceRow, row } = setup();
+      serviceRow.key = key;
+      db.user.findUnique.mockResolvedValue({ tenantId: 'tenant-ch' });
+      Object.assign(db, {
+        tenant: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'tenant-lb' }),
+        },
+      });
+      row().currency = 'CHF';
+      const oldKey = process.env.GOOGLE_MAPS_API_KEY;
+      process.env.GOOGLE_MAPS_API_KEY = 'test-key';
+      const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          status: 'OK',
+          results: [
+            {
+              address_components: [{ types: ['country'], short_name: 'LB' }],
+            },
+          ],
+        }),
+      } as Response);
+      Object.assign(instance, {
+        validateSubmittedRequest: jest.fn().mockResolvedValue(undefined),
+      });
+      try {
+        await instance.editCustomerRequest(
+          'customer',
+          'request',
+          payload(),
+          [],
+        );
+        expect(row()).toMatchObject({
+          customerTenantId: 'tenant-ch',
+          originTenantId: 'tenant-lb',
+          pickupCountryCode: 'LB',
+          destinationCountryCode: 'LB',
+          currency: 'CHF',
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        fetchMock.mockRestore();
+        if (oldKey === undefined) delete process.env.GOOGLE_MAPS_API_KEY;
+        else process.env.GOOGLE_MAPS_API_KEY = oldKey;
+      }
+    },
+  );
 });

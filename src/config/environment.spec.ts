@@ -164,4 +164,21 @@ describe('validateEnvironment', () => {
       }),
     ).toThrow('must be an HTTPS URL');
   });
+  it('requires explicit boolean geography enforcement configuration', () => {
+    expect(() =>
+      validateEnvironment({ ...configured, REQUEST_GEOGRAPHY_REQUIRED: 'yes' }),
+    ).toThrow('must be true or false');
+  });
+  it.each([undefined, '', 'replace_with_your_google_maps_api_key'])(
+    'requires a configured geocoder when enforcement is enabled: %s',
+    (GOOGLE_MAPS_API_KEY) => {
+      expect(() =>
+        validateEnvironment({
+          ...configured,
+          REQUEST_GEOGRAPHY_REQUIRED: 'true',
+          GOOGLE_MAPS_API_KEY,
+        }),
+      ).toThrow('GOOGLE_MAPS_API_KEY is required');
+    },
+  );
 });

@@ -90,6 +90,9 @@ describe('vehicle request edits', () => {
       address: 'New pickup',
     });
     expect(prisma.transportRequest.update.mock.calls[0][0].data).toEqual({
+      pickupCountryCode: null,
+      originTenantId: null,
+      currency: null,
       pickupLatitude: 46,
       pickupLongitude: 6,
       pickupAddress: 'New pickup',

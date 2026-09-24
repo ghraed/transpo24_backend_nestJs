@@ -126,3 +126,35 @@ It validates real registration/login/refresh, backfill dry-run/idempotence/rollb
 profile-country separation, global admin compatibility and database constraints.
 Run `npm run test:cov -- --runInBand`, `npm run test:e2e`, `npm run build`, and
 `npm run prisma:validate` for API verification.
+
+
+## M2 request geography rollout
+
+Apply `20260924150000_add_request_geography` before deploying the M2 API. It adds
+nullable request geography/tenant columns and leaves existing data and currency
+unchanged. No production geography or ownership backfill has been performed.
+
+Configure a backend-only `GOOGLE_MAPS_API_KEY` with Geocoding API access. Resolution
+uses pickup/destination coordinates, the existing Google Geocoding endpoint and
+ISO country components, with a five-second timeout. No new provider is added.
+Missing, unknown or ambiguous provider countries return
+`REQUEST_COUNTRY_UNRESOLVED`; provider failures return
+`REQUEST_GEOGRAPHY_UNAVAILABLE`, without exposing upstream errors or credentials.
+
+`REQUEST_GEOGRAPHY_REQUIRED=false` is the additive default. If the server key is
+missing (or still the example placeholder), legacy writes leave country/origin/
+currency null; customer ownership still comes from the DB. Configured provider
+errors always reject the write. Incomplete drafts remain valid. Setting
+`REQUEST_GEOGRAPHY_REQUIRED=true` requires server geocoding configuration at startup.
+Do not enable multi-market operation or route-policy enforcement using unresolved
+geography. M3 must require resolved countries before applying route blocks.
+
+Request currency uses existing country pricing rules for the pickup country,
+including USD for LB. Existing currency is retained at submission and submitted
+edit; historical and accepted payment records are untouched. Driver offers still
+use their legacy currency logic until M9 enforces the request currency, and mobile
+currency presentation remains M10/M11. No FX conversion is implemented.
+
+Verification: `npm run test:geography:integration` requires a disposable migrated
+local `_test` database via `TENANT_TEST_DATABASE_URL`. Its Google responses are
+mocked; separately verify the deployed server's Google key before enforcement.

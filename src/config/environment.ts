@@ -39,6 +39,22 @@ export function validateEnvironment(
   ) {
     throw new Error('ACCESS_TOKEN_FORMAT must be legacy or jwt.');
   }
+  if (
+    environment.REQUEST_GEOGRAPHY_REQUIRED !== undefined &&
+    environment.REQUEST_GEOGRAPHY_REQUIRED !== 'true' &&
+    environment.REQUEST_GEOGRAPHY_REQUIRED !== 'false'
+  ) {
+    throw new Error('REQUEST_GEOGRAPHY_REQUIRED must be true or false.');
+  }
+  if (
+    environment.REQUEST_GEOGRAPHY_REQUIRED === 'true' &&
+    (isMissing(environment.GOOGLE_MAPS_API_KEY) ||
+      String(environment.GOOGLE_MAPS_API_KEY).startsWith('replace_with_'))
+  ) {
+    throw new Error(
+      'GOOGLE_MAPS_API_KEY is required for request geography enforcement.',
+    );
+  }
   const legacyMarket = environment.LEGACY_REGISTRATION_MARKET_CODE;
   if (
     legacyMarket !== undefined &&

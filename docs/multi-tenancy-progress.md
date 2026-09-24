@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3–M14 not implemented.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -74,26 +74,63 @@ candidate/lifecycle work remain unchecked.
 - No mobile native builds/device QA, Stripe live calls, production deployments,
   commits or pushes were performed.
 
-## Exact next task: M2 — Request geography
+## M2 checkpoint — Request geography (2026-09-24)
 
-Read this handoff and the source CHECKLIST/DECISIONS/ROADMAP, then start at M2.
-Do not repeat discovery or reimplement Tenant/auth.
+Implemented in the API without repeating M0/M1 or modifying mobile/admin code:
 
-1. Inspect all creation/submit/edit/location paths in
-   `src/customer-requests/customer-requests.service.ts` and current response DTOs.
-2. Add an additive migration for customer tenant, optional origin tenant and ISO
-   pickup/destination country codes. Reuse the existing nullable request `currency`
-   field; preserve historical/accepted payment currencies.
-3. Reuse the Google Places/Geocoding provider from mobile helpers to establish
-   authoritative geography on the server. Current backend saved-place storage
-   alone is not an authoritative country resolver; handle incomplete drafts and
-   old clients explicitly without inferring job geography from account tenant.
-4. Derive account tenant from authenticated/DB identity; resolve origin tenant
-   from pickup country. Persist request currency using verified current pricing
-   behavior, without FX conversion or allowing raw client tenant ownership.
-5. Test CH customer -> LB/LB separation and all four transport creation/edit flows.
-6. Then M3 central default-allow directional RouteBlock policy, M4 admin API,
-   M5 Refine UI, M6 coverage, and subsequent milestones in order.
+- Additive migration `20260924150000_add_request_geography`: nullable
+  `customerTenantId`, `originTenantId`, `pickupCountryCode`,
+  `destinationCountryCode`, tenant foreign keys and lookup indexes. Reuses the
+  existing `currency`; does not alter historical request data or guess backfills.
+- `RequestGeographyService` derives ownership from the authenticated customer's
+  database identity and reverse-geocodes the actual pickup/destination coordinates
+  through the existing Google provider. Address strings, place IDs and raw client
+  tenant/country fields do not determine routing geography. ISO alpha-2 validation
+  rejects unknown/ambiguous countries; origin tenant can be absent or inactive.
+- Vehicle drafts, motorcycle/goods/furniture creation, draft location updates,
+  submitted request edits and submission persist authoritative geography. Customer
+  request responses expose all four fields and the existing `currency` field.
+- New geography uses the existing country-to-currency utility for pickup currency,
+  independent from home tenant. Submission/edit preserve an existing currency;
+  historical/accepted requests are unchanged. No FX conversion.
+- Incomplete drafts retain null geography. With no Google server key and
+  `REQUEST_GEOGRAPHY_REQUIRED=false` (default), legacy requests remain usable and
+  unresolved geography/currency stays null. With a configured provider, failures
+  reject the write; they never silently guess a country. Enforced mode requires a
+  server key. See the rollout guide before enabling this.
+- Submission and location updates compare database version/status after geocoding,
+  preventing stale geography or writes to a concurrently submitted request.
+- New reproducible integration command: `npm run test:geography:integration`, with
+  `TENANT_TEST_DATABASE_URL` pointing to a disposable migrated local `_test` DB.
+
+Validation: 467 API tests / 43 suites with coverage thresholds, 14 HTTP e2e tests,
+7 geography PostgreSQL tests, 10 tenant PostgreSQL regression tests, API build,
+full TypeScript check, schema validation and changed-file lint. All 66 migrations
+applied to disposable PostgreSQL 16; a pre-M2 completed request retained its CHF
+currency, price/status and null new fields. Google responses were mocked; no live
+Google/provider validation, production deployment or backfill was performed.
+Previous unrelated full-lint/mobile baseline limitations above still apply.
+
+## Exact next task: M3 — RouteBlock default-allow policy
+
+1. Read the source roadmap/decisions/checklist and this handoff. Keep M0–M2 intact.
+2. Add directional `RouteBlock` using existing `ServiceKey` conventions, nullable
+   type for all types, active flag, reason, creator/audit metadata and indexes.
+   Prevent equivalent duplicate active blocks, including null all-type rules.
+3. Centralize policy: no applicable active block means allowed. Test all-type,
+   type-specific, reverse direction, same-country and deactivated rules.
+4. Integrate authoritative checks on request submission and submitted edits,
+   including the dedicated transport creation flows as appropriate. Resolve
+   geography first and do not allow unresolved compatibility geography to bypass
+   enforcement. M2's permissive rollout mode is not a safe route-policy boundary.
+5. Preserve accepted/in-progress jobs and generic public errors. M4 adds the admin
+   management/check endpoints; M5 adds the UI, then follow milestone order.
+
+Currency follow-up: driver offer creation still derives currency from the driver
+profile. M9 must enforce persisted request currency and reject mismatches before
+cross-market rollout; M10/M11 must display it. M2 is storage/geography only and does
+not make cross-tenant matching/payment authorization complete. The request's
+existing `currency` is the canonical field; do not add a parallel `currencyCode`.
 
 Later checks already identified: possible driver user-ID/profile-ID socket-room
 mismatch; existing DriverRequestAlert as candidate bridge; no matching queue yet;
