@@ -253,6 +253,87 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 - **268/316 complete (84.8%); 48/316 remaining (15.2%)**, unweighted.
   M11 remains in progress. No production changes, migration, commit or push.
 
+## M11 partial checkpoint — Request currency and geography (2026-09-24)
+
+- Read ROADMAP/DECISIONS/current CHECKLIST and verified the existing market-auth
+  implementation. Continued M11 without redoing M0–M10.
+- Driver request list/detail serialization now includes persisted currency and
+  pickup/destination country codes. Historical missing values remain null.
+- Request review displays directional country codes and request currency. Offer
+  screen reloads the authorized request and uses its currency for price, fee,
+  earnings preview and submission. Driver country and navigation currency cannot
+  override it; unavailable currency or denied request access prevents submission,
+  with an error and retry control. Removed outdated profile currency guidance.
+- Validation: **530 API tests / 49 suites**, **17 focused driver tests / 3 suites**,
+  API/driver TypeScript, driver privacy checks and changed-driver-file ESLint pass.
+  New rendered offer tests cover FR driver/CHF request, missing/malformed currency
+  and stale request denial. API test covers geography and null legacy currency.
+  No physical-device, native-build, live-payment or full-driver-suite acceptance.
+- **271/316 complete (85.8%); 45/316 remaining (14.2%)**, unweighted.
+  M11 remains incomplete: coverage/permission screens and approval statuses,
+  candidate discovery verification, broader stale-job handling, cross-tenant open/
+  offer and active-job lifecycle acceptance remain. No deployment, commit or push.
+
+## M11 partial checkpoint — Operational coverage screens (2026-09-24)
+
+- Read ROADMAP, DECISIONS and current CHECKLIST; preserved completed work and
+  existing uncommitted request geography/currency changes. Verified existing
+  coverage authorization and request serialization with 18 backend tests.
+- Added profile-linked operational-country and directional route-permission
+  screens using the existing authenticated self-service endpoints. Country
+  requests include pickup/dropoff flags; route requests preserve direction,
+  including same-country routes. Neither submits tenant IDs or approval status.
+- Display pending, approved, rejected and suspended decisions returned by the
+  server. Repeat submissions retain the administrator decision. Loading, empty,
+  refresh/retry and submission error states are included; stale loads are ignored
+  on screen exit/account change. Country codes are entered as two-letter ISO
+  codes and validated authoritatively by the existing API.
+- Validation: 19 focused driver tests across 3 suites (5 new rendered coverage
+  tests plus existing market-auth/currency checks), 18 API tests across 2 suites,
+  TypeScript, privacy checks, changed-file ESLint and Android production JS/Hermes
+  export pass. No physical-device or native APK/AAB acceptance is claimed.
+- **274/316 complete (86.7%); 42/316 remaining (13.3%)**, unweighted.
+  M11 still needs candidate discovery, cross-tenant opening/offer verification,
+  broader stale-job handling and active-job acceptance. M12–M14 and final
+  acceptance remain open. No deployment, migration, commit or push.
+
+## M11 partial checkpoint — Candidate discovery (2026-09-24)
+
+- Read the roadmap, locked decisions and current checklist; preserved completed
+  milestones and pre-existing uncommitted currency/geography work.
+- Verified API discovery requires an active driver candidate and current matching
+  authorization. The mobile list uses the authenticated API without home-market
+  filtering; cards open request details by ID for authoritative reload.
+- Removed the list's invented CHF fallback, displayed API route country codes,
+  and prevented a pending token read from subscribing after screen cleanup.
+- Seven new rendered tests cover server-returned jobs, detail navigation, missing/
+  invalid currencies, removal on refresh/deletion, and delayed socket setup.
+- Validation: 530 backend tests / 49 suites, 17 focused driver tests / 3 suites,
+  driver TypeScript/privacy checks and changed discovery-file ESLint passed.
+  Mobile APIs are mocked; no device, native-build or live lifecycle acceptance.
+- **275/316 complete (87.0%); 41/316 remaining (13.0%)**, unweighted.
+  M11 remains open for cross-tenant detail/offer verification, broader stale-job
+  handling and active-job lifecycle acceptance. M12–M14 and final acceptance
+  remain open. No deployment, migration, commit or push.
+
+## M11 partial checkpoint — Request detail recovery (2026-09-24)
+
+- Continued the first incomplete milestone without redoing completed work.
+- Verified request details reload by authorized request ID without a mobile home-
+  tenant filter and continue to the same request's offer screen. Existing backend
+  candidate authorization remains authoritative.
+- Detail loading now clears prior data and ignores superseded responses. Failed
+  acceptance clears stale details/actions and presents retry plus return to the
+  request list; retry performs a fresh authorized load.
+- Validation: 17 rendered driver tests across 3 suites (5 new detail tests),
+  105 backend tests across 4 suites, driver TypeScript/privacy checks, changed-file
+  ESLint and diff whitespace checks pass. Mobile API calls are mocked; no device,
+  native-build, production or live lifecycle acceptance is claimed.
+- **276/316 complete (87.3%); 40/316 remaining (12.7%)**, unweighted.
+  Only cross-tenant request opening is newly checked. Broader stale-job handling,
+  full offer-flow and active-job lifecycle verification remain open in M11.
+  M12–M14 and final acceptance remain open. No deployment, migration, commit or push.
+
 # A. Verify projects
 
 - [x] API confirmed NestJS + TypeScript.
@@ -495,14 +576,14 @@ For selected cross-tenant driver:
 - [x] Market selection/auth.
 - [x] Handle `TENANT_MISMATCH`.
 - [x] Home market read-only.
-- [ ] Operational-country screen.
-- [ ] Directional route-permission screen.
-- [ ] Approval statuses displayed.
-- [ ] Candidate-backed available requests.
-- [ ] Pickup/destination countries displayed.
-- [ ] Cross-border route displayed.
-- [ ] Request currency displayed.
-- [ ] Cross-tenant request opens normally.
+- [x] Operational-country screen.
+- [x] Directional route-permission screen.
+- [x] Approval statuses displayed.
+- [x] Candidate-backed available requests.
+- [x] Pickup/destination countries displayed.
+- [x] Cross-border route displayed.
+- [x] Request currency displayed.
+- [x] Cross-tenant request opens normally.
 - [ ] Removed/blocked request handled gracefully.
 - [ ] Offer flow works.
 - [ ] Active-job lifecycle still works.
