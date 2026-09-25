@@ -531,10 +531,74 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 - **278/316 complete (88.0%); 38/316 remaining (12.0%)**, unweighted task count,
   not an effort estimate. No production deployment, migration, commit or push.
 
-## Exact next task: continue M11 — Driver mobile
+## M11 partial checkpoint — Pickup/delivery screen verification (2026-09-24)
 
-Preserve implemented market, coverage, currency, discovery, detail and offer flow,
-and the accepted-job navigation/recovery fixes. Continue mobile pickup/delivery
-confirmation, proof-photo, tracking, chat, expense and payout verification.
-M11 active-job lifecycle, live/device acceptance, M12–M14 and final acceptance
-remain open.
+- Continued the first incomplete milestone after reading roadmap, locked decisions
+  and current checklist. Preserved completed implementation; no application code changed.
+- Added 18 rendered pickup/delivery regressions covering exact foreign-job IDs,
+  proof photos and trimmed notes, missing/cleared proof, camera/library permission
+  denial, pending uploads, server denial and explicit retry, accepted-job access
+  denial, pickup-before-delivery enforcement, delivery start, fresh delivery GPS
+  distance checks and refusal to navigate on an unexpected pickup response status.
+- Validation: **53 driver tests / 4 suites**, **38 backend tests / 3 suites**,
+  driver TypeScript/privacy checks, changed-test ESLint and diff whitespace passed.
+- API, location, photo picker and native components are mocked. These tests establish
+  screen behavior and request contracts, not live cross-tenant authorization or
+  native capture/upload. M11 stays open for remaining arrival/socket, payout and
+  device/live lifecycle acceptance; M12–M14 and final acceptance remain open.
+- Independently counted **278/316 complete (88.0%); 38/316 remaining (12.0%)**.
+  This is an unweighted task count, not an effort estimate. No deployment,
+  migration, commit or push.
+
+## M11 partial checkpoint — Arrival/socket and payout recovery (2026-09-24)
+
+- Continued M11 using existing pickup/delivery regression coverage. Added 34 tests:
+  25 payout cases across the completed-trip screen and payout card, plus nine
+  arrival/socket acknowledgement, request-isolation and cleanup cases.
+- Reproduced and fixed duplicate payout release requests during prerequisite
+  account loading, release attempts continuing after navigation, and previous-trip
+  transfer results appearing on a new trip. Workflows now serialize status/release
+  operations, invalidate pending work on focus cleanup and clear old trip results.
+  Transfers already submitted to the API are not cancelled by navigation.
+- Reproduced and fixed pickup/delivery socket listener leaks when location
+  permission was denied or pending at unmount. Cleanup now owns subscriptions
+  immediately; late callbacks cannot navigate after leaving the screen.
+- Validation: **101 driver tests / 7 suites**, **61 backend tests / 5 suites**,
+  driver TypeScript/privacy, changed-file ESLint and diff whitespace passed.
+  Payout APIs, camera, location and sockets are mocked; no real funds were moved.
+- `adb devices -l` reported no connected device/emulator. M11 native/live acceptance
+  remains open for proof capture/upload, cross-tenant arrival/delivery, tracking,
+  chat, expenses and payout. M12–M14 and final acceptance remain open.
+- Progress remains **278/316 complete (88.0%); 38/316 remaining (12.0%)**,
+  unweighted task count, not an effort estimate. No deployment, migration,
+  commit or push.
+
+## M11 checkpoint — Core physical-device lifecycle (2026-09-25)
+
+- Verified current driver source on a physical Android 14 phone against an isolated
+  real local API/database: FR market login, CH accepted job, CHF display, real GPS,
+  arrival acknowledgement, native gallery pickup/delivery proof uploads and
+  DELIVERED completion. Two proof records and 29 foreground location records persisted.
+- Fixed a device-discovered duplicate delivery-start race; deferred-response test
+  reproduced it and passed after the fix. Replayed successfully on the phone.
+- Validation: **102 driver tests / 7 suites**, **61 backend tests / 5 suites**,
+  driver TypeScript/privacy, changed-file ESLint and whitespace checks passed.
+- Marked active-job lifecycle complete at automated + core native-flow level.
+  This is not full release acceptance: camera launch was cancelled; background
+  location, Firebase push, live chat/expense payments and successful Stripe payout
+  were not verified on-device. No real SMS/payment or customer job was used.
+- [Detailed device evidence and limits](multi-tenancy-device-verification.md).
+  M12 security is next; M13/M14 and final acceptance remain open.
+- **279/316 complete (88.3%); 37/316 remaining (11.7%)**, unweighted task count.
+  Restored original phone location setting and removed added test gallery files.
+  Isolated test API/Metro and fixture database retained for follow-up.
+  No production deployment/migration/backfill, commit or push.
+
+## Exact next task: M12 — Security/performance
+
+Preserve completed M0–M11 implementation and delivery-start, payout and socket
+cleanup fixes. Verify open security items: body tenant override, query tenant
+override and customer ownership. Then continue M13 backward compatibility.
+The physical-device evidence and explicit remaining release acceptance are in
+`multi-tenancy-device-verification.md`. Do not claim successful Stripe payout,
+background tracking, Firebase push or fresh native build from this core device run.
