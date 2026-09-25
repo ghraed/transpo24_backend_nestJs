@@ -6,7 +6,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11 market authentication, coverage/request UI, offer flow and focused active-job regressions are implemented (checkpoints below); M11 core native lifecycle is verified; broader device/release acceptance remains in final acceptance. M12 security/performance is verified (checkpoint below). M13–M14 remain pending. **Next task: M13 — Migration/backward compatibility**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11 market authentication, coverage/request UI, offer flow and focused active-job regressions are implemented (checkpoints below); M11 core native lifecycle is verified; broader device/release acceptance remains in final acceptance. M12 security/performance is verified (checkpoint below). M13 request compatibility is partially verified (checkpoint below); released-app/payment compatibility and M14 remain pending. **Next task: M13 — Migration/backward compatibility**.
 
 - [Implementation handoff and exact next task](multi-tenancy-progress.md)
 - [Architecture and installed versions](multi-tenancy-discovery.md)
@@ -510,6 +510,30 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
   not an effort estimate. Next: **M13 — Migration/backward compatibility**.
   No deployment, migration/backfill, commit or push.
 
+## M13 partial checkpoint — Legacy request compatibility (2026-09-25)
+
+- Continued the first incomplete milestone; application behavior unchanged.
+- Added real PostgreSQL regressions for historical requests with null tenant/geography
+  fields across all 14 existing statuses, owner-only reads/listing, and an accepted
+  legacy job with no candidate row. The selected driver completes tracking, chat,
+  pickup/delivery proofs, expenses, confirmation, rating and wallet settlement after
+  a route block. Tracking returns persisted coordinates and denies non-owners.
+- All 70 migrations applied to a new isolated local `transpo24_m13_20260925_test`
+  database. **19 PostgreSQL integration tests** and **78 focused unit/HTTP tests**
+  passed; API build, full TypeScript, script syntax and whitespace checks passed.
+  The lifecycle suite passed again after explicit tracking assertions were added.
+- Marked status preservation, historical readability, active-job validity and
+  tracking compatibility complete at service/database level. This fixture models
+  pre-migration null columns; it is not a production snapshot upgrade rehearsal.
+- External notifications and payout enqueueing are stubbed; Stripe calls are
+  forbidden by the test. Released app binaries and live card/payout compatibility
+  remain unverified, so those two M13 items stay open. Background/device tracking
+  and broader release acceptance remain in final acceptance.
+- ESLint's existing typed configuration excludes `.cjs` scripts; direct lint of
+  this file fails configuration discovery. Node syntax/Prettier checks passed.
+- **286/316 complete (90.5%); 30/316 remaining (9.5%)**, unweighted item count,
+  not an effort estimate. No production deployment/backfill, commit or push.
+
 # A. Verify projects
 
 - [x] API confirmed NestJS + TypeScript.
@@ -872,11 +896,11 @@ For selected cross-tenant driver:
 - [x] Temporary market-code fallback planned if required.
 - [ ] Old app builds not broken before compatible update.
 - [x] Existing event names preserved.
-- [ ] Existing request statuses preserved.
+- [x] Existing request statuses preserved.
 - [ ] Current payment behavior preserved.
-- [ ] Current tracking behavior preserved.
-- [ ] Historical requests remain readable.
-- [ ] Existing active jobs remain valid.
+- [x] Current tracking behavior preserved.
+- [x] Historical requests remain readable.
+- [x] Existing active jobs remain valid.
 
 # AA. Production rollout
 

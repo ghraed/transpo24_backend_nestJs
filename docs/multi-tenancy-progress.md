@@ -617,12 +617,36 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
   not an effort estimate. Next: **M13 — Migration/backward compatibility**.
   No deployment, migration/backfill, commit or push.
 
-## Exact next task: M13 — Migration/backward compatibility
+## M13 partial checkpoint — Legacy request compatibility (2026-09-25)
+
+- Continued the first incomplete milestone; application behavior unchanged.
+- Added real PostgreSQL regressions for historical requests with null tenant/geography
+  fields across all 14 existing statuses, owner-only reads/listing, and an accepted
+  legacy job with no candidate row. The selected driver completes tracking, chat,
+  pickup/delivery proofs, expenses, confirmation, rating and wallet settlement after
+  a route block. Tracking returns persisted coordinates and denies non-owners.
+- All 70 migrations applied to a new isolated local `transpo24_m13_20260925_test`
+  database. **19 PostgreSQL integration tests** and **78 focused unit/HTTP tests**
+  passed; API build, full TypeScript, script syntax and whitespace checks passed.
+  The lifecycle suite passed again after explicit tracking assertions were added.
+- Marked status preservation, historical readability, active-job validity and
+  tracking compatibility complete at service/database level. This fixture models
+  pre-migration null columns; it is not a production snapshot upgrade rehearsal.
+- External notifications and payout enqueueing are stubbed; Stripe calls are
+  forbidden by the test. Released app binaries and live card/payout compatibility
+  remain unverified, so those two M13 items stay open. Background/device tracking
+  and broader release acceptance remain in final acceptance.
+- ESLint's existing typed configuration excludes `.cjs` scripts; direct lint of
+  this file fails configuration discovery. Node syntax/Prettier checks passed.
+- **286/316 complete (90.5%); 30/316 remaining (9.5%)**, unweighted item count,
+  not an effort estimate. No production deployment/backfill, commit or push.
+
+## Exact next task: M13 — Released-app and payment compatibility
 
 Preserve completed M0–M12 implementation and existing delivery-start, payout and
-socket cleanup fixes. Verify released auth compatibility, existing request statuses,
-payment/tracking behavior, historical readability and active-job validity using
-isolated fixtures. Keep production backfill/enforcement and deployment in M14.
+socket cleanup fixes. Continue released-binary auth/API compatibility and card/payout verification.
+Status, historical reads, selected-job lifecycle and foreground tracking contracts
+are now verified using isolated PostgreSQL fixtures; preserve that completed work. Keep production backfill/enforcement and deployment in M14.
 The physical-device evidence and remaining release acceptance are documented in
 `multi-tenancy-device-verification.md`. No successful Stripe payout, background
 tracking, Firebase push or fresh native build is established by that core run.

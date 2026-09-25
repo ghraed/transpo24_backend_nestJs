@@ -1,7 +1,11 @@
 // Explicit disposable database only. No production URL fallback.
 const assert = require('node:assert/strict');
 const { test, before, after } = require('node:test');
-const { PrismaClient, DayOfWeek } = require('@prisma/client');
+const {
+  PrismaClient,
+  DayOfWeek,
+  TransportRequestStatus,
+} = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { MatchingService } = require('../dist/src/matching/matching.service');
 const {
@@ -391,180 +395,245 @@ test('price, ETA, stale version, accepted-alert and duplicate rules remain enfor
     /offer.*exists/i,
   );
 });
-test('selected foreign driver completes lifecycle after a route block; unrelated users remain denied', async () => {
-  const row = await request();
-  const input = await offerInput(row);
-  const { offer } = await driverService.sendDriverPriceOffer(input);
-  await db.customerWallet.create({
-    data: { customerId: customer.id, currency: 'CHF', balance: 1000 },
-  });
-  await assert.rejects(
-    customerService.acceptDriverOffer({
-      customerId: driver.userId,
+for (const legacy of [false, true]) {
+  test(`${legacy ? 'legacy accepted job without tenant/geography' : 'selected foreign driver'} completes lifecycle after a route block; unrelated users remain denied`, async () => {
+    const row = await request();
+    const input = await offerInput(row);
+    const { offer } = await driverService.sendDriverPriceOffer(input);
+    await db.customerWallet.upsert({
+      where: { customerId: customer.id },
+      create: { customerId: customer.id, currency: 'CHF', balance: 1000 },
+      update: { balance: 1000 },
+    });
+    await assert.rejects(
+      customerService.acceptDriverOffer({
+        customerId: driver.userId,
+        requestId: row.id,
+        offerId: offer.id,
+        confirm: true,
+        paymentMethod: 'APP_WALLET',
+      }),
+    );
+    await customerService.acceptDriverOffer({
+      customerId: customer.id,
       requestId: row.id,
       offerId: offer.id,
       confirm: true,
       paymentMethod: 'APP_WALLET',
-    }),
-  );
-  await customerService.acceptDriverOffer({
-    customerId: customer.id,
-    requestId: row.id,
-    offerId: offer.id,
-    confirm: true,
-    paymentMethod: 'APP_WALLET',
-  });
-  const selected = await customerService.finalizeAcceptedOfferPayment({
-    customerId: customer.id,
-    requestId: row.id,
-  });
-  assert.equal(selected.request.status, 'DRIVER_GOING_TO_PICKUP');
-  assert.equal(selected.request.assignedDriverId, driver.id);
-  const block = await db.routeBlock.create({ data: route });
-  blocks.push(block.id);
-  await db.driverRequestAlert.updateMany({
-    where: { requestId: row.id },
-    data: { isActive: false },
-  });
-  await driverService.getDriverRequestDetails({
-    userId: driver.userId,
-    requestId: row.id,
-  });
-  const outsider = await db.user.create({
-    data: {
-      name: 'Other',
-      email: `${crypto.randomUUID()}@test.invalid`,
-      passwordHash: 'test',
-      role: 'DRIVER',
-      tenantId: foreignTenant.id,
-      driverProfile: {
-        create: {
-          firstName: 'Other',
-          lastName: 'Driver',
-          phone: crypto.randomUUID(),
-          status: 'APPROVED',
-          isProfileCompleted: true,
+    });
+    const selected = await customerService.finalizeAcceptedOfferPayment({
+      customerId: customer.id,
+      requestId: row.id,
+    });
+    assert.equal(selected.request.status, 'DRIVER_GOING_TO_PICKUP');
+    assert.equal(selected.request.assignedDriverId, driver.id);
+    if (legacy) {
+      // Model an accepted pre-migration row: additive columns remain null.
+      // Preserve the original assignment, payment hold, offer and currency.
+      await db.transportRequest.update({
+        where: { id: row.id },
+        data: {
+          customerTenantId: null,
+          originTenantId: null,
+          pickupCountryCode: null,
+          destinationCountryCode: null,
+        },
+      });
+      await db.driverRequestAlert.deleteMany({ where: { requestId: row.id } });
+    }
+    const block = await db.routeBlock.create({ data: route });
+    blocks.push(block.id);
+    await db.driverRequestAlert.updateMany({
+      where: { requestId: row.id },
+      data: { isActive: false },
+    });
+    await driverService.getDriverRequestDetails({
+      userId: driver.userId,
+      requestId: row.id,
+    });
+    const outsider = await db.user.create({
+      data: {
+        name: 'Other',
+        email: `${crypto.randomUUID()}@test.invalid`,
+        passwordHash: 'test',
+        role: 'DRIVER',
+        tenantId: foreignTenant.id,
+        driverProfile: {
+          create: {
+            firstName: 'Other',
+            lastName: 'Driver',
+            phone: crypto.randomUUID(),
+            status: 'APPROVED',
+            isProfileCompleted: true,
+          },
         },
       },
-    },
-  });
-  users.push(outsider.id);
-  await assert.rejects(trips.validateDriverCanAccessTrip(outsider.id, row.id));
-  await trips.joinTripRoom({ userId: driver.userId, tripId: row.id });
-  await assert.rejects(
-    trips.joinTripRoom({ userId: outsider.id, tripId: row.id }),
-  );
-  const room = await db.chatRoom.findUnique({
-    where: { transportRequestId: row.id },
-  });
-  await chat.sendTextMessage({
-    user: { id: driver.userId, role: 'DRIVER' },
-    roomId: room.id,
-    body: 'On my way',
-  });
-  await assert.rejects(
-    chat.sendTextMessage({
-      user: { id: outsider.id, role: 'DRIVER' },
+    });
+    users.push(outsider.id);
+    await assert.rejects(
+      trips.validateDriverCanAccessTrip(outsider.id, row.id),
+    );
+    await trips.joinTripRoom({ userId: driver.userId, tripId: row.id });
+    await assert.rejects(
+      trips.joinTripRoom({ userId: outsider.id, tripId: row.id }),
+    );
+    const room = await db.chatRoom.findUnique({
+      where: { transportRequestId: row.id },
+    });
+    await chat.sendTextMessage({
+      user: { id: driver.userId, role: 'DRIVER' },
       roomId: room.id,
-      body: 'Denied',
-    }),
-  );
-  const position = {
-    driverId: driver.userId,
-    tripId: row.id,
-    latitude: 47.38,
-    longitude: 8.54,
-  };
-  await trips.updateDriverLocation(position);
-  await customerService.getCustomerRequestTracking({
-    customerId: customer.id,
-    requestId: row.id,
+      body: 'On my way',
+    });
+    await assert.rejects(
+      chat.sendTextMessage({
+        user: { id: outsider.id, role: 'DRIVER' },
+        roomId: room.id,
+        body: 'Denied',
+      }),
+    );
+    const position = {
+      driverId: driver.userId,
+      tripId: row.id,
+      latitude: 47.38,
+      longitude: 8.54,
+    };
+    await trips.updateDriverLocation(position);
+    const tracking = await customerService.getCustomerRequestTracking({
+      customerId: customer.id,
+      requestId: row.id,
+    });
+    assert.equal(tracking.requestId, row.id);
+    assert.equal(tracking.assignedDriverId, driver.id);
+    assert.equal(tracking.latestDriverLocation.latitude, position.latitude);
+    assert.equal(tracking.latestDriverLocation.longitude, position.longitude);
+    await assert.rejects(
+      customerService.getCustomerRequestTracking({
+        customerId: outsider.id,
+        requestId: row.id,
+      }),
+    );
+    await trips.markDriverArrivedAtPickup(position);
+    const file = {
+      path: `${process.cwd()}/uploads/m9-test.jpg`,
+      originalname: 'proof.jpg',
+      mimetype: 'image/jpeg',
+      size: 1,
+    };
+    await trips.pickupItem({ ...position, proofPhotos: [file] });
+    assert.equal(
+      await db.transportRequestProofPhoto.count({
+        where: { requestId: row.id, type: 'PICKUP' },
+      }),
+      1,
+    );
+    const expense = await payments.createAdditionalCharge({
+      driverUserId: driver.userId,
+      requestId: row.id,
+      amount: 10,
+      currency: 'CHF',
+      reason: 'Parking',
+      invoiceFile: file,
+    });
+    assert.equal(expense.currency, 'CHF');
+    await payments.approveAdditionalCharge({
+      customerId: customer.id,
+      requestId: row.id,
+      chargeId: expense.id,
+      confirmationLocale: 'en',
+      confirmationText: 'Approve parking expense',
+      paymentOption: 'CASH_ON_DELIVERY',
+    });
+    await trips.startDelivery({ driverId: driver.userId, tripId: row.id });
+    const destination = { ...position, latitude: 47.4, longitude: 8.6 };
+    const approach = await trips.updateDriverLocation(destination);
+    assert.ok(approach.nearDelivery);
+    await trips.deliverItem({ ...destination, proofPhotos: [file] });
+    assert.equal(
+      await db.transportRequestProofPhoto.count({
+        where: { requestId: row.id, type: 'DELIVERY' },
+      }),
+      1,
+    );
+    await trips.confirmCustomerDelivery(customer.id, row.id);
+    await trips.createDriverRating({
+      customerId: customer.id,
+      tripId: row.id,
+      rating: 5,
+      comment: 'Great',
+    });
+    const earning = await db.driverEarning.findUnique({
+      where: { tripId: row.id },
+    });
+    assert.equal(earning.currency, 'CHF');
+    assert.equal(Number(earning.netAmount), 95);
+    assert.equal(Number(earning.platformFeeAmount), 15);
+    assert.equal(await payments.queueDriverPayoutForTrip(row.id), true);
+    assert.ok(
+      payouts.some(
+        (p) =>
+          p.tripId === row.id &&
+          p.runAt.getTime() === earning.availableAt.getTime(),
+      ),
+    );
+    await db.driverEarning.update({
+      where: { tripId: row.id },
+      data: { availableAt: new Date(0) },
+    });
+    await driverService.getDriverEarningsSummary({ driverId: driver.userId });
+    assert.equal(
+      (await db.driverEarning.findUnique({ where: { tripId: row.id } })).status,
+      'AVAILABLE',
+    );
+    const settlement = await db.tripPaymentSettlement.findUnique({
+      where: { requestId: row.id },
+    });
+    assert.equal(settlement.driverPayoutState, 'EARNING_CREATED');
+    assert.equal(
+      (await db.user.findUnique({ where: { id: driver.userId } })).tenantId,
+      tenants[0].id,
+    );
+    await db.routeBlock.update({
+      where: { id: block.id },
+      data: { isActive: false },
+    });
   });
-  await trips.markDriverArrivedAtPickup(position);
-  const file = {
-    path: `${process.cwd()}/uploads/m9-test.jpg`,
-    originalname: 'proof.jpg',
-    mimetype: 'image/jpeg',
-    size: 1,
-  };
-  await trips.pickupItem({ ...position, proofPhotos: [file] });
-  assert.equal(
-    await db.transportRequestProofPhoto.count({
-      where: { requestId: row.id, type: 'PICKUP' },
-    }),
-    1,
-  );
-  const expense = await payments.createAdditionalCharge({
-    driverUserId: driver.userId,
-    requestId: row.id,
-    amount: 10,
-    currency: 'CHF',
-    reason: 'Parking',
-    invoiceFile: file,
-  });
-  assert.equal(expense.currency, 'CHF');
-  await payments.approveAdditionalCharge({
-    customerId: customer.id,
-    requestId: row.id,
-    chargeId: expense.id,
-    confirmationLocale: 'en',
-    confirmationText: 'Approve parking expense',
-    paymentOption: 'CASH_ON_DELIVERY',
-  });
-  await trips.startDelivery({ driverId: driver.userId, tripId: row.id });
-  const destination = { ...position, latitude: 47.4, longitude: 8.6 };
-  const approach = await trips.updateDriverLocation(destination);
-  assert.ok(approach.nearDelivery);
-  await trips.deliverItem({ ...destination, proofPhotos: [file] });
-  assert.equal(
-    await db.transportRequestProofPhoto.count({
-      where: { requestId: row.id, type: 'DELIVERY' },
-    }),
-    1,
-  );
-  await trips.confirmCustomerDelivery(customer.id, row.id);
-  await trips.createDriverRating({
-    customerId: customer.id,
-    tripId: row.id,
-    rating: 5,
-    comment: 'Great',
-  });
-  const earning = await db.driverEarning.findUnique({
-    where: { tripId: row.id },
-  });
-  assert.equal(earning.currency, 'CHF');
-  assert.equal(Number(earning.netAmount), 95);
-  assert.equal(Number(earning.platformFeeAmount), 15);
-  assert.equal(await payments.queueDriverPayoutForTrip(row.id), true);
-  assert.ok(
-    payouts.some(
-      (p) =>
-        p.tripId === row.id &&
-        p.runAt.getTime() === earning.availableAt.getTime(),
-    ),
-  );
-  await db.driverEarning.update({
-    where: { tripId: row.id },
-    data: { availableAt: new Date(0) },
-  });
-  await driverService.getDriverEarningsSummary({ driverId: driver.userId });
-  assert.equal(
-    (await db.driverEarning.findUnique({ where: { tripId: row.id } })).status,
-    'AVAILABLE',
-  );
-  const settlement = await db.tripPaymentSettlement.findUnique({
-    where: { requestId: row.id },
-  });
-  assert.equal(settlement.driverPayoutState, 'EARNING_CREATED');
-  assert.equal(
-    (await db.user.findUnique({ where: { id: driver.userId } })).tenantId,
-    tenants[0].id,
-  );
-  await db.routeBlock.update({
-    where: { id: block.id },
-    data: { isActive: false },
-  });
+}
+
+test('historical rows retain every existing status and remain owner-readable with null geography', async () => {
+  for (const status of Object.values(TransportRequestStatus)) {
+    const row = await request({
+      status,
+      customerTenantId: null,
+      originTenantId: null,
+      pickupCountryCode: null,
+      destinationCountryCode: null,
+    });
+    const result = await customerService.getCustomerRequestStatus({
+      customerId: customer.id,
+      requestId: row.id,
+    });
+    assert.equal(result.status, status);
+    const listing = await customerService.listCustomerRequests({
+      customerId: customer.id,
+    });
+    assert.ok(listing.some((item) => item.id === row.id));
+    await assert.rejects(
+      customerService.getCustomerRequestStatus({
+        customerId: driver.userId,
+        requestId: row.id,
+      }),
+    );
+    const persisted = await db.transportRequest.findUniqueOrThrow({
+      where: { id: row.id },
+    });
+    assert.equal(persisted.status, status);
+    assert.equal(persisted.currency, 'CHF');
+    assert.equal(persisted.customerTenantId, null);
+    assert.equal(persisted.pickupCountryCode, null);
+  }
 });
+
 test('GPS crossing a border changes matching location without changing home tenant or approval', async () => {
   for (const position of [
     { latitude: 48.85, longitude: 2.35 },
