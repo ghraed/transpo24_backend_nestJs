@@ -179,3 +179,22 @@ DELETE soft-deactivates a block; PATCH can reactivate it. Audit history records
 actor, timestamp and complete policy snapshots. M4 does not yet stop matching or
 new offers on newly blocked open requests; those checks remain M7–M9. Do not treat
 this API milestone as completion of the multi-market rollout.
+
+## M13 verification and M14 prerequisites
+
+M13 local-app/legacy-contract and Stripe test-mode verification is complete; see
+[multi-tenancy-m13-verification.md](multi-tenancy-m13-verification.md) for evidence,
+commands, cleanup and limits. Earlier milestone notes above are historical.
+
+Keep legacy issuance and optional market selection until reviewed ownership backfill
+and compatible app releases are live. Before deploying candidate-based matching,
+review/backfill approved driver countries/routes, resolve historical open-request
+geography and rematch eligible requests. Migration alone does not grant permissions.
+Verify server geocoding and Stripe settlement for each activated currency. The tested
+US Stripe account supports the existing USD flow; source-linked CHF transfers failed
+because the charge settled in USD. Do not enable that market's payouts without resolving
+settlement configuration; automatic FX remains outside scope.
+
+The final ownership constraint must follow zero unassigned live customer/driver
+identities (excluding global admins); do not tighten nullable columns before the
+reviewed production backfill. No production operation is authorized by a test result.

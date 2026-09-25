@@ -53,15 +53,21 @@ const { ChatService } = require('../dist/src/chat/chat.service');
 const { PaymentsService } = require('../dist/src/payments/payments.service');
 const trips = new TripsService(db, notifications);
 const chat = new ChatService(db, notifications);
-// No Stripe/network calls are permitted in this wallet-backed regression.
-const stripe = new Proxy(
-  {},
-  {
-    get: (_, name) => () => {
-      throw new Error(`Unexpected Stripe call: ${String(name)}`);
-    },
-  },
-);
+// Default runs forbid Stripe/network calls. M13_STRIPE_TEST=1 opts into test cards/transfers.
+const stripeTestEnabled = process.env.M13_STRIPE_TEST === '1';
+let stripeFixture;
+// The configured US test platform settles in USD. Offline regressions retain CHF.
+const requestCurrency = stripeTestEnabled ? 'USD' : 'CHF';
+const stripe = stripeTestEnabled
+  ? new (require('../dist/src/payments/stripe.service').StripeService)()
+  : new Proxy(
+      {},
+      {
+        get: (_, name) => () => {
+          throw new Error(`Unexpected Stripe call: ${String(name)}`);
+        },
+      },
+    );
 const payouts = [];
 const payments = new PaymentsService(db, stripe, notifications, {
   enqueueDriverPayout: async (input) => {
@@ -97,7 +103,7 @@ async function request(extra = {}) {
       status: 'PENDING_QUOTES',
       pickupCountryCode: 'CH',
       destinationCountryCode: 'CH',
-      currency: 'CHF',
+      currency: requestCurrency,
       isImmediate: true,
       pickupLatitude: 47.38,
       pickupLongitude: 8.54,
@@ -188,6 +194,22 @@ before(async () => {
   });
   users.push(user.id);
   driver = user.driverProfile;
+  if (stripeTestEnabled) {
+    stripeFixture =
+      await require('./stripe-compatibility-fixture.cjs').createStripeCompatibilityFixture();
+    await db.user.update({
+      where: { id: customer.id },
+      data: { stripeCustomerId: stripeFixture.customer.id },
+    });
+    await db.driverProfile.update({
+      where: { id: driver.id },
+      data: {
+        stripeAccountId: stripeFixture.account.id,
+        stripePayoutsEnabled: stripeFixture.account.payouts_enabled,
+        stripeDetailsSubmitted: stripeFixture.account.details_submitted,
+      },
+    });
+  }
   vehicle = await db.driverVehicle.create({
     data: {
       driverId: driver.id,
@@ -228,13 +250,20 @@ before(async () => {
   }
 });
 after(async () => {
-  await db.routeBlock.deleteMany({ where: { id: { in: blocks } } });
-  await db.transportRequest.deleteMany({ where: { id: { in: requests } } });
-  await db.user.deleteMany({ where: { id: { in: users } } });
-  if (ownsService && service)
-    await db.service.delete({ where: { id: service.id } });
-  await db.tenant.deleteMany({ where: { id: { in: ownedTenantIds } } });
-  await db.$disconnect();
+  try {
+    if (stripeFixture) await stripeFixture.cleanup(requests);
+  } finally {
+    try {
+      await db.routeBlock.deleteMany({ where: { id: { in: blocks } } });
+      await db.transportRequest.deleteMany({ where: { id: { in: requests } } });
+      await db.user.deleteMany({ where: { id: { in: users } } });
+      if (ownsService && service)
+        await db.service.delete({ where: { id: service.id } });
+      await db.tenant.deleteMany({ where: { id: { in: ownedTenantIds } } });
+    } finally {
+      await db.$disconnect();
+    }
+  }
 });
 async function offerInput(row) {
   await matching.activate(row.id, driver.id);
@@ -250,7 +279,7 @@ async function offerInput(row) {
     userId: driver.userId,
     requestId: row.id,
     price: 100,
-    currency: 'CHF',
+    currency: requestCurrency,
     requestVersion: details.requestVersion,
   };
 }
@@ -311,18 +340,18 @@ test('a block activated after alert acceptance denies a direct offer with a gene
     data: { isActive: false },
   });
   const result = await driverService.sendDriverPriceOffer(input);
-  assert.equal(result.offer.currency, 'CHF');
+  assert.equal(result.offer.currency, requestCurrency);
 });
 test('request currency is authoritative for a French driver; omitted currency is derived, conflicts rejected', async () => {
   const row = await request();
   const input = await offerInput(row);
-  for (const currency of ['EUR', '', 'USD'])
+  for (const currency of ['EUR', '', stripeTestEnabled ? 'CHF' : 'USD'])
     await denied({ ...input, currency }, 'CURRENCY_MISMATCH');
   const result = await driverService.sendDriverPriceOffer({
     ...input,
     currency: undefined,
   });
-  assert.equal(result.offer.currency, 'CHF');
+  assert.equal(result.offer.currency, requestCurrency);
   assert.ok(
     events.some(
       (e) =>
@@ -349,12 +378,12 @@ test('null optional currency derives the request currency; unresolved request cu
   await denied(input, 'CURRENCY_MISMATCH');
   await db.transportRequest.update({
     where: { id: row.id },
-    data: { currency: 'CHF' },
+    data: { currency: requestCurrency },
   });
   assert.equal(
     (await driverService.sendDriverPriceOffer({ ...input, currency: null }))
       .offer.currency,
-    'CHF',
+    requestCurrency,
   );
 });
 test('price, ETA, stale version, accepted-alert and duplicate rules remain enforced', async () => {
@@ -402,7 +431,11 @@ for (const legacy of [false, true]) {
     const { offer } = await driverService.sendDriverPriceOffer(input);
     await db.customerWallet.upsert({
       where: { customerId: customer.id },
-      create: { customerId: customer.id, currency: 'CHF', balance: 1000 },
+      create: {
+        customerId: customer.id,
+        currency: requestCurrency,
+        balance: 1000,
+      },
       update: { balance: 1000 },
     });
     await assert.rejects(
@@ -411,7 +444,10 @@ for (const legacy of [false, true]) {
         requestId: row.id,
         offerId: offer.id,
         confirm: true,
-        paymentMethod: 'APP_WALLET',
+        paymentMethod: stripeTestEnabled ? 'CREDIT_CARD' : 'APP_WALLET',
+        ...(stripeTestEnabled
+          ? { stripePaymentMethodId: stripeFixture.method.id }
+          : {}),
       }),
     );
     await customerService.acceptDriverOffer({
@@ -419,7 +455,10 @@ for (const legacy of [false, true]) {
       requestId: row.id,
       offerId: offer.id,
       confirm: true,
-      paymentMethod: 'APP_WALLET',
+      paymentMethod: stripeTestEnabled ? 'CREDIT_CARD' : 'APP_WALLET',
+      ...(stripeTestEnabled
+        ? { stripePaymentMethodId: stripeFixture.method.id }
+        : {}),
     });
     const selected = await customerService.finalizeAcceptedOfferPayment({
       customerId: customer.id,
@@ -531,11 +570,11 @@ for (const legacy of [false, true]) {
       driverUserId: driver.userId,
       requestId: row.id,
       amount: 10,
-      currency: 'CHF',
+      currency: requestCurrency,
       reason: 'Parking',
       invoiceFile: file,
     });
-    assert.equal(expense.currency, 'CHF');
+    assert.equal(expense.currency, requestCurrency);
     await payments.approveAdditionalCharge({
       customerId: customer.id,
       requestId: row.id,
@@ -565,7 +604,7 @@ for (const legacy of [false, true]) {
     const earning = await db.driverEarning.findUnique({
       where: { tripId: row.id },
     });
-    assert.equal(earning.currency, 'CHF');
+    assert.equal(earning.currency, requestCurrency);
     assert.equal(Number(earning.netAmount), 95);
     assert.equal(Number(earning.platformFeeAmount), 15);
     assert.equal(await payments.queueDriverPayoutForTrip(row.id), true);
@@ -589,6 +628,59 @@ for (const legacy of [false, true]) {
       where: { requestId: row.id },
     });
     assert.equal(settlement.driverPayoutState, 'EARNING_CREATED');
+    if (stripeTestEnabled) {
+      const payment = await payments.getRequestPayment({
+        customerId: customer.id,
+        requestId: row.id,
+      });
+      assert.equal(payment.status, 'PAYMENT_CAPTURED');
+      const paid = await payments.retryTransferForTrip({
+        driverUserId: driver.userId,
+        tripId: row.id,
+      });
+      assert.equal(paid.transferred, true, paid.reason);
+      const transfer = await stripeFixture.stripe.transfers.retrieve(
+        paid.stripeTransferId,
+      );
+      assert.equal(transfer.livemode, false);
+      assert.equal(transfer.amount, 9500);
+      assert.equal(transfer.currency, requestCurrency.toLowerCase());
+      assert.equal(transfer.destination, stripeFixture.account.id);
+      assert.equal(transfer.transfer_group, `trip_${row.id}`);
+      const hold = await db.paymentHold.findUniqueOrThrow({
+        where: { requestId: row.id },
+      });
+      assert.equal(transfer.source_transaction, hold.stripeChargeId);
+      const repeated = await payments.retryTransferForTrip({
+        driverUserId: driver.userId,
+        tripId: row.id,
+      });
+      assert.equal(repeated.stripeTransferId, paid.stripeTransferId);
+      assert.equal(
+        (
+          await stripeFixture.stripe.transfers.list({
+            transfer_group: `trip_${row.id}`,
+          })
+        ).data.length,
+        1,
+      );
+      assert.equal(
+        (
+          await db.driverEarning.findUniqueOrThrow({
+            where: { tripId: row.id },
+          })
+        ).status,
+        'PAID_OUT',
+      );
+      assert.equal(
+        (
+          await db.tripPaymentSettlement.findUniqueOrThrow({
+            where: { requestId: row.id },
+          })
+        ).driverPayoutState,
+        'PAID_OUT',
+      );
+    }
     assert.equal(
       (await db.user.findUnique({ where: { id: driver.userId } })).tenantId,
       tenants[0].id,
@@ -628,7 +720,7 @@ test('historical rows retain every existing status and remain owner-readable wit
       where: { id: row.id },
     });
     assert.equal(persisted.status, status);
-    assert.equal(persisted.currency, 'CHF');
+    assert.equal(persisted.currency, requestCurrency);
     assert.equal(persisted.customerTenantId, null);
     assert.equal(persisted.pickupCountryCode, null);
   }

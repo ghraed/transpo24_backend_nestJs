@@ -33,7 +33,8 @@
     "test:route-block-admin:integration": "npm run build && node --test scripts/test-route-block-admin.cjs",
     "test:driver-coverage:integration": "npm run build && node --test scripts/test-driver-coverage.cjs",
     "test:matching:integration": "npm run build && node --test scripts/test-request-matching.cjs",
-    "test:offer-lifecycle:integration": "npm run build && node --test scripts/test-offer-lifecycle.cjs"
+    "test:offer-lifecycle:integration": "npm run build && node --test scripts/test-offer-lifecycle.cjs",
+    "test:compatibility:stripe": "npm run build && M13_STRIPE_TEST=1 node --env-file=.env --test scripts/test-offer-lifecycle.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",

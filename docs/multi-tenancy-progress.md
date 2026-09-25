@@ -641,12 +641,34 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
 - **286/316 complete (90.5%); 30/316 remaining (9.5%)**, unweighted item count,
   not an effort estimate. No production deployment/backfill, commit or push.
 
-## Exact next task: M13 — Released-app and payment compatibility
+## M13 checkpoint — Local apps and Stripe test-mode compatibility (2026-09-25)
 
-Preserve completed M0–M12 implementation and existing delivery-start, payout and
-socket cleanup fixes. Continue released-binary auth/API compatibility and card/payout verification.
-Status, historical reads, selected-job lifecycle and foreground tracking contracts
-are now verified using isolated PostgreSQL fixtures; preserve that completed work. Keep production backfill/enforcement and deployment in M14.
-The physical-device evidence and remaining release acceptance are documented in
-`multi-tenancy-device-verification.md`. No successful Stripe payout, background
-tracking, Firebase push or fresh native build is established by that core run.
+- Owner instructed using the local client/driver apps and Stripe 4242 test card.
+  Closed the remaining M13 items for that verification scope; store-binary and
+  production acceptance remain separate release gates.
+- Added real HTTP + PostgreSQL legacy customer/driver auth regressions across
+  explicit backfill: missing-market payloads, segment-zero token expiry, refresh/
+  trusted continuation and wrong-market rejection. **12 integration tests passed**.
+- Added opt-in real Stripe test-mode lifecycle verification: USD card collection,
+  correct driver transfer, persisted settlement and duplicate-transfer protection
+  for both tenant-aware and legacy accepted jobs. **9 Stripe-mode tests passed**;
+  synthetic transfers reversed, charges refunded, accounts/customers cleaned up.
+- **37 client tests**, **40 driver tests**, **68 API auth/payment tests**, both app
+  TypeScript/privacy checks passed. Default CHF wallet/database checks also passed.
+- Existing US-platform settlement limitation reproduced: CHF source charges settle
+  in USD and cannot fund CHF source-linked transfers. Non-USD settlement must be
+  configured/verified before market activation; no FX or payment behavior changed.
+- Native card entry, external bank payouts, store binaries and live webhook delivery
+  are not claimed. Test recipient is a synthetic Custom Connect account.
+- Evidence and runnable commands: `backend/api/docs/multi-tenancy-m13-verification.md`.
+- **288/316 complete (91.1%); 28/316 remaining (8.9%)**, unweighted item count.
+  Next: **M14 — Production rollout**. No production deployment/backfill or push.
+
+## Exact next task: M14 — Production rollout
+
+Preserve completed M0–M13 implementation and regressions. Follow
+`multi-tenancy-m13-verification.md` and `multi-tenancy-rollout.md` for release gates,
+explicit backfill/coverage preparation and deployment order. Confirm target environment,
+backup, market configuration and compatible release availability before production
+mutations. Non-USD Stripe settlement is an explicit market-activation prerequisite.
+Final device/store-binary and production acceptance remain open.

@@ -6,7 +6,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11 market authentication, coverage/request UI, offer flow and focused active-job regressions are implemented (checkpoints below); M11 core native lifecycle is verified; broader device/release acceptance remains in final acceptance. M12 security/performance is verified (checkpoint below). M13 request compatibility is partially verified (checkpoint below); released-app/payment compatibility and M14 remain pending. **Next task: M13 — Migration/backward compatibility**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11 market authentication, coverage/request UI, offer flow and focused active-job regressions are implemented (checkpoints below); M11 core native lifecycle is verified; broader device/release acceptance remains in final acceptance. M12 security/performance is verified (checkpoint below). M13 is complete for owner-approved local-app/test-mode compatibility (checkpoint below). M14 and final acceptance remain open. **Next task: M14 — Production rollout**.
 
 - [Implementation handoff and exact next task](multi-tenancy-progress.md)
 - [Architecture and installed versions](multi-tenancy-discovery.md)
@@ -534,6 +534,29 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
 - **286/316 complete (90.5%); 30/316 remaining (9.5%)**, unweighted item count,
   not an effort estimate. No production deployment/backfill, commit or push.
 
+## M13 checkpoint — Local apps and Stripe test-mode compatibility (2026-09-25)
+
+- Owner instructed using the local client/driver apps and Stripe 4242 test card.
+  Closed the remaining M13 items for that verification scope; store-binary and
+  production acceptance remain separate release gates.
+- Added real HTTP + PostgreSQL legacy customer/driver auth regressions across
+  explicit backfill: missing-market payloads, segment-zero token expiry, refresh/
+  trusted continuation and wrong-market rejection. **12 integration tests passed**.
+- Added opt-in real Stripe test-mode lifecycle verification: USD card collection,
+  correct driver transfer, persisted settlement and duplicate-transfer protection
+  for both tenant-aware and legacy accepted jobs. **9 Stripe-mode tests passed**;
+  synthetic transfers reversed, charges refunded, accounts/customers cleaned up.
+- **37 client tests**, **40 driver tests**, **68 API auth/payment tests**, both app
+  TypeScript/privacy checks passed. Default CHF wallet/database checks also passed.
+- Existing US-platform settlement limitation reproduced: CHF source charges settle
+  in USD and cannot fund CHF source-linked transfers. Non-USD settlement must be
+  configured/verified before market activation; no FX or payment behavior changed.
+- Native card entry, external bank payouts, store binaries and live webhook delivery
+  are not claimed. Test recipient is a synthetic Custom Connect account.
+- Evidence and runnable commands: `backend/api/docs/multi-tenancy-m13-verification.md`.
+- **288/316 complete (91.1%); 28/316 remaining (8.9%)**, unweighted item count.
+  Next: **M14 — Production rollout**. No production deployment/backfill or push.
+
 # A. Verify projects
 
 - [x] API confirmed NestJS + TypeScript.
@@ -894,10 +917,10 @@ For selected cross-tenant driver:
 
 - [x] Current released auth payloads inspected.
 - [x] Temporary market-code fallback planned if required.
-- [ ] Old app builds not broken before compatible update.
+- [x] Old app builds not broken before compatible update (legacy HTTP contracts + owner-approved local-app verification; store-binary acceptance remains a release gate).
 - [x] Existing event names preserved.
 - [x] Existing request statuses preserved.
-- [ ] Current payment behavior preserved.
+- [x] Current payment behavior preserved (USD Stripe test-mode collection/transfers and CHF wallet regressions; non-USD settlement remains a market-activation gate).
 - [x] Current tracking behavior preserved.
 - [x] Historical requests remain readable.
 - [x] Existing active jobs remain valid.

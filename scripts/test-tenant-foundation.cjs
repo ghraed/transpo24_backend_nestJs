@@ -1,6 +1,20 @@
 // Run only against a disposable database after prisma migrate deploy.
 const assert = require('node:assert/strict');
 const { test, before, after } = require('node:test');
+const { Test } = require('@nestjs/testing');
+const http = require('supertest');
+const { AuthController } = require('../dist/src/auth/auth.controller');
+const {
+  CustomerAuthGuard,
+} = require('../dist/src/auth/guards/customer-auth.guard');
+const {
+  AuthenticatedUserGuard,
+} = require('../dist/src/auth/guards/authenticated-user.guard');
+const {
+  TestingOnlyGuard,
+} = require('../dist/src/auth/guards/testing-only.guard');
+const { configureHttpApplication } = require('../dist/src/config/http');
+let app;
 const { randomUUID } = require('node:crypto');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -38,6 +52,7 @@ const prefix = `tenant-test-${randomUUID()}`;
 const userIds = [];
 let fr;
 let ch;
+const originalFormat = process.env.ACCESS_TOKEN_FORMAT;
 const originalRequired = process.env.TENANT_AUTH_REQUIRED;
 const originalLegacy = process.env.LEGACY_REGISTRATION_MARKET_CODE;
 async function user(data = {}) {
@@ -56,6 +71,19 @@ async function user(data = {}) {
 const errorCode = (expected) => (error) =>
   error?.getResponse?.().code === expected;
 before(async () => {
+  delete process.env.ACCESS_TOKEN_FORMAT;
+  const module = await Test.createTestingModule({
+    controllers: [AuthController],
+    providers: [
+      CustomerAuthGuard,
+      AuthenticatedUserGuard,
+      TestingOnlyGuard,
+      { provide: AuthService, useValue: auth },
+    ],
+  }).compile();
+  app = module.createNestApplication({ bodyParser: false });
+  configureHttpApplication(app);
+  await app.init();
   delete process.env.TENANT_AUTH_REQUIRED;
   delete process.env.LEGACY_REGISTRATION_MARKET_CODE;
   await applyPlan(prisma, plan, true);
@@ -63,6 +91,9 @@ before(async () => {
   ch = await prisma.tenant.findUniqueOrThrow({ where: { code: 'CH' } });
 });
 after(async () => {
+  if (app) await app.close();
+  if (originalFormat === undefined) delete process.env.ACCESS_TOKEN_FORMAT;
+  else process.env.ACCESS_TOKEN_FORMAT = originalFormat;
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.$disconnect();
   if (originalRequired === undefined) delete process.env.TENANT_AUTH_REQUIRED;
@@ -290,3 +321,88 @@ test('strict enforcement leaves global admin access intact and rejects unassigne
     delete process.env.TENANT_AUTH_REQUIRED;
   }
 });
+
+for (const role of ['CUSTOMER', 'DRIVER']) {
+  test(`legacy ${role} HTTP login and session survive explicit backfill without a market payload`, async () => {
+    const isDriver = role === 'DRIVER';
+    const account = await user({
+      role,
+      email: `${randomUUID()}@example.invalid`,
+      phoneNumber: isDriver ? '+33600000402' : '+33600000401',
+      ...(isDriver
+        ? {
+            driverProfile: {
+              create: {
+                firstName: 'Legacy',
+                lastName: 'Driver',
+                phone: '+33600000402',
+                status: 'APPROVED',
+                isProfileCompleted: true,
+              },
+            },
+          }
+        : {}),
+    });
+    const base = isDriver ? '/auth/driver' : '/auth';
+    const password = await http(app.getHttpServer())
+      .post(`${base}/login`)
+      .send({
+        email: account.email,
+        password: 'password-123',
+      })
+      .expect(201);
+    assert.equal(password.body.user.tenantId, null);
+    // Released customer decoder reads expiry from segment zero.
+    assert.equal(password.body.accessToken.split('.').length, 2);
+    const payload = JSON.parse(
+      Buffer.from(
+        password.body.accessToken.split('.')[0],
+        'base64url',
+      ).toString(),
+    );
+    assert.ok(payload.exp > Date.now() / 1000);
+    const otp = await http(app.getHttpServer())
+      .post(`${base}/phone/verify-code`)
+      .send({
+        phoneNumber: account.phoneNumber,
+        code: '123456',
+      })
+      .expect(201);
+    if (otp.body.user.id !== account.id) userIds.push(otp.body.user.id);
+    assert.equal(otp.body.user.id, account.id);
+    assert.equal(otp.body.user.tenantId, null);
+    await applyPlan(
+      prisma,
+      { tenants: [], assignments: [{ userId: account.id, marketCode: 'FR' }] },
+      true,
+    );
+    const identity = auth.getUserFromAccessToken(password.body.accessToken);
+    assert.equal(await auth.isUserActive(identity), true);
+    assert.equal(identity.tenantId, fr.id);
+    const next = isDriver
+      ? await http(app.getHttpServer())
+          .post('/auth/driver/session/continue')
+          .send({ accessToken: otp.body.accessToken })
+          .expect(201)
+      : await http(app.getHttpServer())
+          .post('/auth/refresh')
+          .send({ refreshToken: otp.body.refreshToken })
+          .expect(201);
+    assert.equal(next.body.user.tenantId, fr.id);
+    assert.equal(next.body.accessToken.split('.').length, 2);
+    const mismatch = await http(app.getHttpServer())
+      .post(`${base}/login`)
+      .send({
+        email: account.email,
+        password: 'password-123',
+        marketCode: 'LB',
+      })
+      .expect(403);
+    assert.equal(mismatch.body.code, 'TENANT_MISMATCH');
+    assert.equal(
+      (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+        .tenantId,
+      fr.id,
+    );
+  });
+}
