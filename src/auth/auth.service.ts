@@ -142,7 +142,6 @@ export class AuthService {
   ): Promise<{ success: true; message: string }> {
     if (dto.marketCode !== undefined)
       await this.tenants.resolveMarket(dto.marketCode);
-    else if (this.tenants.authRequired) await this.tenants.registrationTenant();
     const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
     await this.phoneRateLimit.assertCanSend(phoneNumber, ipAddress);
     await this.twilioVerify.sendCode(phoneNumber);
@@ -171,6 +170,16 @@ export class AuthService {
       where: { phoneNumber },
       select: this.customerSessionUserSelect,
     });
+
+    if (
+      !dto.marketCode &&
+      (!existing || existing.deletedAt || existing.role === UserRole.DRIVER)
+    ) {
+      throw new BadRequestException({
+        code: 'MARKET_REQUIRED',
+        message: 'Create an account and choose your home market to continue.',
+      });
+    }
 
     if (existing?.role === UserRole.DRIVER && !existing.deletedAt) {
       const driverProfile = await this.prisma.driverProfile.findUnique({
@@ -294,6 +303,12 @@ export class AuthService {
     });
 
     if (!user) {
+      if (!dto.marketCode) {
+        throw new BadRequestException({
+          code: 'MARKET_REQUIRED',
+          message: 'Create an account and choose your home market to continue.',
+        });
+      }
       const tenant = await this.tenants.registrationTenant(dto.marketCode);
       user = await this.prisma.user.create({
         data: {

@@ -22,7 +22,7 @@ Settings:
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
-| `TENANT_AUTH_REQUIRED` | unset / `false` | Missing market remains accepted for old clients; supplied markets always validate. `true` requires market on new login/registration and assigned ownership for customer/driver sessions. |
+| `TENANT_AUTH_REQUIRED` | unset / `false` | Missing market remains accepted for old clients; supplied markets always validate. `true` requires market on registration and assigned ownership for customer/driver sessions. Login derives the market from the existing account. |
 | `LEGACY_REGISTRATION_MARKET_CODE` | unset | Optional explicitly approved market for **new** legacy registrations only. Never assigns an existing account. Without it, old registrations stay unassigned until explicit backfill. Strict mode ignores this fallback and requires market selection. |
 | `ACCESS_TOKEN_FORMAT` | unset / `legacy` | Two-part token issuance stays compatible with released customer builds. `jwt` issues HS256 JWTs containing `sub`, `role`, `tenantId`, `tenantCode`, and existing claims. Both signed formats are verified by the server. |
 
@@ -198,3 +198,13 @@ settlement configuration; automatic FX remains outside scope.
 The final ownership constraint must follow zero unassigned live customer/driver
 identities (excluding global admins); do not tighten nullable columns before the
 reviewed production backfill. No production operation is authorized by a test result.
+
+## Registration-only market selection
+
+Client and driver apps select a home market during account creation only. Login,
+OTP resend/verification, and trusted-session continuation omit the market and use
+the existing account assignment, including when `TENANT_AUTH_REQUIRED=true`.
+Explicit market values from older clients still receive mismatch validation.
+Phone verification without an existing account and without a selected market
+returns `MARKET_REQUIRED` and directs the user to create an account; it does not
+create an unassigned user. Sending an OTP does not require a market.

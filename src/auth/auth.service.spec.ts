@@ -8,7 +8,11 @@ import { DriverStatus, Prisma, UserRole } from '@prisma/client';
 import { TenantsService } from '../tenants/tenants.service';
 import { AuthService } from './auth.service';
 
+const tenant = { id: 'tenant-lb', code: 'LB', isActive: true };
+
 const customer = {
+  tenantId: tenant.id,
+  tenant,
   id: 'customer-1',
   name: 'Customer',
   email: 'customer@example.com',
@@ -20,6 +24,7 @@ const customer = {
 
 function createHarness() {
   const prisma = {
+    tenant: { findUnique: jest.fn().mockResolvedValue(tenant) },
     user: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -117,7 +122,7 @@ describe('AuthService phone authentication', () => {
     });
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      { phoneNumber: customer.phoneNumber, code: '123456', marketCode: 'LB' },
       '127.0.0.1',
     );
 
@@ -142,7 +147,7 @@ describe('AuthService phone authentication', () => {
     );
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      { phoneNumber: customer.phoneNumber, code: '123456', marketCode: 'LB' },
       '127.0.0.1',
     );
 
@@ -189,7 +194,7 @@ describe('AuthService phone authentication', () => {
     prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      { phoneNumber: customer.phoneNumber, code: '123456', marketCode: 'LB' },
       '127.0.0.1',
     );
 
@@ -214,7 +219,7 @@ describe('AuthService phone authentication', () => {
     prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      { phoneNumber: customer.phoneNumber, code: '123456', marketCode: 'LB' },
       '127.0.0.1',
     );
 
@@ -237,7 +242,7 @@ describe('AuthService phone authentication', () => {
     prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      { phoneNumber: customer.phoneNumber, code: '123456', marketCode: 'LB' },
       '127.0.0.1',
     );
 
@@ -300,6 +305,8 @@ describe('AuthService phone authentication', () => {
     prisma.user.findFirst.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue({
       id: 'driver-user-2',
+      tenantId: tenant.id,
+      tenant,
       name: 'Driver',
       email: 'phone-driver@example.com',
       role: UserRole.DRIVER,
@@ -319,7 +326,7 @@ describe('AuthService phone authentication', () => {
     });
 
     const response = await service.verifyDriverPhoneCode(
-      { phoneNumber: '+96170123458', code: '123456' },
+      { phoneNumber: '+96170123458', code: '123456', marketCode: 'LB' },
       '127.0.0.1',
     );
 

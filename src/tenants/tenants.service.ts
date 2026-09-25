@@ -65,8 +65,6 @@ export class TenantsService {
           message: 'This account belongs to another Transpo24 market.',
         });
       }
-    } else if (this.authRequired) {
-      this.marketRequired();
     }
     this.assertIdentity(user);
   }

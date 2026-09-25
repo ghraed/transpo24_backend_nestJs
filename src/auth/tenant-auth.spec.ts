@@ -278,12 +278,12 @@ describe('tenant authentication', () => {
     });
     expect(response.user.tenantId).toBe(fr.id);
   });
-  it('requires a selected market only after enforcement is enabled', async () => {
+  it('uses the account market for login even when enforcement is enabled', async () => {
     process.env.TENANT_AUTH_REQUIRED = 'true';
     const { service } = setup();
     await expect(
       service.login({ email: customer.email, password: 'password-123' }),
-    ).rejects.toEqual(code('MARKET_REQUIRED'));
+    ).resolves.toMatchObject({ user: { tenantId: fr.id } });
   });
   it('preserves global ADMIN login with enforcement enabled', async () => {
     process.env.TENANT_AUTH_REQUIRED = 'true';
@@ -472,4 +472,51 @@ describe('market resolution and rollout compatibility', () => {
       code('TENANT_INACTIVE'),
     );
   });
+});
+
+describe('account-owned login market', () => {
+  it.each(['customer', 'driver'])(
+    'allows %s OTP login without a market in strict mode',
+    async (role) => {
+      process.env.TENANT_AUTH_REQUIRED = 'true';
+      const { service } = setup(role === 'driver' ? driver : customer);
+      const verify =
+        role === 'driver'
+          ? service.verifyDriverPhoneCode.bind(service)
+          : service.verifyPhoneCode.bind(service);
+      await expect(
+        verify(
+          { phoneNumber: customer.phoneNumber, code: '123456' },
+          '127.0.0.1',
+        ),
+      ).resolves.toMatchObject({ user: { tenantId: fr.id } });
+    },
+  );
+  it('sends OTP without a market in strict mode', async () => {
+    process.env.TENANT_AUTH_REQUIRED = 'true';
+    const { service } = setup();
+    await expect(
+      service.sendPhoneCode({ phoneNumber: customer.phoneNumber }, '127.0.0.1'),
+    ).resolves.toMatchObject({ success: true });
+  });
+  it.each(['customer', 'driver'])(
+    'does not create a %s from login without a market',
+    async (role) => {
+      const { service, prisma } = setup();
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
+      const verify =
+        role === 'driver'
+          ? service.verifyDriverPhoneCode.bind(service)
+          : service.verifyPhoneCode.bind(service);
+      await expect(
+        verify(
+          { phoneNumber: customer.phoneNumber, code: '123456' },
+          '127.0.0.1',
+        ),
+      ).rejects.toEqual(code('MARKET_REQUIRED'));
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    },
+  );
 });
