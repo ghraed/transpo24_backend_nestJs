@@ -6,7 +6,7 @@ Use this checklist across API, client mobile, driver mobile and admin.
 
 M0 discovery, M1 tenant foundation and M2 request geography are implemented and
 verified for the **additive compatibility phase**. The full multi-tenancy feature is not complete.
-M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11 market authentication, coverage/request UI, offer flow and focused active-job regressions are implemented (checkpoints below); M11 core native lifecycle is verified; broader device/release acceptance remains in final acceptance. M12–M14 remain pending. **Next task: M12 — Security/performance**.
+M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint below). M6 is implemented (checkpoint below). M7 is implemented (checkpoint below). M8 is implemented (checkpoint below). M9 is implemented (checkpoint below). M10 is implemented (checkpoint below). M11 market authentication, coverage/request UI, offer flow and focused active-job regressions are implemented (checkpoints below); M11 core native lifecycle is verified; broader device/release acceptance remains in final acceptance. M12 security/performance is verified (checkpoint below). M13–M14 remain pending. **Next task: M13 — Migration/backward compatibility**.
 
 - [Implementation handoff and exact next task](multi-tenancy-progress.md)
 - [Architecture and installed versions](multi-tenancy-discovery.md)
@@ -487,6 +487,29 @@ M3 and M4 are implemented (checkpoints below). M5 is implemented (checkpoint bel
   Isolated test API/Metro and fixture database retained for follow-up.
   No production deployment/migration/backfill, commit or push.
 
+## M12 checkpoint — Tenant override and customer ownership (2026-09-25)
+
+- Verified the existing implementation without changing application behavior.
+  Added 36 HTTP security regressions using the real validation, customer guard,
+  controller and request service, with mocked identity lookup and database.
+- Raw tenant/customer body overrides and tenant fields inside multipart edit
+  details are rejected. Query/header tenant claims cannot change the authenticated
+  customer used for request listing or grant access to another customer's job.
+- Same-tenant and cross-tenant non-owners are denied status, offers, tracking,
+  edit reads/writes, deletion, photo deletion, location/schedule updates, submission,
+  offer acceptance and payment finalization. The owner can read offers for an
+  outside-home-tenant job; missing authentication is denied.
+- Validation: **566 API tests / 50 suites**, **14 HTTP e2e tests**, full TypeScript,
+  changed-file ESLint and whitespace checks passed. Existing tenant-auth, route,
+  candidate, socket and lifecycle regressions passed in the full suite.
+- Marked the three remaining M12 security items complete. Existing performance
+  implementation remains unchanged. No new database integration, load benchmark,
+  device or production acceptance is claimed; API/database identities in the new
+  tests are fixtures. Broader release acceptance remains open.
+- **282/316 complete (89.2%); 34/316 remaining (10.8%)**, unweighted item count,
+  not an effort estimate. Next: **M13 — Migration/backward compatibility**.
+  No deployment, migration/backfill, commit or push.
+
 # A. Verify projects
 
 - [x] API confirmed NestJS + TypeScript.
@@ -819,10 +842,10 @@ For selected cross-tenant driver:
 
 # X. Security
 
-- [ ] Body tenant override denied.
-- [ ] Query tenant override denied.
+- [x] Body tenant override denied.
+- [x] Query tenant override denied.
 - [x] Wrong-market login denied.
-- [ ] Customer ownership enforced.
+- [x] Customer ownership enforced.
 - [x] Arbitrary driver request access denied.
 - [x] Candidate-specific access allowed.
 - [x] Candidate does not expose unrelated tenant data.

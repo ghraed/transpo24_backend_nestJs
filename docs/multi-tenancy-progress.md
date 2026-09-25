@@ -8,7 +8,7 @@
   user ownership relation, public markets, password/OTP market validation,
   signed tenant context, staged JWT support, refresh binding, trusted driver
   continuation validation, socket handshake validation, explicit backfill and tests.
-- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8 implemented** (checkpoint below); **M9 implemented** (checkpoint below); **M10 implemented** (checkpoint below); **M11–M14 not implemented.** Production enforcement, mandatory ownership
+- **M2 implemented for the additive compatibility phase** (see the M2 checkpoint below). **M3 implemented** (see checkpoint below); **M4 implemented** (checkpoint below); **M5 implemented** (checkpoint below); **M6 implemented** (checkpoint below); **M7 implemented** (checkpoint below); **M8 implemented** (checkpoint below); **M9 implemented** (checkpoint below); **M10 implemented** (checkpoint below); **M11 core native lifecycle verified** (checkpoint below); **M12 security/performance verified** (checkpoint below); **M13–M14 remain pending.** Production enforcement, mandatory ownership
   constraints and enabling JWT issuance remain rollout tasks. The feature as a
   whole is not complete and must not yet be enabled for multiple live markets.
 
@@ -594,11 +594,35 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
   Isolated test API/Metro and fixture database retained for follow-up.
   No production deployment/migration/backfill, commit or push.
 
-## Exact next task: M12 — Security/performance
+## M12 checkpoint — Tenant override and customer ownership (2026-09-25)
 
-Preserve completed M0–M11 implementation and delivery-start, payout and socket
-cleanup fixes. Verify open security items: body tenant override, query tenant
-override and customer ownership. Then continue M13 backward compatibility.
-The physical-device evidence and explicit remaining release acceptance are in
-`multi-tenancy-device-verification.md`. Do not claim successful Stripe payout,
-background tracking, Firebase push or fresh native build from this core device run.
+- Verified the existing implementation without changing application behavior.
+  Added 36 HTTP security regressions using the real validation, customer guard,
+  controller and request service, with mocked identity lookup and database.
+- Raw tenant/customer body overrides and tenant fields inside multipart edit
+  details are rejected. Query/header tenant claims cannot change the authenticated
+  customer used for request listing or grant access to another customer's job.
+- Same-tenant and cross-tenant non-owners are denied status, offers, tracking,
+  edit reads/writes, deletion, photo deletion, location/schedule updates, submission,
+  offer acceptance and payment finalization. The owner can read offers for an
+  outside-home-tenant job; missing authentication is denied.
+- Validation: **566 API tests / 50 suites**, **14 HTTP e2e tests**, full TypeScript,
+  changed-file ESLint and whitespace checks passed. Existing tenant-auth, route,
+  candidate, socket and lifecycle regressions passed in the full suite.
+- Marked the three remaining M12 security items complete. Existing performance
+  implementation remains unchanged. No new database integration, load benchmark,
+  device or production acceptance is claimed; API/database identities in the new
+  tests are fixtures. Broader release acceptance remains open.
+- **282/316 complete (89.2%); 34/316 remaining (10.8%)**, unweighted item count,
+  not an effort estimate. Next: **M13 — Migration/backward compatibility**.
+  No deployment, migration/backfill, commit or push.
+
+## Exact next task: M13 — Migration/backward compatibility
+
+Preserve completed M0–M12 implementation and existing delivery-start, payout and
+socket cleanup fixes. Verify released auth compatibility, existing request statuses,
+payment/tracking behavior, historical readability and active-job validity using
+isolated fixtures. Keep production backfill/enforcement and deployment in M14.
+The physical-device evidence and remaining release acceptance are documented in
+`multi-tenancy-device-verification.md`. No successful Stripe payout, background
+tracking, Firebase push or fresh native build is established by that core run.
