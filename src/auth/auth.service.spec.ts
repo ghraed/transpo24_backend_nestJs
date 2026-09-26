@@ -1,4 +1,8 @@
+import { unlink } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import {
+  BadRequestException,
   ForbiddenException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -7,6 +11,10 @@ import { DriverStatus, Prisma, UserRole } from '@prisma/client';
 
 import { TenantsService } from '../tenants/tenants.service';
 import { AuthService } from './auth.service';
+
+jest.mock('node:fs/promises', () => ({
+  unlink: jest.fn().mockResolvedValue(undefined),
+}));
 
 const tenant = { id: 'tenant-lb', code: 'LB', isActive: true };
 
@@ -563,5 +571,169 @@ describe('customer nickname profiles', () => {
         },
       }),
     );
+  });
+});
+
+describe('AuthService irreversible account deletion', () => {
+  beforeEach(() => jest.mocked(unlink).mockClear());
+
+  function deletionHarness(role = UserRole.CUSTOMER) {
+    const { service, prisma } = createHarness();
+    const tx = {
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          ...customer,
+          role,
+          driverProfile:
+            role === UserRole.DRIVER
+              ? {
+                  id: 'driver-1',
+                  profilePhotoUrl: '/uploads/profile.jpg',
+                  documents: [
+                    { storageKey: 'uploads/id.jpg' },
+                    { storageKey: '../outside.jpg' },
+                  ],
+                }
+              : null,
+        }),
+        update: jest.fn(),
+      },
+      transportRequest: { count: jest.fn().mockResolvedValue(0) },
+      driverDocument: { deleteMany: jest.fn() },
+      driverVehicle: { deleteMany: jest.fn() },
+      driverAvailability: { updateMany: jest.fn() },
+      driverProfile: { update: jest.fn() },
+      savedPlace: { deleteMany: jest.fn() },
+      pushToken: { deleteMany: jest.fn() },
+      webPushSubscription: { deleteMany: jest.fn() },
+      refreshSession: { deleteMany: jest.fn() },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+    return {
+      service,
+      prisma,
+      tx,
+      user: { ...customer, role, hasDriverProfile: role === UserRole.DRIVER },
+    };
+  }
+
+  it.each([UserRole.CUSTOMER, UserRole.DRIVER])(
+    'anonymizes %s and removes personal records and sessions',
+    async (role) => {
+      const { service, tx, user } = deletionHarness(role);
+      await expect(service.deleteAccount(user)).resolves.toEqual({
+        success: true,
+      });
+      expect(tx.user.update).toHaveBeenCalledTimes(1);
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: customer.id },
+        data: {
+          name: 'Deleted account',
+          nickname: null,
+          email: `deleted-${customer.id}@deleted.transpo24.invalid`,
+          passwordHash: expect.any(String),
+          phoneNumber: null,
+          countryCode: null,
+          stripeCustomerId: null,
+          isProfileCompleted: false,
+          deletedAt: expect.any(Date),
+        },
+      });
+      expect(tx.savedPlace.deleteMany).toHaveBeenCalledWith({
+        where: { customerId: customer.id },
+      });
+      for (const records of [
+        tx.pushToken,
+        tx.webPushSubscription,
+        tx.refreshSession,
+      ]) {
+        expect(records.deleteMany).toHaveBeenCalledWith({
+          where: { userId: customer.id },
+        });
+      }
+      if (role === UserRole.CUSTOMER) {
+        expect(tx.driverProfile.update).not.toHaveBeenCalled();
+        expect(unlink).not.toHaveBeenCalled();
+      } else {
+        expect(tx.driverDocument.deleteMany).toHaveBeenCalledWith({
+          where: { driverId: 'driver-1' },
+        });
+        expect(tx.driverVehicle.deleteMany).toHaveBeenCalledWith({
+          where: { driverId: 'driver-1' },
+        });
+        expect(tx.driverAvailability.updateMany).toHaveBeenCalledWith({
+          where: { driverId: 'driver-1' },
+          data: { isOnline: false },
+        });
+        expect(tx.driverProfile.update).toHaveBeenCalledWith({
+          where: { id: 'driver-1' },
+          data: expect.objectContaining({
+            firstName: 'Deleted',
+            lastName: 'Driver',
+            nickname: null,
+            phone: 'deleted-driver-1',
+            profilePhotoUrl: null,
+            idOrResidencyNumber: null,
+            addressLine1: null,
+            stripeAccountId: null,
+            status: DriverStatus.SUSPENDED,
+            isProfileCompleted: false,
+          }),
+        });
+        expect(unlink).toHaveBeenCalledTimes(2);
+        expect(unlink).toHaveBeenCalledWith(
+          join(process.cwd(), 'uploads/id.jpg'),
+        );
+        expect(unlink).toHaveBeenCalledWith(
+          join(process.cwd(), 'uploads/profile.jpg'),
+        );
+      }
+    },
+  );
+
+  it.each([UserRole.CUSTOMER, UserRole.DRIVER])(
+    'rejects deletion for %s with active transport requests before any cleanup',
+    async (role) => {
+      const { service, tx, user } = deletionHarness(role);
+      tx.transportRequest.count.mockResolvedValue(1);
+      await expect(service.deleteAccount(user)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(tx.user.update).not.toHaveBeenCalled();
+      expect(tx.savedPlace.deleteMany).not.toHaveBeenCalled();
+      expect(tx.driverDocument.deleteMany).not.toHaveBeenCalled();
+      expect(unlink).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects already deleted accounts', async () => {
+    const { service, tx, user } = deletionHarness();
+    tx.user.findFirst.mockResolvedValue(null);
+    await expect(service.deleteAccount(user)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('does not remove uploads when the database transaction fails', async () => {
+    const { service, tx, user } = deletionHarness(UserRole.DRIVER);
+    tx.user.update.mockRejectedValue(new Error('Database unavailable'));
+    await expect(service.deleteAccount(user)).rejects.toThrow(
+      'Database unavailable',
+    );
+    expect(unlink).not.toHaveBeenCalled();
+  });
+
+  it('rejects refresh sessions belonging to deleted users', async () => {
+    const { service, prisma } = createHarness();
+    prisma.refreshSession.findUnique.mockResolvedValue({
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60000),
+      user: { ...customer, deletedAt: new Date() },
+    });
+    await expect(
+      service.refreshCustomerSession('old-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
