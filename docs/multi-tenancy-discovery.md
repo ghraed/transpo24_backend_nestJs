@@ -10,7 +10,7 @@ in that directory is the persistent completion tracker.
 
 | Project | Actual Git root | Installed core packages |
 | --- | --- | --- |
-| API | `backend/api` | NestJS 11.2.1, TypeScript 5.9.3, Prisma client 7.9.1, pg 8.21.0, BullMQ 5.77.0, ioredis 5.10.1, Socket.IO 4.8.3 |
+| API | `api` | NestJS 11.2.1, TypeScript 5.9.3, Prisma client 7.9.1, pg 8.21.0, BullMQ 5.77.0, ioredis 5.10.1, Socket.IO 4.8.3 |
 | Customer | `client_mobile/app` | Expo 56.0.20, React Native 0.85.3, React 19.2.3, Expo Router 56.2.19, TypeScript 6.0.3 |
 | Driver | `driver_mobile` | Expo 56.0.21, React Native 0.85.3, React 19.2.3, Expo Router 56.2.20, TypeScript 6.0.3 |
 | Admin | `admin/Transpo_24` | Next.js 15.5.24, Refine core 5.0.12, React 19.1.2, TypeScript 5.9.3 |

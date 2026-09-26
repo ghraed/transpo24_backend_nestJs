@@ -1,6 +1,6 @@
 # Point 13 — vehicle documents
 
-Implemented across `client_mobile/app`, `driver_mobile`, `backend/api`, and `admin/Transpo_24`.
+Implemented across `client_mobile/app`, `driver_mobile`, `api`, and `admin/Transpo_24`.
 
 ## Customer flow
 
@@ -27,7 +27,7 @@ Files are stored in PostgreSQL bytea, never in the public `/uploads` folder. Met
 - Real PostgreSQL + Nest HTTP integration test verifies all four types, PDF/JPG/PNG byte round trips, payment gating, owner/driver/admin authorization, unauthenticated and unrelated-user denial, invalid/oversized files, both chat directions, realtime and notification hooks, official/chat separation, revoked driver access and cascading deletion. All synthetic fixtures are rolled back; external notifications are mocked.
 - Admin: production build, TypeScript, component lint, 12 existing tests. Actual Chrome page exercised with synthetic API fixtures: labels, separation, authenticated PDF download with matching bytes/filename, failed-load retry, no runtime exceptions.
 
-Repeat the database/HTTP check from `backend/api`: `npm run test:documents:integration`. It requires a migrated local PostgreSQL database and refuses remote database hosts.
+Repeat the database/HTTP check from `api`: `npm run test:documents:integration`. It requires a migrated local PostgreSQL database and refuses remote database hosts.
 
 ## Release
 

@@ -660,7 +660,7 @@ Checklist: **250/316 complete (79.1%); 66 remain (20.9%)**, unweighted.
   configured/verified before market activation; no FX or payment behavior changed.
 - Native card entry, external bank payouts, store binaries and live webhook delivery
   are not claimed. Test recipient is a synthetic Custom Connect account.
-- Evidence and runnable commands: `backend/api/docs/multi-tenancy-m13-verification.md`.
+- Evidence and runnable commands: `api/docs/multi-tenancy-m13-verification.md`.
 - **288/316 complete (91.1%); 28/316 remaining (8.9%)**, unweighted item count.
   Next: **M14 — Production rollout**. No production deployment/backfill or push.
 

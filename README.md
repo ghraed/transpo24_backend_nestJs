@@ -1,5 +1,8 @@
 # Transpo24 API
 
+The NestJS application and Git repository root is the top-level `api/` folder. From the workspace root, run `cd api` before running the commands below.
+
+
 ## Setup
 
 ```bash
