@@ -143,7 +143,7 @@ describe('driver-facing customer identity', () => {
     mapDriverRatingItemResponse: (item: unknown) => { customerName: string };
   };
   const request = {
-    id: 'request-1', photos: [], customer: { name: 'Private Legal Name', nickname: 'Road Runner' },
+    id: 'request-1', createdAt: new Date(), photos: [], customer: { name: 'Private Legal Name', nickname: 'Road Runner' },
     acceptedOffer: { id: 'offer-1', price: 20, createdAt: new Date(), updatedAt: new Date(), driver: { id: 'driver-1' } },
   };
   it('uses the entire nickname in request details without disclosing the full name', () => {
