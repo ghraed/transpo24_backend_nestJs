@@ -1154,6 +1154,35 @@ export class DriverService {
       );
     }
 
+    const vehicles = await this.prisma.driverVehicle.findMany({
+      where: {
+        driverId: profile.id,
+        status: {
+          in: [
+            DriverVehicleReviewStatus.PENDING_REVIEW,
+            DriverVehicleReviewStatus.APPROVED,
+          ],
+        },
+      },
+      select: {
+        ...DRIVER_VEHICLE_SELECT,
+        documents: {
+          orderBy: { createdAt: 'desc' },
+          select: DRIVER_DOCUMENT_SELECT,
+        },
+      },
+    });
+    const hasCompleteVehicle = vehicles.some(
+      (vehicle) =>
+        this.toVehicleCompletenessResponse(vehicle, vehicle.documents)
+          .isComplete,
+    );
+    if (!hasCompleteVehicle) {
+      throw new BadRequestException(
+        'Complete a vehicle with all required documents and a load-capacity profile before submitting for review.',
+      );
+    }
+
     const submittedAt = new Date();
     await this.prisma.$transaction([
       this.prisma.driverDocument.updateMany({
