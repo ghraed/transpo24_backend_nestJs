@@ -26,6 +26,16 @@ export class UploadDriverOnboardingDocumentsDto {
   drivingLicenseExpiryDate?: string;
 }
 
+export class UpdateDriverOnboardingDocumentDatesDto {
+  @IsOptional()
+  @IsDateString()
+  idExpiryDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  drivingLicenseExpiryDate?: string;
+}
+
 export class SubmitDriverOnboardingReviewDto {
   @IsString()
   @IsNotEmpty()

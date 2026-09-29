@@ -67,6 +67,7 @@ import {
   DriverOnboardingDocumentsStatusResponseDto,
   SubmitDriverOnboardingReviewDto,
   UploadDriverOnboardingDocumentsDto,
+  UpdateDriverOnboardingDocumentDatesDto,
 } from './dto/driver-onboarding-documents.dto';
 import { SendTestCustomerNotificationDto } from './dto/send-test-customer-notification.dto';
 import { UpsertDriverPersonalInfoDto } from './dto/upsert-driver-personal-info.dto';
@@ -195,6 +196,20 @@ export class DriverController {
   ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
     return this.driverService.getOnboardingDocumentsStatus({
       userId: request.user.id,
+    });
+  }
+
+  @Patch('onboarding/documents/dates')
+  async updateOnboardingDocumentDates(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpdateDriverOnboardingDocumentDatesDto,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    return this.driverService.updateOnboardingDocumentDates({
+      userId: request.user.id,
+      idExpiryDate: dto.idExpiryDate ? new Date(dto.idExpiryDate) : undefined,
+      drivingLicenseExpiryDate: dto.drivingLicenseExpiryDate
+        ? new Date(dto.drivingLicenseExpiryDate)
+        : undefined,
     });
   }
 

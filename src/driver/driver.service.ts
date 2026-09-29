@@ -299,6 +299,12 @@ interface GetDriverOnboardingDocumentsInput {
   userId: string;
 }
 
+interface UpdateDriverOnboardingDocumentDatesInput {
+  userId: string;
+  idExpiryDate?: Date;
+  drivingLicenseExpiryDate?: Date;
+}
+
 interface SubmitDriverOnboardingDocumentsReviewInput {
   userId: string;
   vehicleId: string;
@@ -1104,6 +1110,85 @@ export class DriverService {
     });
 
     return this.toOnboardingDocumentsStatusResponse(profile, documents);
+  }
+
+  async updateOnboardingDocumentDates(
+    input: UpdateDriverOnboardingDocumentDatesInput,
+  ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
+    const profile = await this.getDriverProfileForOnboardingDocuments(
+      input.userId,
+    );
+    if (!profile.isProfileCompleted) {
+      throw new BadRequestException('Driver profile must be completed first.');
+    }
+    if (
+      profile.status === DriverStatus.PENDING_REVIEW ||
+      profile.status === DriverStatus.APPROVED ||
+      profile.status === DriverStatus.SUSPENDED
+    ) {
+      throw new BadRequestException(
+        'Documents cannot be changed during or after review.',
+      );
+    }
+    if (!input.idExpiryDate && !input.drivingLicenseExpiryDate) {
+      throw new BadRequestException('Choose a document expiry date to update.');
+    }
+    if (input.idExpiryDate) {
+      if (
+        profile.identityDocumentKind !== IdentityDocumentKind.RESIDENCY_CARD
+      ) {
+        throw new BadRequestException(
+          'Residency expiry date requires a residency card.',
+        );
+      }
+      this.assertExpiryDateNotPast(input.idExpiryDate, 'ID expiry date');
+    }
+    if (input.drivingLicenseExpiryDate) {
+      this.assertExpiryDateNotPast(
+        input.drivingLicenseExpiryDate,
+        'Driving license expiry date',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const updateExpiry = async (
+        type: DriverDocumentType,
+        expiresAt: Date,
+      ) => {
+        const updated = await tx.driverDocument.updateMany({
+          where: {
+            driverId: profile.id,
+            vehicleId: null,
+            type,
+            status: { not: DocumentStatus.REJECTED },
+          },
+          data: {
+            expiresAt,
+            status: DocumentStatus.UPLOADED,
+            reviewedAt: null,
+            rejectionReason: null,
+          },
+        });
+        if (updated.count === 0) {
+          throw new BadRequestException(
+            'Upload the document before setting its expiry date.',
+          );
+        }
+      };
+
+      if (input.idExpiryDate) {
+        await updateExpiry(DriverDocumentType.ID_FRONT, input.idExpiryDate);
+        await updateExpiry(DriverDocumentType.ID_BACK, input.idExpiryDate);
+      }
+      if (input.drivingLicenseExpiryDate) {
+        await updateExpiry(
+          DriverDocumentType.DRIVING_LICENSE,
+          input.drivingLicenseExpiryDate,
+        );
+      }
+    });
+
+    return this.getOnboardingDocumentsStatus({ userId: input.userId });
   }
 
   async submitOnboardingDocumentsForReview(
