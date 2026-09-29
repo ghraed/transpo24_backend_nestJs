@@ -24,6 +24,8 @@ function setup() {
     id: 'driver-1',
     status: DriverStatus.PENDING_REVIEW,
     submittedForReviewAt: new Date('2026-01-01'),
+    reviewVehicleId: 'vehicle-1',
+    userId: 'driver-user-1',
     documents: [
       document('selfie-1', 'PERSONAL_SELFIE'),
       document('id-front-1', 'ID_FRONT'),
@@ -50,15 +52,25 @@ function setup() {
       Promise.all(operations),
     ),
   };
-  const service = new AdminService(prisma as never, {} as never, {} as never);
+  const notifications = {
+    notifyDriverReviewDeclined: jest.fn().mockResolvedValue(undefined),
+  };
+  const service = new AdminService(
+    prisma as never,
+    notifications as never,
+    {} as never,
+  );
   jest.spyOn(service, 'findDriverReviewById').mockResolvedValue({} as never);
-  return { profile, prisma, service };
+  return { profile, prisma, service, notifications };
 }
 
 describe('selective driver review declines', () => {
   it('rejects only the selected personal document and leaves vehicle status untouched', async () => {
-    const { prisma, service } = setup();
+    const { prisma, service, notifications } = setup();
     await service.declineDriverReview('driver-1', 'Blurry ID.', ['id-front-1']);
+    expect(notifications.notifyDriverReviewDeclined).toHaveBeenCalledWith({
+      driverUserId: 'driver-user-1',
+    });
     expect(prisma.driverProfile.update).toHaveBeenCalledWith({
       where: { id: 'driver-1' },
       data: { status: DriverStatus.REJECTED },
@@ -94,6 +106,25 @@ describe('selective driver review declines', () => {
     });
   });
 
+  it('reviews the pinned vehicle when other vehicles appear first', async () => {
+    const { profile, prisma, service } = setup();
+    profile.vehicles.unshift({
+      id: 'other-vehicle',
+      status: DriverVehicleReviewStatus.PENDING_REVIEW,
+      documents: [
+        document('other-front', 'VEHICLE_FRONT_PHOTO', 'other-vehicle'),
+      ],
+    });
+    await service.declineDriverReview('driver-1', 'Plate is unreadable.', [
+      'front-1',
+    ]);
+    expect(prisma.driverVehicle.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'vehicle-1' },
+      }),
+    );
+  });
+
   it('does not let an older document version be declined after a replacement was uploaded', async () => {
     const { profile, prisma, service } = setup();
     profile.documents.unshift(document('id-front-2', 'ID_FRONT'));
@@ -119,6 +150,21 @@ describe('selective driver review declines', () => {
     profile.documents[1].status = DocumentStatus.REJECTED;
     await expect(
       service.approveDriverReviewVehicle('driver-1', 'vehicle-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('blocks approval of a different vehicle while the pinned review is pending', async () => {
+    const { profile, prisma, service } = setup();
+    profile.vehicles.push({
+      id: 'other-vehicle',
+      status: DriverVehicleReviewStatus.PENDING_REVIEW,
+      documents: [
+        document('other-front', 'VEHICLE_FRONT_PHOTO', 'other-vehicle'),
+      ],
+    });
+    await expect(
+      service.approveDriverReviewVehicle('driver-1', 'other-vehicle'),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });

@@ -48,6 +48,7 @@ export interface AdminDriverReviewResponseDto {
   identityDocumentKind: IdentityDocumentKind | null;
   status: DriverStatus;
   submittedForReviewAt: string | null;
+  reviewVehicleId: string | null;
   createdAt: string;
   updatedAt: string;
   onboardingDocuments: AdminDriverReviewDocumentDto[];

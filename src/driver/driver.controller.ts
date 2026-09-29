@@ -65,6 +65,7 @@ import {
 import { DriverOnboardingResponseDto } from './dto/driver-onboarding-response.dto';
 import {
   DriverOnboardingDocumentsStatusResponseDto,
+  SubmitDriverOnboardingReviewDto,
   UploadDriverOnboardingDocumentsDto,
 } from './dto/driver-onboarding-documents.dto';
 import { SendTestCustomerNotificationDto } from './dto/send-test-customer-notification.dto';
@@ -200,9 +201,11 @@ export class DriverController {
   @Post('onboarding/submit-review')
   async submitOnboardingDocumentsForReview(
     @Req() request: AuthenticatedRequest,
+    @Body() dto: SubmitDriverOnboardingReviewDto,
   ): Promise<DriverOnboardingDocumentsStatusResponseDto> {
     return this.driverService.submitOnboardingDocumentsForReview({
       userId: request.user.id,
+      vehicleId: dto.vehicleId,
     });
   }
 

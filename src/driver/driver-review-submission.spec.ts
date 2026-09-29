@@ -74,6 +74,7 @@ function setup(vehicles: ReturnType<typeof completeVehicle>[]) {
     identityDocumentKind: null,
     status: DriverStatus.PENDING_DOCUMENTS,
     submittedForReviewAt: null,
+    reviewVehicleId: null,
   };
   const personalDocuments = personalTypes.map((type) => document(type));
   const prisma = {
@@ -144,14 +145,74 @@ describe('driver review submission vehicle readiness', () => {
         vehicles as ReturnType<typeof completeVehicle>[],
       );
       await expect(
-        service.submitOnboardingDocumentsForReview({ userId: 'user-1' }),
+        service.submitOnboardingDocumentsForReview({
+          userId: 'user-1',
+          vehicleId: 'vehicle-1',
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.driverProfile.update).not.toHaveBeenCalled();
     },
   );
 
-  it('submits when at least one reviewable vehicle is complete', async () => {
+  it('rejects an incomplete selected vehicle even when another vehicle is complete', async () => {
+    const { prisma, service } = setup([
+      { ...completeVehicle(), id: 'vehicle-incomplete', capacityKg: null },
+      completeVehicle(),
+    ]);
+    await expect(
+      service.submitOnboardingDocumentsForReview({
+        userId: 'user-1',
+        vehicleId: 'vehicle-incomplete',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('returns the existing review for the same vehicle without writing or notifying again', async () => {
+    const { profile, prisma, notifications, service } = setup([
+      completeVehicle(),
+    ]);
+    profile.status = DriverStatus.PENDING_REVIEW;
+    profile.reviewVehicleId = 'vehicle-1';
+    profile.submittedForReviewAt = new Date('2026-01-02');
+    const response = await service.submitOnboardingDocumentsForReview({
+      userId: 'user-1',
+      vehicleId: 'vehicle-1',
+    });
+    expect(response.reviewVehicleId).toBe('vehicle-1');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(
+      notifications.notifyAdminsAboutDriverReviewSubmission,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('does not move an approved driver back into review', async () => {
+    const { profile, prisma, service } = setup([completeVehicle()]);
+    profile.status = DriverStatus.APPROVED;
+    await expect(
+      service.submitOnboardingDocumentsForReview({
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not switch vehicles while a review is pending', async () => {
+    const { profile, prisma, service } = setup([completeVehicle()]);
+    profile.status = DriverStatus.PENDING_REVIEW;
+    profile.reviewVehicleId = 'vehicle-1';
+    await expect(
+      service.submitOnboardingDocumentsForReview({
+        userId: 'user-1',
+        vehicleId: 'vehicle-2',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('submits only the selected complete vehicle even when another vehicle is incomplete', async () => {
     const incomplete = {
       ...completeVehicle(),
       id: 'vehicle-incomplete',
@@ -163,6 +224,7 @@ describe('driver review submission vehicle readiness', () => {
     ]);
     const response = await service.submitOnboardingDocumentsForReview({
       userId: 'user-1',
+      vehicleId: 'vehicle-1',
     });
     expect(prisma.driverVehicle.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -183,6 +245,7 @@ describe('driver review submission vehicle readiness', () => {
       data: {
         status: DriverStatus.PENDING_REVIEW,
         submittedForReviewAt: expect.any(Date),
+        reviewVehicleId: 'vehicle-1',
       },
     });
     expect(response.onboardingStatus).toBe(DriverStatus.PENDING_REVIEW);

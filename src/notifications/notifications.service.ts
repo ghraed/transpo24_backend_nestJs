@@ -423,11 +423,24 @@ export class NotificationsService {
       userIds: [input.driverUserId],
       app: PushApp.DRIVER,
       title: 'Driver account approved',
-      body: `${greeting} You can now start receiving transport requests.`,
+      body: `${greeting} Set your availability in the app to start receiving transport requests.`,
       type: 'DRIVER_APPROVED',
       data: {
         driverApproved: true,
       },
+    });
+  }
+
+  async notifyDriverReviewDeclined(input: {
+    driverUserId: string;
+  }): Promise<void> {
+    await this.sendToUsers({
+      userIds: [input.driverUserId],
+      app: PushApp.DRIVER,
+      title: 'Driver review needs corrections',
+      body: 'Open the app to see the declined items and replace them before submitting again.',
+      type: 'DRIVER_REVIEW_DECLINED',
+      data: { driverReviewDeclined: true },
     });
   }
 

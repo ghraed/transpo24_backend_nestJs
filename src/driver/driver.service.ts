@@ -301,6 +301,7 @@ interface GetDriverOnboardingDocumentsInput {
 
 interface SubmitDriverOnboardingDocumentsReviewInput {
   userId: string;
+  vehicleId: string;
 }
 
 interface UploadDriverOnboardingDocumentsInput {
@@ -362,6 +363,7 @@ type DriverProfileSource = {
   profilePhotoUrl: string | null;
   identityDocumentKind: IdentityDocumentKind | null;
   submittedForReviewAt: Date | null;
+  reviewVehicleId: string | null;
   status: DriverStatus;
   isProfileCompleted: boolean;
   createdAt: Date;
@@ -672,6 +674,7 @@ const DRIVER_ME_SELECT = {
       profilePhotoUrl: true,
       identityDocumentKind: true,
       submittedForReviewAt: true,
+      reviewVehicleId: true,
       status: true,
       isProfileCompleted: true,
       createdAt: true,
@@ -1122,6 +1125,19 @@ export class DriverService {
       );
     }
 
+    if (profile.status === DriverStatus.APPROVED) {
+      throw new BadRequestException('This driver account is already approved.');
+    }
+
+    if (profile.status === DriverStatus.PENDING_REVIEW) {
+      if (profile.reviewVehicleId !== input.vehicleId) {
+        throw new BadRequestException(
+          'A different vehicle is already submitted for review.',
+        );
+      }
+      return this.getOnboardingDocumentsStatus({ userId: input.userId });
+    }
+
     const documents = await this.prisma.driverDocument.findMany({
       where: {
         driverId: profile.id,
@@ -1174,6 +1190,7 @@ export class DriverService {
     });
     const hasCompleteVehicle = vehicles.some(
       (vehicle) =>
+        vehicle.id === input.vehicleId &&
         this.toVehicleCompletenessResponse(vehicle, vehicle.documents)
           .isComplete,
     );
@@ -1209,12 +1226,14 @@ export class DriverService {
         data: {
           status: DriverStatus.PENDING_REVIEW,
           submittedForReviewAt: submittedAt,
+          reviewVehicleId: input.vehicleId,
         },
       }),
     ]);
 
     profile.status = DriverStatus.PENDING_REVIEW;
     profile.submittedForReviewAt = submittedAt;
+    profile.reviewVehicleId = input.vehicleId;
 
     const updatedDocuments = await this.prisma.driverDocument.findMany({
       where: {
@@ -1288,19 +1307,29 @@ export class DriverService {
 
   private normalizeDriverNickname(nickname: string): string {
     const value = typeof nickname === 'string' ? nickname.trim() : '';
-    if (value.length < 2 || value.length > 40 || /[\u0000-\u001f\u007f]/u.test(value)) {
-      throw new BadRequestException('Nickname must be between 2 and 40 characters.');
+    const hasControlCharacter = Array.from(value).some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127;
+    });
+    if (value.length < 2 || value.length > 40 || hasControlCharacter) {
+      throw new BadRequestException(
+        'Nickname must be between 2 and 40 characters.',
+      );
     }
     return value;
   }
 
-  async updateNickname(userId: string, nickname: string): Promise<DriverMeResponseDto> {
+  async updateNickname(
+    userId: string,
+    nickname: string,
+  ): Promise<DriverMeResponseDto> {
     const normalizedNickname = this.normalizeDriverNickname(nickname);
     const updated = await this.prisma.driverProfile.updateMany({
       where: { userId, user: { deletedAt: null } },
       data: { nickname: normalizedNickname },
     });
-    if (updated.count !== 1) throw new NotFoundException('Driver profile not found.');
+    if (updated.count !== 1)
+      throw new NotFoundException('Driver profile not found.');
     return this.getMe({ userId });
   }
 
@@ -2292,8 +2321,7 @@ export class DriverService {
       const estimatedPickupAt = customerOffer.estimatedPickupAt
         ? customerOffer.estimatedPickupAt.toISOString()
         : null;
-      const driverName =
-        customerOffer.driver.nickname?.trim() || 'Driver';
+      const driverName = customerOffer.driver.nickname?.trim() || 'Driver';
       const payload: OfferNewPayload = {
         requestId: result.updatedRequest.id,
         requestStatus: result.updatedRequest.status,
@@ -3594,7 +3622,9 @@ export class DriverService {
       );
     }
 
-    const nextNickname = this.normalizeDriverNickname(input.changes.nickname ?? input.existingProfile.nickname ?? '');
+    const nextNickname = this.normalizeDriverNickname(
+      input.changes.nickname ?? input.existingProfile.nickname ?? '',
+    );
     const nextFirstName =
       input.changes.firstName !== undefined
         ? input.changes.firstName.trim()
@@ -5615,6 +5645,7 @@ export class DriverService {
       submittedForReviewAt: profile.submittedForReviewAt
         ? profile.submittedForReviewAt.toISOString()
         : null,
+      reviewVehicleId: profile.reviewVehicleId ?? null,
       nextStep: this.getOnboardingNextStep(profile),
     };
   }

@@ -250,6 +250,7 @@ type ReviewProfileSource = {
   identityDocumentKind: 'NATIONAL_ID' | 'RESIDENCY_CARD' | null;
   status: DriverStatus;
   submittedForReviewAt: Date | null;
+  reviewVehicleId: string | null;
   createdAt: Date;
   updatedAt: Date;
   user: {
@@ -1051,7 +1052,10 @@ export class AdminService {
   async approveDriverReview(id: string): Promise<AdminDriverReviewResponseDto> {
     const profile = await this.getDriverReviewProfile(id);
     this.assertDriverReviewCanBeApproved(profile);
-    const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
+    const reviewVehicle = this.pickReviewVehicle(
+      profile.vehicles,
+      profile.reviewVehicleId,
+    );
 
     if (!reviewVehicle) {
       throw new BadRequestException(
@@ -1149,6 +1153,15 @@ export class AdminService {
   ): Promise<AdminDriverReviewResponseDto> {
     const profile = await this.getDriverReviewProfile(id);
     this.assertDriverReviewCanBeApproved(profile);
+    if (
+      profile.status === DriverStatus.PENDING_REVIEW &&
+      profile.reviewVehicleId &&
+      profile.reviewVehicleId !== vehicleId
+    ) {
+      throw new BadRequestException(
+        'Approve the vehicle submitted for this review.',
+      );
+    }
     const vehicle = profile.vehicles.find((item) => item.id === vehicleId);
 
     if (!vehicle) {
@@ -1225,6 +1238,19 @@ export class AdminService {
       }),
     ]);
 
+    if (profile.status === DriverStatus.PENDING_REVIEW) {
+      void this.notificationsService
+        .notifyDriverApproved({
+          driverUserId: profile.userId,
+          driverName: profile.user.name,
+        })
+        .catch((notificationError: unknown) => {
+          this.logger.error(
+            `Failed to notify approved driver ${profile.id}: ${notificationError instanceof Error ? notificationError.message : 'Unexpected error'}`,
+          );
+        });
+    }
+
     return this.findDriverReviewById(id);
   }
 
@@ -1279,7 +1305,10 @@ export class AdminService {
         'Only pending driver reviews can be declined.',
       );
     }
-    const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
+    const reviewVehicle = this.pickReviewVehicle(
+      profile.vehicles,
+      profile.reviewVehicleId,
+    );
     const personalDocuments = this.uniqueLatestDocumentsByType(
       profile.documents,
     );
@@ -1338,6 +1367,16 @@ export class AdminService {
           ]
         : []),
     ]);
+
+    void this.notificationsService
+      .notifyDriverReviewDeclined({
+        driverUserId: profile.userId,
+      })
+      .catch((notificationError: unknown) => {
+        this.logger.error(
+          `Failed to notify declined driver ${profile.id}: ${notificationError instanceof Error ? notificationError.message : 'Unexpected error'}`,
+        );
+      });
 
     return this.findDriverReviewById(id);
   }
@@ -3586,6 +3625,7 @@ export class AdminService {
       identityDocumentKind: true,
       status: true,
       submittedForReviewAt: true,
+      reviewVehicleId: true,
       createdAt: true,
       updatedAt: true,
       user: {
@@ -3675,7 +3715,10 @@ export class AdminService {
     const onboardingDocuments = this.uniqueLatestDocumentsByType(
       profile.documents,
     ).map((document) => this.mapReviewDocument(document));
-    const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
+    const reviewVehicle = this.pickReviewVehicle(
+      profile.vehicles,
+      profile.reviewVehicleId,
+    );
 
     return {
       id: profile.id,
@@ -3692,6 +3735,7 @@ export class AdminService {
       submittedForReviewAt: profile.submittedForReviewAt
         ? profile.submittedForReviewAt.toISOString()
         : null,
+      reviewVehicleId: profile.reviewVehicleId ?? null,
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
       onboardingDocuments,
@@ -3762,7 +3806,11 @@ export class AdminService {
 
   private pickReviewVehicle(
     vehicles: ReviewVehicleSource[],
+    reviewVehicleId?: string | null,
   ): ReviewVehicleSource | null {
+    if (reviewVehicleId) {
+      return vehicles.find((vehicle) => vehicle.id === reviewVehicleId) ?? null;
+    }
     if (vehicles.length === 0) {
       return null;
     }

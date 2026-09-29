@@ -117,6 +117,7 @@ enum PreferredLanguage {
   ar
   de
   fr
+  es
   it
 }
 
@@ -773,6 +774,7 @@ model DriverProfile {
   emergencyContactName  String?
   emergencyContactPhone String?
   submittedForReviewAt  DateTime?
+  reviewVehicleId       String?
   status                DriverStatus       @default(PENDING_PROFILE)
   isProfileCompleted    Boolean            @default(false)
   averageRating         Decimal?           @db.Decimal(3, 2)

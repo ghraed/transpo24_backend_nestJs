@@ -4,7 +4,13 @@ import {
   DriverStatus,
   IdentityDocumentKind,
 } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class UploadDriverOnboardingDocumentsDto {
   @IsOptional()
@@ -18,6 +24,12 @@ export class UploadDriverOnboardingDocumentsDto {
   @IsOptional()
   @IsDateString()
   drivingLicenseExpiryDate?: string;
+}
+
+export class SubmitDriverOnboardingReviewDto {
+  @IsString()
+  @IsNotEmpty()
+  vehicleId!: string;
 }
 
 export interface DriverOnboardingDocumentResponseDto {
@@ -42,6 +54,7 @@ export interface DriverOnboardingDocumentsStatusResponseDto {
   missingDocumentLabels: string[];
   canSubmitForReview: boolean;
   submittedForReviewAt: string | null;
+  reviewVehicleId: string | null;
   nextStep:
     | 'COMPLETE_PROFILE'
     | 'UPLOAD_DOCUMENTS'

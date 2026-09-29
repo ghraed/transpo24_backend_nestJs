@@ -302,12 +302,28 @@ describe('NotificationsService', () => {
       userIds: ['driver-user-1'],
       app: PushApp.DRIVER,
       title: 'Driver account approved',
-      body: 'John Driver, your driver account is approved. You can now start receiving transport requests.',
+      body: 'John Driver, your driver account is approved. Set your availability in the app to start receiving transport requests.',
       type: 'DRIVER_APPROVED',
       data: {
         driverApproved: true,
       },
     });
+  });
+
+  it('prompts declined drivers to open their correction details', async () => {
+    const service = createService({});
+    const sendToUsersSpy = jest
+      .spyOn(service, 'sendToUsers')
+      .mockResolvedValue(undefined);
+    await service.notifyDriverReviewDeclined({ driverUserId: 'driver-user-1' });
+    expect(sendToUsersSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userIds: ['driver-user-1'],
+        app: PushApp.DRIVER,
+        type: 'DRIVER_REVIEW_DECLINED',
+        body: expect.stringContaining('replace them before submitting again'),
+      }),
+    );
   });
 
   it('maps a normalized browser payload to a safe relative admin URL', () => {
