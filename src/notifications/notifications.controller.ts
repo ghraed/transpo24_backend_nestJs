@@ -19,6 +19,7 @@ import { AuthenticatedUserGuard } from '../auth/guards/authenticated-user.guard'
 import { AdminRoleGuard } from '../admin/guards/admin-role.guard';
 import { CreateWebPushSubscriptionDto } from './dto/create-web-push-subscription.dto';
 import { DeleteWebPushSubscriptionDto } from './dto/delete-web-push-subscription.dto';
+import { WebPushProvider } from './web-push.provider';
 import {
   WebPushSubscriptionResponseDto,
   WebPushSubscriptionsService,
@@ -40,6 +41,7 @@ class NotificationListQueryDto {
 export class NotificationsController {
   constructor(
     private readonly webPushSubscriptionsService: WebPushSubscriptionsService,
+    private readonly webPushProvider: WebPushProvider,
   ) {}
 
   @Post()
@@ -64,6 +66,14 @@ export class NotificationsController {
       role: user.role,
       endpoint: dto.endpoint,
     });
+  }
+
+  @Post('test')
+  test(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DeleteWebPushSubscriptionDto,
+  ): Promise<{ accepted: true }> {
+    return this.webPushProvider.sendTestToSubscription(user.id, dto.endpoint);
   }
 
   @Get('me')

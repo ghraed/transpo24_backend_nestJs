@@ -1330,7 +1330,7 @@ export class DriverService {
       select: DRIVER_DOCUMENT_SELECT,
     });
 
-    void this.notificationsService
+    await this.notificationsService
       .notifyAdminsAboutDriverReviewSubmission({
         driverProfileId: profile.id,
         driverName:

@@ -1,5 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import type { WebPushSubscription as PrismaWebPushSubscription } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import webpush, { type PushSubscription, type RequestOptions } from 'web-push';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -58,6 +64,54 @@ export class WebPushProvider {
         this.sendToSubscription(subscription, payload),
       ),
     );
+  }
+
+  async sendTestToSubscription(
+    userId: string,
+    endpoint: string,
+  ): Promise<{ accepted: true }> {
+    if (!this.config) {
+      throw new BadRequestException('Web Push is not configured.');
+    }
+
+    const subscription = await this.prisma.webPushSubscription.findFirst({
+      where: { userId, endpoint },
+    });
+    if (!subscription) {
+      throw new BadRequestException(
+        'This browser is not subscribed to admin notifications.',
+      );
+    }
+
+    try {
+      await webpush.sendNotification(
+        this.toPushSubscription(subscription),
+        JSON.stringify({
+          id: randomUUID(),
+          type: 'ADMIN_TEST_NOTIFICATION',
+          title: 'Transpo24 test notification',
+          body: 'The local API delivered this test to your browser push service.',
+          url: '/driver-reviews',
+        } satisfies BrowserPushNotificationPayload),
+        { TTL: 60, urgency: 'high' },
+      );
+    } catch (error) {
+      const webPushError = error as WebPushError;
+      if (webPushError.statusCode === 404 || webPushError.statusCode === 410) {
+        await this.webPushSubscriptionsService.deleteById(subscription.id);
+        throw new BadGatewayException(
+          'This browser subscription expired. Disable and re-enable notifications, then try again.',
+        );
+      }
+      this.logger.warn(
+        `Web push test failed for subscription ${subscription.id}: ${this.toSafeErrorSummary(webPushError)}`,
+      );
+      throw new BadGatewayException(
+        'The push service did not accept the test notification. Try again or check the API logs.',
+      );
+    }
+
+    return { accepted: true };
   }
 
   async sendToSubscription(

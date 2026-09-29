@@ -212,6 +212,40 @@ describe('driver review submission vehicle readiness', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('waits for the admin notification attempt after saving a new review', async () => {
+    const { prisma, notifications, service } = setup([completeVehicle()]);
+    let finishNotification!: () => void;
+    notifications.notifyAdminsAboutDriverReviewSubmission.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishNotification = resolve;
+        }),
+    );
+
+    let completed = false;
+    const action = service
+      .submitOnboardingDocumentsForReview({
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+      })
+      .then(() => {
+        completed = true;
+      });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(
+      notifications.notifyAdminsAboutDriverReviewSubmission,
+    ).toHaveBeenCalledWith({
+      driverProfileId: 'driver-1',
+      driverName: expect.any(String),
+    });
+    expect(completed).toBe(false);
+
+    finishNotification();
+    await action;
+    expect(completed).toBe(true);
+  });
+
   it('submits only the selected complete vehicle even when another vehicle is incomplete', async () => {
     const incomplete = {
       ...completeVehicle(),

@@ -28,6 +28,80 @@ describe('WebPushProvider', () => {
     process.env = originalEnv;
   });
 
+  it('tests server delivery only for the requesting admin browser', async () => {
+    sendNotification.mockResolvedValueOnce({ statusCode: 201 });
+    const subscription = {
+      id: 'sub-1',
+      userId: 'admin-1',
+      endpoint: 'https://push.example.com/1',
+      p256dh: 'p256dh-1',
+      auth: 'auth-1',
+      expirationTime: null,
+    };
+    const findFirst = jest.fn().mockResolvedValue(subscription);
+    const provider = new WebPushProvider(
+      { webPushSubscription: { findFirst } } as never,
+      { deleteById: jest.fn() } as never,
+    );
+
+    await expect(
+      provider.sendTestToSubscription('admin-1', subscription.endpoint),
+    ).resolves.toEqual({ accepted: true });
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { userId: 'admin-1', endpoint: subscription.endpoint },
+    });
+    expect(sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: subscription.endpoint }),
+      expect.stringContaining('ADMIN_TEST_NOTIFICATION'),
+      expect.objectContaining({ urgency: 'high' }),
+    );
+  });
+
+  it('does not test an endpoint that is not subscribed by this admin', async () => {
+    const provider = new WebPushProvider(
+      {
+        webPushSubscription: { findFirst: jest.fn().mockResolvedValue(null) },
+      } as never,
+      { deleteById: jest.fn() } as never,
+    );
+    await expect(
+      provider.sendTestToSubscription(
+        'admin-1',
+        'https://push.example.com/other',
+      ),
+    ).rejects.toThrow('not subscribed');
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('reports an expired test subscription and removes it', async () => {
+    sendNotification.mockRejectedValueOnce({
+      statusCode: 410,
+      message: 'Gone',
+    });
+    const deleteById = jest.fn().mockResolvedValue(undefined);
+    const provider = new WebPushProvider(
+      {
+        webPushSubscription: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'expired',
+            endpoint: 'https://push.example.com/expired',
+            p256dh: 'p256dh',
+            auth: 'auth',
+            expirationTime: null,
+          }),
+        },
+      } as never,
+      { deleteById } as never,
+    );
+    await expect(
+      provider.sendTestToSubscription(
+        'admin-1',
+        'https://push.example.com/expired',
+      ),
+    ).rejects.toThrow('expired');
+    expect(deleteById).toHaveBeenCalledWith('expired');
+  });
+
   it('sends to multiple subscriptions for the same user', async () => {
     const prisma = {
       webPushSubscription: {
