@@ -3942,9 +3942,23 @@ export class DriverService {
   }
 
   private hasRequiredVehicleDocuments(
-    documents: Array<{ type: DriverDocumentType; status?: DocumentStatus }>,
+    documents: Array<{
+      type: DriverDocumentType;
+      status?: DocumentStatus;
+      createdAt: Date;
+    }>,
   ): boolean {
-    const eligibleDocuments = documents.filter(
+    const latestByType = new Map<
+      DriverDocumentType,
+      (typeof documents)[number]
+    >();
+    for (const document of documents) {
+      const current = latestByType.get(document.type);
+      if (!current || document.createdAt > current.createdAt) {
+        latestByType.set(document.type, document);
+      }
+    }
+    const eligibleDocuments = [...latestByType.values()].filter(
       (document) => document.status !== DocumentStatus.REJECTED,
     );
 
@@ -4614,6 +4628,7 @@ export class DriverService {
           select: {
             type: true,
             status: true,
+            createdAt: true,
           },
         },
       },
@@ -4621,9 +4636,7 @@ export class DriverService {
 
     return vehicles.some((vehicle) => {
       const hasRequiredDocuments = this.hasRequiredVehicleDocuments(
-        vehicle.documents.filter(
-          (document) => document.status !== DocumentStatus.REJECTED,
-        ),
+        vehicle.documents,
       );
 
       return (
@@ -5334,9 +5347,9 @@ export class DriverService {
     vehicle: VehicleSource,
     documents: DocumentSource[],
   ): DriverVehicleCompletenessResponseDto {
-    const eligibleDocuments = documents.filter(
-      (document) => document.status !== DocumentStatus.REJECTED,
-    );
+    const eligibleDocuments = this.uniqueLatestDocumentsByType(
+      documents,
+    ).filter((document) => document.status !== DocumentStatus.REJECTED);
     const documentTypes = new Set(
       eligibleDocuments.map((document) => document.type),
     );
@@ -5505,7 +5518,8 @@ export class DriverService {
     const map = new Map<DriverDocumentType, DocumentSource>();
 
     for (const document of documents) {
-      if (!map.has(document.type)) {
+      const current = map.get(document.type);
+      if (!current || document.createdAt > current.createdAt) {
         map.set(document.type, document);
       }
     }

@@ -1,5 +1,13 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class ReviewDriverRequestDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -9,4 +17,11 @@ export class ReviewDriverRequestDto {
   @IsNotEmpty()
   @MaxLength(500)
   reason!: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsString({ each: true })
+  rejectedDocumentIds!: string[];
 }

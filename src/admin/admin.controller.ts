@@ -178,7 +178,11 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: ReviewDriverRequestDto,
   ): Promise<AdminDriverReviewResponseDto> {
-    return this.adminService.declineDriverReview(id, dto.reason);
+    return this.adminService.declineDriverReview(
+      id,
+      dto.reason,
+      dto.rejectedDocumentIds,
+    );
   }
 
   @Delete('users/:id')

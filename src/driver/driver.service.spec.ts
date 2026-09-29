@@ -10,6 +10,52 @@ import { DriverService } from './driver.service';
 describe('DriverService', () => {
   const service = new DriverService({} as never, {} as never, {} as never);
 
+  it('uses the newest vehicle document when checking readiness', () => {
+    const checkDocuments = (
+      service as unknown as {
+        hasRequiredVehicleDocuments(
+          documents: Array<{
+            type: DriverDocumentType;
+            status: DocumentStatus;
+            createdAt: Date;
+          }>,
+        ): boolean;
+      }
+    ).hasRequiredVehicleDocuments.bind(service);
+    const requiredTypes = [
+      DriverDocumentType.VEHICLE_FRONT_PHOTO,
+      DriverDocumentType.VEHICLE_REAR_PHOTO,
+      DriverDocumentType.VEHICLE_SIDE_PHOTO,
+      DriverDocumentType.VEHICLE_LICENSE_PLATE_PHOTO,
+      DriverDocumentType.VEHICLE_REGISTRATION_FRONT,
+      DriverDocumentType.VEHICLE_REGISTRATION_BACK,
+      DriverDocumentType.VEHICLE_INSURANCE_DOCUMENT,
+    ];
+    const documents = requiredTypes.map((type) => ({
+      type,
+      status: DocumentStatus.APPROVED,
+      createdAt: new Date('2026-01-01'),
+    }));
+    expect(checkDocuments(documents)).toBe(true);
+    const replacement = {
+      type: DriverDocumentType.VEHICLE_REAR_PHOTO,
+      status: DocumentStatus.REJECTED,
+      createdAt: new Date('2026-01-02'),
+    };
+    expect(checkDocuments([...documents, replacement])).toBe(false);
+    expect(
+      checkDocuments([
+        ...documents,
+        replacement,
+        {
+          ...replacement,
+          status: DocumentStatus.UPLOADED,
+          createdAt: new Date('2026-01-03'),
+        },
+      ]),
+    ).toBe(true);
+  });
+
   it('releases due pending driver earnings into available balance', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const serviceWithPrisma = new DriverService(

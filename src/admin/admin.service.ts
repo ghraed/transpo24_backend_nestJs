@@ -1050,6 +1050,7 @@ export class AdminService {
 
   async approveDriverReview(id: string): Promise<AdminDriverReviewResponseDto> {
     const profile = await this.getDriverReviewProfile(id);
+    this.assertDriverReviewCanBeApproved(profile);
     const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
 
     if (!reviewVehicle) {
@@ -1147,6 +1148,7 @@ export class AdminService {
     vehicleId: string,
   ): Promise<AdminDriverReviewResponseDto> {
     const profile = await this.getDriverReviewProfile(id);
+    this.assertDriverReviewCanBeApproved(profile);
     const vehicle = profile.vehicles.find((item) => item.id === vehicleId);
 
     if (!vehicle) {
@@ -1226,38 +1228,96 @@ export class AdminService {
     return this.findDriverReviewById(id);
   }
 
+  private assertDriverReviewCanBeApproved(profile: ReviewProfileSource): void {
+    if (
+      profile.status !== DriverStatus.PENDING_REVIEW &&
+      profile.status !== DriverStatus.APPROVED
+    ) {
+      throw new BadRequestException(
+        'Driver corrections must be resubmitted before approval.',
+      );
+    }
+    const latestDocuments = this.uniqueLatestDocumentsByType(profile.documents);
+    if (
+      DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES.some(
+        (type) =>
+          !latestDocuments.some(
+            (document) =>
+              document.type === type &&
+              document.status !== DocumentStatus.REJECTED,
+          ),
+      )
+    ) {
+      throw new BadRequestException(
+        'Required personal documents must be corrected before approval.',
+      );
+    }
+  }
+
   async declineDriverReview(
     id: string,
     reason: string,
+    rejectedDocumentIds: string[],
   ): Promise<AdminDriverReviewResponseDto> {
     const normalizedReason = reason?.trim();
     if (!normalizedReason) {
       throw new BadRequestException('A reason for the driver is required.');
     }
-    const profile = await this.getDriverReviewProfile(id);
-    const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
-    const reviewedAt = new Date();
+    if (
+      !Array.isArray(rejectedDocumentIds) ||
+      rejectedDocumentIds.length === 0 ||
+      new Set(rejectedDocumentIds).size !== rejectedDocumentIds.length
+    ) {
+      throw new BadRequestException(
+        'Select the documents that need replacement.',
+      );
+    }
 
+    const profile = await this.getDriverReviewProfile(id);
+    if (profile.status !== DriverStatus.PENDING_REVIEW) {
+      throw new BadRequestException(
+        'Only pending driver reviews can be declined.',
+      );
+    }
+    const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
+    const personalDocuments = this.uniqueLatestDocumentsByType(
+      profile.documents,
+    );
+    const vehicleDocuments = reviewVehicle
+      ? this.uniqueLatestDocumentsByType(reviewVehicle.documents)
+      : [];
+    const selectableDocuments = [
+      ...personalDocuments.filter((document) =>
+        DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES.includes(document.type),
+      ),
+      ...vehicleDocuments.filter((document) =>
+        DRIVER_CANONICAL_VEHICLE_DOCUMENT_TYPES.includes(document.type),
+      ),
+    ].filter((document) => document.status !== DocumentStatus.REJECTED);
+    const selectableIds = new Set(
+      selectableDocuments.map((document) => document.id),
+    );
+    if (
+      rejectedDocumentIds.some((documentId) => !selectableIds.has(documentId))
+    ) {
+      throw new BadRequestException(
+        'Select only current documents from this review.',
+      );
+    }
+
+    const reviewedAt = new Date();
+    const hasRejectedVehicleDocument = vehicleDocuments.some((document) =>
+      rejectedDocumentIds.includes(document.id),
+    );
     await this.prisma.$transaction([
       this.prisma.driverProfile.update({
         where: { id: profile.id },
-        data: {
-          status: DriverStatus.REJECTED,
-        },
+        data: { status: DriverStatus.REJECTED },
       }),
       this.prisma.driverDocument.updateMany({
         where: {
           driverId: profile.id,
-          vehicleId: null,
-          type: { in: DRIVER_ONBOARDING_REQUIRED_DOCUMENT_TYPES },
-          status: {
-            in: [
-              DocumentStatus.UPLOADED,
-              DocumentStatus.PENDING_REVIEW,
-              DocumentStatus.UNDER_REVIEW,
-              DocumentStatus.APPROVED,
-            ],
-          },
+          id: { in: rejectedDocumentIds },
         },
         data: {
           status: DocumentStatus.REJECTED,
@@ -1265,7 +1325,7 @@ export class AdminService {
           reviewedAt,
         },
       }),
-      ...(reviewVehicle
+      ...(reviewVehicle && hasRejectedVehicleDocument
         ? [
             this.prisma.driverVehicle.update({
               where: { id: reviewVehicle.id },
@@ -1273,25 +1333,6 @@ export class AdminService {
                 status: DriverVehicleReviewStatus.REJECTED,
                 rejectionReason: normalizedReason,
                 isActive: false,
-              },
-            }),
-            this.prisma.driverDocument.updateMany({
-              where: {
-                driverId: profile.id,
-                vehicleId: reviewVehicle.id,
-                status: {
-                  in: [
-                    DocumentStatus.UPLOADED,
-                    DocumentStatus.PENDING_REVIEW,
-                    DocumentStatus.UNDER_REVIEW,
-                    DocumentStatus.APPROVED,
-                  ],
-                },
-              },
-              data: {
-                status: DocumentStatus.REJECTED,
-                rejectionReason: normalizedReason,
-                reviewedAt,
               },
             }),
           ]
