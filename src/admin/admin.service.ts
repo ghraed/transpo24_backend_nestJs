@@ -1133,16 +1133,18 @@ export class AdminService {
       }),
     ]);
 
-    void this.notificationsService
-      .notifyDriverApproved({
-        driverUserId: profile.userId,
-        driverName: profile.user.name,
-      })
-      .catch((notificationError: unknown) => {
-        this.logger.error(
-          `Failed to notify approved driver ${profile.id}: ${notificationError instanceof Error ? notificationError.message : 'Unexpected error'}`,
-        );
-      });
+    if (profile.status === DriverStatus.PENDING_REVIEW) {
+      await this.notificationsService
+        .notifyDriverApproved({
+          driverUserId: profile.userId,
+          driverName: profile.user.name,
+        })
+        .catch((notificationError: unknown) => {
+          this.logger.error(
+            `Failed to notify approved driver ${profile.id}: ${notificationError instanceof Error ? notificationError.message : 'Unexpected error'}`,
+          );
+        });
+    }
 
     return this.findDriverReviewById(id);
   }
@@ -1239,7 +1241,7 @@ export class AdminService {
     ]);
 
     if (profile.status === DriverStatus.PENDING_REVIEW) {
-      void this.notificationsService
+      await this.notificationsService
         .notifyDriverApproved({
           driverUserId: profile.userId,
           driverName: profile.user.name,
@@ -1368,7 +1370,7 @@ export class AdminService {
         : []),
     ]);
 
-    void this.notificationsService
+    await this.notificationsService
       .notifyDriverReviewDeclined({
         driverUserId: profile.userId,
       })
