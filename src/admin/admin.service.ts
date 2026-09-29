@@ -1228,11 +1228,14 @@ export class AdminService {
 
   async declineDriverReview(
     id: string,
-    reason?: string,
+    reason: string,
   ): Promise<AdminDriverReviewResponseDto> {
+    const normalizedReason = reason?.trim();
+    if (!normalizedReason) {
+      throw new BadRequestException('A reason for the driver is required.');
+    }
     const profile = await this.getDriverReviewProfile(id);
     const reviewVehicle = this.pickReviewVehicle(profile.vehicles);
-    const normalizedReason = reason?.trim() || 'Declined by admin review.';
     const reviewedAt = new Date();
 
     await this.prisma.$transaction([
