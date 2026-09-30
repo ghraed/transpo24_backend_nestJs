@@ -301,6 +301,36 @@ describe('shared request eligibility', () => {
       ),
     ).toBe(false);
   });
+  it.each([
+    { serviceKey: 'GOODS_TRANSPORT', itemType: 'GOODS', cargoType: 'GOODS' },
+    { serviceKey: 'FURNITURE_TRANSPORT', itemType: 'FURNITURE', cargoType: 'FURNITURE' },
+  ] as const)(
+    'allows a flatbed for $serviceKey only when its cargo type is selected',
+    ({ serviceKey, itemType, cargoType }) => {
+      const matchingRequest = {
+        ...request(),
+        service: { key: serviceKey },
+        itemType,
+      };
+      const flatbed = { ...vehicles[0], vehicleType: 'FLATBED_OPEN' as const };
+      expect(
+        isEligibleRequest(
+          matchingRequest,
+          availability(),
+          [{ ...flatbed, allowedCargoTypes: [cargoType] }],
+          now,
+        ),
+      ).toBe(true);
+      expect(
+        isEligibleRequest(
+          matchingRequest,
+          availability(),
+          [{ ...flatbed, allowedCargoTypes: ['VEHICLE'] }],
+          now,
+        ),
+      ).toBe(false);
+    },
+  );
   it('does not restrict the dropoff to the pickup coverage', () => {
     const r = { ...request(), dropoffLatitude: -33.9, dropoffLongitude: 151.2 };
     expect(isEligibleRequest(r, availability(), vehicles, now)).toBe(true);

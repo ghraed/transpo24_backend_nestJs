@@ -330,6 +330,9 @@ const SERVICE_VEHICLES: Record<ServiceKey, VehicleType[]> = {
     'SMALL_TRUCK',
     'MEDIUM_TRUCK',
     'PICKUP',
+    'FLATBED_TRUCK',
+    'FLATBED_OPEN',
+    'FLATBED_ENCLOSED',
   ],
   FURNITURE_TRANSPORT: [
     'FURNITURE_TRUCK',
@@ -337,6 +340,9 @@ const SERVICE_VEHICLES: Record<ServiceKey, VehicleType[]> = {
     'VAN',
     'SMALL_TRUCK',
     'MEDIUM_TRUCK',
+    'FLATBED_TRUCK',
+    'FLATBED_OPEN',
+    'FLATBED_ENCLOSED',
   ],
 };
 

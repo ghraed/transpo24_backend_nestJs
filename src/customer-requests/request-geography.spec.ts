@@ -300,6 +300,27 @@ describe('request geography write paths', () => {
     });
     expect(row).toMatchObject(expected);
   });
+  it('uses server time for immediate furniture pickup even when the client timestamp is stale', async () => {
+    const before = Date.now();
+    await service.createFurnitureTransportRequest({
+      ...common,
+      furnitureDescription: 'Sofa',
+      approximateItemCount: 1,
+      movingDate: new Date(before - 60_000),
+      files: [
+        {
+          path: '/tmp/geography-photo.jpg',
+          originalname: 'photo.jpg',
+          mimetype: 'image/jpeg',
+          size: 100,
+        } as never,
+      ],
+    });
+    expect(row.isImmediate).toBe(true);
+    expect(row.scheduledPickupAt).toBeInstanceOf(Date);
+    expect((row.scheduledPickupAt as Date).getTime()).toBeGreaterThanOrEqual(before);
+    expect((row.scheduledPickupAt as Date).getTime()).toBeLessThanOrEqual(Date.now());
+  });
   it('resolves legacy drafts on submission and preserves existing currency', async () => {
     row.currency = 'CHF';
     await service.submitCustomerRequest({

@@ -1146,15 +1146,11 @@ export class CustomerRequestsService {
     const effectiveMovingDate =
       input.isImmediate === false
         ? (input.scheduledPickupAt ?? input.movingDate)
-        : input.movingDate;
+        : new Date();
 
-    if (effectiveMovingDate.getTime() < Date.now()) {
+    if (input.isImmediate === false && effectiveMovingDate.getTime() < Date.now()) {
       await this.cleanupFiles(input.files);
-      throw new BadRequestException(
-        input.isImmediate === false
-          ? 'scheduledPickupAt cannot be in the past.'
-          : 'movingDate cannot be in the past.',
-      );
+      throw new BadRequestException('scheduledPickupAt cannot be in the past.');
     }
 
     for (const file of input.files) {
