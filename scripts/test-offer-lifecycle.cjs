@@ -368,6 +368,55 @@ test('request currency is authoritative for a French driver; omitted currency is
     ),
   );
 });
+test('Swiss-home driver quotes a France-to-Switzerland request in EUR for a French-home customer', async () => {
+  const originalCustomerTenantId = customer.tenantId;
+  const originalDriverTenantId = tenants[0].id;
+  const frenchPickup = { latitude: 47.58, longitude: 7.57 };
+  await db.user.update({ where: { id: customer.id }, data: { tenantId: tenants[0].id } });
+  await db.user.update({ where: { id: driver.userId }, data: { tenantId: tenants[1].id } });
+  await db.driverAvailability.update({
+    where: { driverId: driver.id },
+    data: { baseLatitude: frenchPickup.latitude, baseLongitude: frenchPickup.longitude },
+  });
+  const frenchCoverage = await db.driverOperationalCountry.create({
+    data: { driverId: driver.id, countryCode: 'FR', status: 'APPROVED', canPickup: true, canDropoff: false },
+  });
+  const crossBorderRoute = await db.driverRoutePermission.create({
+    data: { driverId: driver.id, fromCountryCode: 'FR', toCountryCode: 'CH', status: 'APPROVED' },
+  });
+  try {
+    const row = await request({
+      customerTenantId: tenants[0].id,
+      originTenantId: tenants[0].id,
+      pickupCountryCode: 'FR',
+      destinationCountryCode: 'CH',
+      currency: 'EUR',
+      pickupLatitude: frenchPickup.latitude,
+      pickupLongitude: frenchPickup.longitude,
+      dropoffLatitude: 47.56,
+      dropoffLongitude: 7.59,
+    });
+    const input = await offerInput(row);
+    await denied({ ...input, currency: 'CHF' }, 'CURRENCY_MISMATCH');
+    const sent = await driverService.sendDriverPriceOffer({ ...input, currency: 'EUR' });
+    const received = await customerService.getCustomerRequestOffers({ customerId: customer.id, requestId: row.id });
+    assert.equal(sent.offer.price, 100);
+    assert.equal(sent.offer.currency, 'EUR');
+    assert.equal(received.offers.length, 1);
+    assert.equal(received.offers[0].price, 100);
+    assert.equal(received.offers[0].currency, 'EUR');
+    assert.equal((await customerService.getCustomerRequestStatus({ customerId: customer.id, requestId: row.id })).quotesSummary.currency, 'EUR');
+  } finally {
+    await db.driverRoutePermission.delete({ where: { id: crossBorderRoute.id } });
+    await db.driverOperationalCountry.delete({ where: { id: frenchCoverage.id } });
+    await db.driverAvailability.update({
+      where: { driverId: driver.id },
+      data: { baseLatitude: 47.38, baseLongitude: 8.54 },
+    });
+    await db.user.update({ where: { id: driver.userId }, data: { tenantId: originalDriverTenantId } });
+    await db.user.update({ where: { id: customer.id }, data: { tenantId: originalCustomerTenantId } });
+  }
+});
 test('null optional currency derives the request currency; unresolved request currency fails closed', async () => {
   const row = await request();
   const input = await offerInput(row);
