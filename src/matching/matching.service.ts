@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { isISO31661Alpha2 } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoutePolicyService } from '../route-policy/route-policy.service';
+import { DriverCoverageService } from '../driver-coverage/driver-coverage.service';
 import {
   APPROVED_MATCHING_VEHICLE_WHERE,
   MATCHING_AVAILABILITY_SELECT,
@@ -13,14 +14,24 @@ import {
 export const MATCHING_DRIVER_SELECT = {
   id: true,
   userId: true,
+  user: { select: { tenant: { select: { countryCode: true } } } },
   availability: { select: MATCHING_AVAILABILITY_SELECT },
   operationalCountries: {
     where: { status: 'APPROVED' },
-    select: { countryCode: true, canPickup: true, canDropoff: true },
+    select: {
+      countryCode: true,
+      canPickup: true,
+      canDropoff: true,
+      isAutoHomeGrant: true,
+    },
   },
   routePermissions: {
     where: { status: 'APPROVED' },
-    select: { fromCountryCode: true, toCountryCode: true },
+    select: {
+      fromCountryCode: true,
+      toCountryCode: true,
+      isAutoHomeGrant: true,
+    },
   },
   vehicles: {
     where: APPROVED_MATCHING_VEHICLE_WHERE,
@@ -57,12 +68,16 @@ const DRIVER = {
 
 @Injectable()
 export class MatchingService {
+  private readonly coverage: DriverCoverageService;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly policy: RoutePolicyService = new RoutePolicyService(
       prisma,
     ),
-  ) {}
+  ) {
+    this.coverage = new DriverCoverageService(prisma);
+  }
 
   private countries(request: Request): request is Request & {
     pickupCountryCode: string;
@@ -77,17 +92,26 @@ export class MatchingService {
   }
 
   private operational(request: Request, driver: Driver) {
+    const home = driver.user?.tenant?.countryCode;
     return (
       driver.operationalCountries.some(
-        (c) => c.countryCode === request.pickupCountryCode && c.canPickup,
+        (c) =>
+          c.countryCode === request.pickupCountryCode &&
+          c.canPickup &&
+          (!c.isAutoHomeGrant || home === c.countryCode),
       ) &&
       driver.operationalCountries.some(
-        (c) => c.countryCode === request.destinationCountryCode && c.canDropoff,
+        (c) =>
+          c.countryCode === request.destinationCountryCode &&
+          c.canDropoff &&
+          (!c.isAutoHomeGrant || home === c.countryCode),
       ) &&
       driver.routePermissions.some(
         (r) =>
           r.fromCountryCode === request.pickupCountryCode &&
-          r.toCountryCode === request.destinationCountryCode,
+          r.toCountryCode === request.destinationCountryCode &&
+          (!r.isAutoHomeGrant ||
+            (home === r.fromCountryCode && home === r.toCountryCode)),
       )
     );
   }
@@ -180,6 +204,7 @@ export class MatchingService {
 
   // Driver refresh loads only approved directions, in bounded pages, with one policy read per page.
   async refreshDriver(driverId: string): Promise<string[]> {
+    await this.coverage.reconcileHome(driverId);
     const newlyActive: string[] = [];
     const driver = await this.prisma.driverProfile.findFirst({
       where: { id: driverId, ...DRIVER },
@@ -227,7 +252,13 @@ export class MatchingService {
       });
       if (!requests.length) break;
       const blocks = await this.prisma.routeBlock.findMany({
-        where: { isActive: true, OR: directions },
+        where: {
+          isActive: true,
+          OR: directions.map((r) => ({
+            fromCountryCode: r.fromCountryCode,
+            toCountryCode: r.toCountryCode,
+          })),
+        },
         select: {
           fromCountryCode: true,
           toCountryCode: true,

@@ -80,6 +80,24 @@ function setup(status: DriverStatus = DriverStatus.PENDING_REVIEW) {
 
 describe('admin driver review decision notifications', () => {
   it.each([
+    (service: AdminService) => service.approveDriverReview('driver-1'),
+    (service: AdminService) =>
+      service.approveDriverReviewVehicle('driver-1', 'vehicle-1'),
+  ])('reconciles domestic grants after approval', async (approve) => {
+    const { service, profile } = setup();
+    Object.assign(profile.user, { tenant: { countryCode: 'LB' } });
+    const coverage = (
+      service as unknown as {
+        coverage: { reconcileHome: (id: string) => Promise<unknown> };
+      }
+    ).coverage;
+    const reconcile = jest
+      .spyOn(coverage, 'reconcileHome')
+      .mockResolvedValue(null);
+    await approve(service);
+    expect(reconcile).toHaveBeenCalledWith('driver-1');
+  });
+  it.each([
     [
       'driver approval',
       (service: AdminService) => service.approveDriverReview('driver-1'),

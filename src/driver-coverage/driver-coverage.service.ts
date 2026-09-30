@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { DriverStatus, Prisma } from '@prisma/client';
+import type {
+  DriverOperationalCountry,
+  DriverRoutePermission,
+} from '@prisma/client';
 import { isISO31661Alpha2 } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -33,7 +37,9 @@ export class DriverCoverageService {
   ) {
     const driver = await db.driverProfile.findUnique({
       where: { id: driverId },
-      include: { user: { select: { tenant: true } } },
+      include: {
+        user: { select: { tenant: true, role: true, deletedAt: true } },
+      },
     });
     if (!driver) throw new NotFoundException('Driver profile not found.');
     return driver;
@@ -47,7 +53,7 @@ export class DriverCoverageService {
   }
 
   async list(driverId: string) {
-    await this.driver(driverId);
+    await this.reconcileHome(driverId);
     const [countries, routes] = await Promise.all([
       this.prisma.driverOperationalCountry.findMany({
         where: { driverId },
@@ -108,6 +114,7 @@ export class DriverCoverageService {
       status: input.status,
       reviewedByAdminId: actorId,
       reviewedAt: new Date(),
+      isAutoHomeGrant: false,
     };
     return this.prisma.driverOperationalCountry.upsert({
       where: { driverId_countryCode: { driverId, countryCode } },
@@ -124,6 +131,7 @@ export class DriverCoverageService {
       status: input.status,
       reviewedByAdminId: actorId,
       reviewedAt: new Date(),
+      isAutoHomeGrant: false,
     };
     return this.prisma.driverRoutePermission.upsert({
       where: {
@@ -138,7 +146,113 @@ export class DriverCoverageService {
     });
   }
 
-  // Explicit admin action after reviewed tenant assignment. Initialization grants nothing.
+  // Only an approved driver with a reviewed tenant gets an automatic domestic grant.
+  // Admin-reviewed rows, including restricted APPROVED rows, always take precedence.
+  async reconcileHome(
+    driverId: string,
+    db?: Prisma.TransactionClient,
+  ): Promise<{
+    country: DriverOperationalCountry;
+    route: DriverRoutePermission;
+  } | null> {
+    if (!db)
+      return this.prisma.$transaction((tx) => this.reconcileHome(driverId, tx));
+    const driver = await this.driver(driverId, db);
+    const tenant = driver.user.tenant;
+    const home =
+      driver.status === DriverStatus.APPROVED &&
+      driver.user.role === 'DRIVER' &&
+      !driver.user.deletedAt &&
+      tenant
+        ? this.country(tenant.countryCode)
+        : null;
+    await db.driverOperationalCountry.deleteMany({
+      where: {
+        driverId,
+        isAutoHomeGrant: true,
+        ...(home ? { countryCode: { not: home } } : {}),
+      },
+    });
+    await db.driverRoutePermission.deleteMany({
+      where: {
+        driverId,
+        isAutoHomeGrant: true,
+        ...(home
+          ? {
+              OR: [
+                { fromCountryCode: { not: home } },
+                { toCountryCode: { not: home } },
+              ],
+            }
+          : {}),
+      },
+    });
+    if (!home) return null;
+    const countryWhere = {
+      driverId_countryCode: { driverId, countryCode: home },
+    };
+    const routeWhere = {
+      driverId_fromCountryCode_toCountryCode: {
+        driverId,
+        fromCountryCode: home,
+        toCountryCode: home,
+      },
+    };
+    await db.driverOperationalCountry.upsert({
+      where: countryWhere,
+      update: {},
+      create: {
+        driverId,
+        countryCode: home,
+        canPickup: true,
+        canDropoff: true,
+        status: 'APPROVED',
+        isAutoHomeGrant: true,
+      },
+    });
+    await db.driverOperationalCountry.updateMany({
+      where: {
+        driverId,
+        countryCode: home,
+        status: 'PENDING',
+        reviewedByAdminId: null,
+      },
+      data: {
+        status: 'APPROVED',
+        canPickup: true,
+        canDropoff: true,
+        isAutoHomeGrant: true,
+      },
+    });
+    await db.driverRoutePermission.upsert({
+      where: routeWhere,
+      update: {},
+      create: {
+        driverId,
+        fromCountryCode: home,
+        toCountryCode: home,
+        status: 'APPROVED',
+        isAutoHomeGrant: true,
+      },
+    });
+    await db.driverRoutePermission.updateMany({
+      where: {
+        driverId,
+        fromCountryCode: home,
+        toCountryCode: home,
+        status: 'PENDING',
+        reviewedByAdminId: null,
+      },
+      data: { status: 'APPROVED', isAutoHomeGrant: true },
+    });
+    const [country, route] = await Promise.all([
+      db.driverOperationalCountry.findUniqueOrThrow({ where: countryWhere }),
+      db.driverRoutePermission.findUniqueOrThrow({ where: routeWhere }),
+    ]);
+    return { country, route };
+  }
+
+  // Explicit admin action can also initialize pending rows before approval.
   async initializeHome(driverId: string) {
     return this.prisma.$transaction(async (db) => {
       const driver = await this.driver(driverId, db);
@@ -167,7 +281,9 @@ export class DriverCoverageService {
           status: 'PENDING',
         },
       });
-      return { country, route };
+      return driver.status === DriverStatus.APPROVED
+        ? this.reconcileHome(driverId, db)
+        : { country, route };
     });
   }
 
@@ -180,6 +296,8 @@ export class DriverCoverageService {
   ) {
     const fromCountryCode = this.country(from);
     const toCountryCode = this.country(to);
+    const driver = await this.driver(driverId, db);
+    const home = driver.user.tenant?.countryCode;
     const countries = await db.driverOperationalCountry.findMany({
       where: {
         driverId,
@@ -189,9 +307,17 @@ export class DriverCoverageService {
     });
     if (
       !countries.some(
-        (c) => c.countryCode === fromCountryCode && c.canPickup,
+        (c) =>
+          c.countryCode === fromCountryCode &&
+          c.canPickup &&
+          (!c.isAutoHomeGrant || home === fromCountryCode),
       ) ||
-      !countries.some((c) => c.countryCode === toCountryCode && c.canDropoff)
+      !countries.some(
+        (c) =>
+          c.countryCode === toCountryCode &&
+          c.canDropoff &&
+          (!c.isAutoHomeGrant || home === toCountryCode),
+      )
     ) {
       throw new ForbiddenException({
         code: 'DRIVER_COUNTRY_NOT_APPROVED',
@@ -207,7 +333,11 @@ export class DriverCoverageService {
         },
       },
     });
-    if (route?.status !== 'APPROVED')
+    if (
+      route?.status !== 'APPROVED' ||
+      (route.isAutoHomeGrant &&
+        (home !== fromCountryCode || home !== toCountryCode))
+    )
       throw new ForbiddenException({
         code: 'DRIVER_ROUTE_NOT_APPROVED',
         message: 'Driver route is not approved.',

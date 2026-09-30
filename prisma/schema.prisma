@@ -1465,6 +1465,7 @@ model DriverOperationalCountry {
   status CoverageApprovalStatus @default(PENDING)
   reviewedByAdminId String?
   reviewedAt DateTime?
+  isAutoHomeGrant Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   driver DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
@@ -1482,6 +1483,7 @@ model DriverRoutePermission {
   status CoverageApprovalStatus @default(PENDING)
   reviewedByAdminId String?
   reviewedAt DateTime?
+  isAutoHomeGrant Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   driver DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)

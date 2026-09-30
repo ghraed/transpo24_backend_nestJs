@@ -30,6 +30,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { DriverCoverageService } from '../driver-coverage/driver-coverage.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { hashPassword } from '../common/security/password.util';
@@ -256,6 +257,7 @@ type ReviewProfileSource = {
   user: {
     name: string;
     email: string;
+    tenant?: { countryCode: string } | null;
   };
   documents: ReviewDocumentSource[];
   vehicles: ReviewVehicleSource[];
@@ -479,12 +481,15 @@ type WalletTopUpDisputeAdminSource = {
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+  private readonly coverage: DriverCoverageService;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly paymentsService: PaymentsService,
-  ) {}
+  ) {
+    this.coverage = new DriverCoverageService(prisma);
+  }
 
   async findAll(): Promise<AdminUserResponseDto[]> {
     const users = await this.prisma.user.findMany({
@@ -1133,6 +1138,8 @@ export class AdminService {
       }),
     ]);
 
+    if (profile.user.tenant) await this.coverage.reconcileHome(profile.id);
+
     if (profile.status === DriverStatus.PENDING_REVIEW) {
       await this.notificationsService
         .notifyDriverApproved({
@@ -1239,6 +1246,8 @@ export class AdminService {
         },
       }),
     ]);
+
+    if (profile.user.tenant) await this.coverage.reconcileHome(profile.id);
 
     if (profile.status === DriverStatus.PENDING_REVIEW) {
       await this.notificationsService
@@ -3634,6 +3643,7 @@ export class AdminService {
         select: {
           name: true,
           email: true,
+          tenant: { select: { countryCode: true } },
         },
       },
       documents: {

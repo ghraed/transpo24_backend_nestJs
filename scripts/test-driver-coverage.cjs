@@ -11,7 +11,8 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const service = new DriverCoverageService(db);
 const userIds = [];
 let tenantId;
-after(async () => { await db.user.deleteMany({ where: { id: { in: userIds } } }); if (tenantId) await db.tenant.delete({ where: { id: tenantId } }); await db.$disconnect(); });
+const additionalTenantIds = [];
+after(async () => { await db.user.deleteMany({ where: { id: { in: userIds } } }); for (const id of additionalTenantIds) await db.tenant.delete({ where: { id } }); if (tenantId) await db.tenant.delete({ where: { id: tenantId } }); await db.$disconnect(); });
 async function driver(tenantId) {
   const suffix = crypto.randomUUID();
   const user = await db.user.create({ data: { email: `${suffix}@test.invalid`, name: 'M6', passwordHash: 'test', role: 'DRIVER', tenantId, driverProfile: { create: { firstName: 'Test', lastName: 'Driver', phone: suffix, countryCode: 'LB', countryCodes: ['LB', 'CH'], status: 'APPROVED' } } }, include: { driverProfile: true } });
@@ -21,20 +22,41 @@ async function driver(tenantId) {
 const route = { fromCountryCode: 'FR', toCountryCode: 'CH' };
 const approvedCountry = countryCode => ({ countryCode, canPickup: true, canDropoff: true, status: 'APPROVED' });
 const denied = code => e => e.getResponse?.().code === code;
-test('reviewed home initialization is pending, idempotent, uses tenant not profile and preserves suspension', async () => {
+test('reviewed home initialization auto-approves an approved driver and preserves suspension', async () => {
   const tenant = await db.tenant.create({ data: { code: 'FR', countryCode: 'FR', name: 'France', defaultCurrency: 'EUR', timezone: 'Europe/Paris' } }); tenantId = tenant.id;
   const user = await driver(tenant.id); const id = user.driverProfile.id;
   const initial = await service.initializeHome(id);
-  assert.equal(initial.country.countryCode, 'FR'); assert.equal(initial.country.status, 'PENDING'); assert.equal(initial.route.status, 'PENDING');
+  assert.equal(initial.country.countryCode, 'FR'); assert.equal(initial.country.status, 'APPROVED'); assert.equal(initial.route.status, 'APPROVED');
+  assert.equal(initial.country.canPickup, true); assert.equal(initial.country.canDropoff, true);
+  assert.equal(initial.country.isAutoHomeGrant, true); assert.equal(initial.route.isAutoHomeGrant, true);
+  await service.assertApproved(id, 'FR', 'FR');
   await service.reviewCountry(id, { ...approvedCountry('FR'), status: 'SUSPENDED' }, 'admin');
   await service.reviewRoute(id, { fromCountryCode: 'FR', toCountryCode: 'FR', status: 'REJECTED' }, 'admin');
   const again = await service.initializeHome(id);
   assert.equal(again.country.status, 'SUSPENDED'); assert.equal(again.route.status, 'REJECTED');
+  assert.equal(again.country.isAutoHomeGrant, false); assert.equal(again.route.isAutoHomeGrant, false);
   assert.equal((await service.list(id)).countries.length, 1);
   assert.equal((await db.user.findUnique({ where: { id: user.id } })).tenantId, tenant.id);
   const legacy = await driver();
   await assert.rejects(service.initializeHome(legacy.driverProfile.id), /reviewed home tenant/);
   assert.deepEqual(await service.list(legacy.driverProfile.id), { countries: [], routes: [] });
+});
+test('home transfer removes only automatic grants and approves the new domestic route', async () => {
+  const user = await driver(tenantId);
+  const id = user.driverProfile.id;
+  await service.reconcileHome(id);
+  await service.reviewCountry(id, approvedCountry('LB'), 'admin');
+  await service.reviewRoute(id, { fromCountryCode: 'LB', toCountryCode: 'LB', status: 'APPROVED' }, 'admin');
+  const newTenant = await db.tenant.create({ data: { code: 'CH', countryCode: 'CH', name: 'Switzerland', defaultCurrency: 'CHF', timezone: 'Europe/Zurich' } });
+  additionalTenantIds.push(newTenant.id);
+  await db.user.update({ where: { id: user.id }, data: { tenantId: newTenant.id } });
+  await assert.rejects(service.assertApproved(id, 'FR', 'FR'), denied('DRIVER_COUNTRY_NOT_APPROVED'));
+  const coverage = await service.list(id);
+  assert.equal(coverage.countries.some(c => c.countryCode === 'FR'), false);
+  assert.equal(coverage.routes.some(r => r.fromCountryCode === 'FR' && r.toCountryCode === 'FR'), false);
+  assert.equal(coverage.countries.find(c => c.countryCode === 'LB').status, 'APPROVED');
+  assert.equal(coverage.routes.find(r => r.fromCountryCode === 'LB' && r.toCountryCode === 'LB').status, 'APPROVED');
+  await service.assertApproved(id, 'CH', 'CH');
 });
 test('foreign requests cannot grant, expand or reset approval; exact direction and pickup/dropoff are enforced', async () => {
   const user = await driver(tenantId); const id = user.driverProfile.id;
