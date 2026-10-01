@@ -895,9 +895,10 @@ export class PaymentsService {
       return null;
     }
 
+    const stripeCustomerId = await this.ensureSavedCardCustomer(input.customerId);
     const paymentMethod =
       await this.stripeService.getCustomerDefaultPaymentMethod(
-        customer.stripeCustomerId,
+        stripeCustomerId,
       );
 
     return paymentMethod
@@ -913,7 +914,8 @@ export class PaymentsService {
       select: { stripeCustomerId: true },
     });
     if (!customer?.stripeCustomerId) return [];
-    return this.stripeService.listCustomerCards(customer.stripeCustomerId);
+    const stripeCustomerId = await this.ensureSavedCardCustomer(customerId);
+    return this.stripeService.listCustomerCards(stripeCustomerId);
   }
 
   async removeCustomerSavedCard(

@@ -30,7 +30,7 @@ describe('Saved card security', () => {
   let client: {
     paymentMethods: { retrieve: jest.Mock; list: jest.Mock; detach: jest.Mock };
     setupIntents: { create: jest.Mock };
-    customers: { update: jest.Mock };
+    customers: { retrieve: jest.Mock; create: jest.Mock; update: jest.Mock };
     paymentIntents: { create: jest.Mock };
   };
 
@@ -47,7 +47,11 @@ describe('Saved card security', () => {
           internal: 'private',
         }),
       },
-      customers: { update: jest.fn().mockResolvedValue({}) },
+      customers: {
+        retrieve: jest.fn().mockResolvedValue({ id: 'cus_owner' }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
+      },
       paymentIntents: { create: jest.fn().mockResolvedValue({}) },
     };
     stripe = new StripeService();
@@ -142,10 +146,53 @@ describe('Saved card security', () => {
     expect(client.paymentMethods.detach).toHaveBeenCalledWith('pm_owned');
   });
 
+  it('replaces an old sandbox customer before reading the default card', async () => {
+    const findUnique = jest.fn().mockResolvedValue({
+      id: 'user_owner',
+      email: 'owner@example.com',
+      name: 'Owner',
+      stripeCustomerId: 'cus_old_sandbox',
+    });
+    const update = jest.fn().mockResolvedValue({});
+    client.customers.retrieve.mockRejectedValueOnce({
+      type: 'StripeInvalidRequestError',
+      message: 'No such customer: cus_old_sandbox',
+    });
+    client.customers.retrieve.mockResolvedValueOnce({
+      id: 'cus_new_sandbox',
+      invoice_settings: { default_payment_method: null },
+    });
+    client.customers.create.mockResolvedValue({ id: 'cus_new_sandbox' });
+    const service = new PaymentsService(
+      { user: { findUnique, update } } as never,
+      stripe,
+      {} as never,
+    );
+
+    await expect(
+      service.getCustomerDefaultPaymentMethodSummary({
+        customerId: 'user_owner',
+      }),
+    ).resolves.toBeNull();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'user_owner' },
+      data: { stripeCustomerId: 'cus_new_sandbox' },
+    });
+    expect(client.customers.retrieve).toHaveBeenCalledWith(
+      'cus_new_sandbox',
+      { expand: ['invoice_settings.default_payment_method'] },
+    );
+  });
+
   it('resolves card access through the application account instead of trusting a supplied Stripe customer', async () => {
     const findUnique = jest
       .fn()
-      .mockResolvedValue({ stripeCustomerId: 'cus_owner' });
+      .mockResolvedValue({
+        id: 'user_owner',
+        email: 'owner@example.com',
+        name: 'Owner',
+        stripeCustomerId: 'cus_owner',
+      });
     const service = new PaymentsService(
       { user: { findUnique } } as never,
       stripe,
