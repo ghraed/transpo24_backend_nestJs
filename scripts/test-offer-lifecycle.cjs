@@ -56,8 +56,9 @@ const chat = new ChatService(db, notifications);
 // Default runs forbid Stripe/network calls. M13_STRIPE_TEST=1 opts into test cards/transfers.
 const stripeTestEnabled = process.env.M13_STRIPE_TEST === '1';
 let stripeFixture;
-// The configured US test platform settles in USD. Offline regressions retain CHF.
+// The configured US test platform settles in USD. Offline runs exercise a EUR offer on a CHF request.
 const requestCurrency = stripeTestEnabled ? 'USD' : 'CHF';
+const offerCurrency = stripeTestEnabled ? 'USD' : 'EUR';
 const stripe = stripeTestEnabled
   ? new (require('../dist/src/payments/stripe.service').StripeService)()
   : new Proxy(
@@ -120,7 +121,7 @@ async function request(extra = {}) {
   return row;
 }
 before(async () => {
-  for (const code of ['FR', 'CH']) {
+  for (const code of (stripeTestEnabled ? ['FR', 'CH', 'US'] : ['FR', 'CH'])) {
     let tenant = await db.tenant.findUnique({ where: { countryCode: code } });
     if (!tenant) {
       tenant = await db.tenant.create({
@@ -128,7 +129,7 @@ before(async () => {
           code,
           countryCode: code,
           name: code,
-          defaultCurrency: code === 'CH' ? 'CHF' : 'EUR',
+          defaultCurrency: code === 'CH' ? 'CHF' : code === 'US' ? 'USD' : 'EUR',
           timezone: 'UTC',
         },
       });
@@ -152,7 +153,7 @@ before(async () => {
       email: `${crypto.randomUUID()}@test.invalid`,
       passwordHash: 'test',
       role: 'DRIVER',
-      tenantId: tenants[0].id,
+      tenantId: tenants[stripeTestEnabled ? 2 : 0].id,
       driverProfile: {
         create: {
           firstName: 'Border',
@@ -279,7 +280,7 @@ async function offerInput(row) {
     userId: driver.userId,
     requestId: row.id,
     price: 100,
-    currency: requestCurrency,
+    currency: offerCurrency,
     requestVersion: details.requestVersion,
   };
 }
@@ -340,18 +341,18 @@ test('a block activated after alert acceptance denies a direct offer with a gene
     data: { isActive: false },
   });
   const result = await driverService.sendDriverPriceOffer(input);
-  assert.equal(result.offer.currency, requestCurrency);
+  assert.equal(result.offer.currency, offerCurrency);
 });
-test('request currency is authoritative for a French driver; omitted currency is derived, conflicts rejected', async () => {
+test('driver home-market currency is authoritative; omitted currency is derived, conflicts rejected', async () => {
   const row = await request();
   const input = await offerInput(row);
-  for (const currency of ['EUR', '', stripeTestEnabled ? 'CHF' : 'USD'])
+  for (const currency of [requestCurrency === offerCurrency ? 'EUR' : requestCurrency, '', stripeTestEnabled ? 'CHF' : 'USD'])
     await denied({ ...input, currency }, 'CURRENCY_MISMATCH');
   const result = await driverService.sendDriverPriceOffer({
     ...input,
     currency: undefined,
   });
-  assert.equal(result.offer.currency, requestCurrency);
+  assert.equal(result.offer.currency, offerCurrency);
   assert.ok(
     events.some(
       (e) =>
@@ -368,9 +369,9 @@ test('request currency is authoritative for a French driver; omitted currency is
     ),
   );
 });
-test('Swiss-home driver quotes a France-to-Switzerland request in EUR for a French-home customer', async () => {
+test('Swiss-home driver quotes a France-to-Switzerland request in CHF for a French-home customer', async () => {
   const originalCustomerTenantId = customer.tenantId;
-  const originalDriverTenantId = tenants[0].id;
+  const originalDriverTenantId = tenants[stripeTestEnabled ? 2 : 0].id;
   const frenchPickup = { latitude: 47.58, longitude: 7.57 };
   await db.user.update({ where: { id: customer.id }, data: { tenantId: tenants[0].id } });
   await db.user.update({ where: { id: driver.userId }, data: { tenantId: tenants[1].id } });
@@ -397,15 +398,15 @@ test('Swiss-home driver quotes a France-to-Switzerland request in EUR for a Fren
       dropoffLongitude: 7.59,
     });
     const input = await offerInput(row);
-    await denied({ ...input, currency: 'CHF' }, 'CURRENCY_MISMATCH');
-    const sent = await driverService.sendDriverPriceOffer({ ...input, currency: 'EUR' });
+    await denied({ ...input, currency: 'EUR' }, 'CURRENCY_MISMATCH');
+    const sent = await driverService.sendDriverPriceOffer({ ...input, currency: 'CHF' });
     const received = await customerService.getCustomerRequestOffers({ customerId: customer.id, requestId: row.id });
     assert.equal(sent.offer.price, 100);
-    assert.equal(sent.offer.currency, 'EUR');
+    assert.equal(sent.offer.currency, 'CHF');
     assert.equal(received.offers.length, 1);
     assert.equal(received.offers[0].price, 100);
-    assert.equal(received.offers[0].currency, 'EUR');
-    assert.equal((await customerService.getCustomerRequestStatus({ customerId: customer.id, requestId: row.id })).quotesSummary.currency, 'EUR');
+    assert.equal(received.offers[0].currency, 'CHF');
+    assert.equal((await customerService.getCustomerRequestStatus({ customerId: customer.id, requestId: row.id })).quotesSummary.currency, 'CHF');
   } finally {
     await db.driverRoutePermission.delete({ where: { id: crossBorderRoute.id } });
     await db.driverOperationalCountry.delete({ where: { id: frenchCoverage.id } });
@@ -417,22 +418,17 @@ test('Swiss-home driver quotes a France-to-Switzerland request in EUR for a Fren
     await db.user.update({ where: { id: customer.id }, data: { tenantId: originalCustomerTenantId } });
   }
 });
-test('null optional currency derives the request currency; unresolved request currency fails closed', async () => {
+test('missing request currency does not change the driver offer currency', async () => {
   const row = await request();
-  const input = await offerInput(row);
   await db.transportRequest.update({
     where: { id: row.id },
     data: { currency: null },
   });
-  await denied(input, 'CURRENCY_MISMATCH');
-  await db.transportRequest.update({
-    where: { id: row.id },
-    data: { currency: requestCurrency },
-  });
+  const input = await offerInput(row);
   assert.equal(
     (await driverService.sendDriverPriceOffer({ ...input, currency: null }))
       .offer.currency,
-    requestCurrency,
+    offerCurrency,
   );
 });
 test('price, ETA, stale version, accepted-alert and duplicate rules remain enforced', async () => {
@@ -482,7 +478,7 @@ for (const legacy of [false, true]) {
       where: { customerId: customer.id },
       create: {
         customerId: customer.id,
-        currency: requestCurrency,
+        currency: offerCurrency,
         balance: 1000,
       },
       update: { balance: 1000 },
@@ -619,11 +615,11 @@ for (const legacy of [false, true]) {
       driverUserId: driver.userId,
       requestId: row.id,
       amount: 10,
-      currency: requestCurrency,
+      currency: offerCurrency,
       reason: 'Parking',
       invoiceFile: file,
     });
-    assert.equal(expense.currency, requestCurrency);
+    assert.equal(expense.currency, offerCurrency);
     await payments.approveAdditionalCharge({
       customerId: customer.id,
       requestId: row.id,
@@ -653,7 +649,7 @@ for (const legacy of [false, true]) {
     const earning = await db.driverEarning.findUnique({
       where: { tripId: row.id },
     });
-    assert.equal(earning.currency, requestCurrency);
+    assert.equal(earning.currency, offerCurrency);
     assert.equal(Number(earning.netAmount), 95);
     assert.equal(Number(earning.platformFeeAmount), 15);
     assert.equal(await payments.queueDriverPayoutForTrip(row.id), true);
@@ -693,7 +689,7 @@ for (const legacy of [false, true]) {
       );
       assert.equal(transfer.livemode, false);
       assert.equal(transfer.amount, 9500);
-      assert.equal(transfer.currency, requestCurrency.toLowerCase());
+      assert.equal(transfer.currency, offerCurrency.toLowerCase());
       assert.equal(transfer.destination, stripeFixture.account.id);
       assert.equal(transfer.transfer_group, `trip_${row.id}`);
       const hold = await db.paymentHold.findUniqueOrThrow({

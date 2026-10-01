@@ -72,6 +72,7 @@ export interface DriverRequestAlertsResponseDto {
 }
 
 export interface DriverRequestDetailsResponseDto extends DriverRequestAlertSummaryDto {
+  offerCurrency: string | null;
   requestVersion: string;
   offerStatus: DriverOfferStatus | null;
   customerNote: string | null;

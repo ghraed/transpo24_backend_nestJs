@@ -2030,6 +2030,7 @@ export class DriverService {
       seenAlert,
       distanceKm,
       offer?.status ?? null,
+      profile.offerCurrency,
     );
   }
 
@@ -2201,7 +2202,7 @@ export class DriverService {
       }
 
       await this.matching.assertCanOffer(request, profile.id, tx);
-      const normalizedCurrency = request.currency?.trim().toUpperCase();
+      const normalizedCurrency = profile.offerCurrency?.trim().toUpperCase();
       if (
         !normalizedCurrency ||
         !SUPPORTED_OFFER_CURRENCIES.has(normalizedCurrency) ||
@@ -2210,7 +2211,7 @@ export class DriverService {
       ) {
         throw new BadRequestException({
           code: 'CURRENCY_MISMATCH',
-          message: 'Offers must use the currency of this request.',
+          message: 'Offers must use the currency of the driver home market.',
         });
       }
 
@@ -4604,12 +4605,14 @@ export class DriverService {
     alert: RequestAlertSource,
     distanceKm: number | null,
     offerStatus: DriverOfferStatus | null,
+    offerCurrency: string | null,
   ): DriverRequestDetailsResponseDto {
     const summary = this.toRequestAlertSummary(request, alert, distanceKm);
     const customerFirstName = request.customer?.nickname?.trim() || 'Customer';
 
     return {
       ...summary,
+      offerCurrency,
       requestVersion: requestDetailsVersion(request),
       offerStatus,
       customerNote: request.customerNote,
@@ -5347,12 +5350,14 @@ export class DriverService {
     cities: string[];
     id: string;
     countryCode: string | null;
+    offerCurrency: string | null;
     status: DriverStatus;
     isProfileCompleted: boolean;
   }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
+        tenant: { select: { defaultCurrency: true } },
         driverProfile: {
           select: {
             cities: true,
@@ -5373,7 +5378,10 @@ export class DriverService {
       throw new NotFoundException('Driver profile not found.');
     }
 
-    return user.driverProfile;
+    return {
+      ...user.driverProfile,
+      offerCurrency: user.tenant?.defaultCurrency ?? null,
+    };
   }
 
   private flattenUploadFiles(

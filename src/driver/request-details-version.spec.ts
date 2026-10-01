@@ -62,9 +62,11 @@ function setup() {
   );
   // Constructor order is Prisma, gateway, notifications.
   Object.assign(service, {
-    ensureDriverProfile: jest
-      .fn()
-      .mockResolvedValue({ id: 'driver', countryCode: 'DE' }),
+    ensureDriverProfile: jest.fn().mockResolvedValue({
+      id: 'driver',
+      countryCode: 'DE',
+      offerCurrency: 'EUR',
+    }),
     ensureDriverOnboardingForAlerts: jest.fn(),
     getApprovedDriverVehiclesTx: jest.fn().mockResolvedValue([]),
     toDriverOfferResponse: jest.fn().mockReturnValue({ id: 'offer' }),
@@ -149,6 +151,27 @@ describe('offer snapshot guard', () => {
       ConflictException,
     );
     expect(tx.$queryRaw.mock.calls[0][0].join('?')).toContain('FOR UPDATE');
+    expect(tx.driverOffer.create).not.toHaveBeenCalled();
+  });
+  it('uses the driver currency when it differs from the request currency', async () => {
+    const { service, tx, request, input } = setup();
+    request.currency = 'CHF';
+    await expect(service.sendDriverPriceOffer(input)).resolves.toMatchObject({
+      offer: { id: 'offer' },
+    });
+    expect(tx.driverOffer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ currency: 'EUR' }),
+      }),
+    );
+  });
+  it('rejects an offer in a currency other than the driver home market', async () => {
+    const { service, tx, input } = setup();
+    await expect(
+      service.sendDriverPriceOffer({ ...input, currency: 'CHF' }),
+    ).rejects.toMatchObject({
+      response: { code: 'CURRENCY_MISMATCH' },
+    });
     expect(tx.driverOffer.create).not.toHaveBeenCalled();
   });
   it.each(['PENDING_QUOTES', 'QUOTED'])(

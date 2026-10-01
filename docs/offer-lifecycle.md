@@ -14,12 +14,26 @@ reason. Missing/inactive candidates or revoked eligibility return
 checks evaluate current committed state, not a global serialization lock against
 concurrent admin policy/coverage writes.
 
-Offers persist the request currency, never the driver's home-country currency.
-An omitted/null optional currency uses the request currency; a supplied conflicting
-currency or missing/unsupported persisted currency returns `CURRENCY_MISMATCH`.
-No exchange conversion or historical currency backfill occurs. Existing mobile
-builds sending their home currency for foreign jobs need M10/M11 updates before
-multi-market rollout. Historical requests require reviewed currency/geography.
+Offers persist the driver's home-market default currency. The driver request
+details response supplies `offerCurrency`, and the API checks that currency when
+the offer is submitted. An omitted/null optional currency uses the driver's
+home-market currency; a supplied conflicting currency or missing/unsupported
+driver-market currency returns `CURRENCY_MISMATCH`. The request's pickup currency
+remains geography metadata and does not set an offer's charge currency.
+
+The customer sees and accepts the offer amount in its original currency. Card
+payments use that same offer currency; the card issuer can convert the charge for
+a cardholder with another account currency. Issuer conversion and fees do not
+change the offer amount or the platform's recorded driver earnings. A driver
+payout may separately incur conversion or bank fees. The wallet requires the
+same currency as the offer and cannot perform foreign exchange.
+
+Offer lists retain each currency. A lowest-price summary is shown only when
+all active offers use one currency, because numeric prices in different
+currencies are not comparable without an exchange rate. No in-app exchange
+conversion or historical currency backfill occurs. Production payout readiness
+still needs verification for each enabled offer currency, including Stripe's
+source-charge settlement currency and the linked driver transfer.
 
 Selected-job access continues to use customer ownership and assigned driver IDs,
 independent of candidate activation, current route blocks, or tenant equality.

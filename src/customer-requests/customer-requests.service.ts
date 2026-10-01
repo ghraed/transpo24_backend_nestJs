@@ -2368,35 +2368,25 @@ export class CustomerRequestsService {
       throw new ForbiddenException('You are not allowed to view this request.');
     }
 
-    const offerStats = await this.prisma.driverOffer.aggregate({
+    const activeOffers = await this.prisma.driverOffer.findMany({
       where: {
         requestId: request.id,
         status: { in: [DriverOfferStatus.PENDING, DriverOfferStatus.ACCEPTED] },
       },
-      _count: { id: true },
-      _min: { price: true },
+      select: { price: true, currency: true },
+      orderBy: { price: 'asc' },
     });
-
-    const lowestPriceDecimal = offerStats._min.price;
-    const lowestOffer = lowestPriceDecimal
-      ? await this.prisma.driverOffer.findFirst({
-          where: {
-            requestId: request.id,
-            price: lowestPriceDecimal,
-            status: {
-              in: [DriverOfferStatus.PENDING, DriverOfferStatus.ACCEPTED],
-            },
-          },
-          select: { currency: true },
-          orderBy: { createdAt: 'asc' },
-        })
-      : null;
+    const singleCurrency =
+      activeOffers.length > 0 &&
+      activeOffers.every((offer) => offer.currency === activeOffers[0].currency)
+        ? activeOffers[0].currency
+        : null;
 
     return {
       ...this.toStatusResponseDto(request, {
-        count: offerStats._count.id,
-        lowestPrice: lowestPriceDecimal ? Number(lowestPriceDecimal) : null,
-        currency: lowestOffer?.currency ?? null,
+        count: activeOffers.length,
+        lowestPrice: singleCurrency ? Number(activeOffers[0].price) : null,
+        currency: singleCurrency,
       }),
       canEdit: await this.canEditRequest(input.requestId),
     };
@@ -2429,7 +2419,7 @@ export class CustomerRequestsService {
 
     const offers = await this.prisma.driverOffer.findMany({
       where: { requestId: request.id },
-      orderBy: [{ status: 'asc' }, { price: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
         requestId: true,
