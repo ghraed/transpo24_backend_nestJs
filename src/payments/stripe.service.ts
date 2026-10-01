@@ -416,6 +416,33 @@ export class StripeService {
     );
   }
 
+  async getChargeSettlement(chargeId: string): Promise<{
+    chargeAmount: number;
+    chargeCurrency: string;
+    balanceAmount: number;
+    balanceCurrency: string;
+    exchangeRate: number | null;
+  }> {
+    const charge = await this.runStripe(() =>
+      this.getClient().charges.retrieve(chargeId, {
+        expand: ['balance_transaction'],
+      }),
+    );
+    const balanceTransaction = charge.balance_transaction;
+    if (!balanceTransaction || typeof balanceTransaction === 'string') {
+      throw new BadGatewayException(
+        'Stripe charge settlement details are unavailable.',
+      );
+    }
+    return {
+      chargeAmount: charge.amount,
+      chargeCurrency: charge.currency,
+      balanceAmount: balanceTransaction.amount,
+      balanceCurrency: balanceTransaction.currency,
+      exchangeRate: balanceTransaction.exchange_rate,
+    };
+  }
+
   async createTransfer(input: {
     amount: number;
     currency: string;

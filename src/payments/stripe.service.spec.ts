@@ -147,6 +147,35 @@ describe('StripeService', () => {
     );
   });
 
+  it('reads the charge settlement currency and exchange rate', async () => {
+    const retrieve = jest.fn().mockResolvedValue({
+      amount: 1000,
+      currency: 'usd',
+      balance_transaction: {
+        amount: 835,
+        currency: 'chf',
+        exchange_rate: 0.83545,
+      },
+    });
+    const service = new StripeService();
+    (
+      service as unknown as {
+        getClient(): { charges: { retrieve: typeof retrieve } };
+      }
+    ).getClient = () => ({ charges: { retrieve } });
+
+    await expect(service.getChargeSettlement('ch_trip_1')).resolves.toEqual({
+      chargeAmount: 1000,
+      chargeCurrency: 'usd',
+      balanceAmount: 835,
+      balanceCurrency: 'chf',
+      exchangeRate: 0.83545,
+    });
+    expect(retrieve).toHaveBeenCalledWith('ch_trip_1', {
+      expand: ['balance_transaction'],
+    });
+  });
+
   it('creates an idempotent transfer linked to the source charge', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'tr_test' });
     const service = new StripeService();

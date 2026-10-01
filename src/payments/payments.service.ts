@@ -1949,7 +1949,37 @@ export class PaymentsService {
       });
     }
 
-    const transferAmount = this.toStripeMinorUnit(context.netAmount);
+    let transferCurrency = context.currency.toLowerCase();
+    let transferAmount = this.toStripeMinorUnit(context.netAmount);
+    if (context.stripeChargeId) {
+      try {
+        const settlement = await this.stripeService.getChargeSettlement(
+          context.stripeChargeId,
+        );
+        if (settlement.chargeCurrency !== transferCurrency) {
+          throw new Error('Trip and Stripe charge currencies do not match.');
+        }
+        if (settlement.balanceCurrency !== transferCurrency) {
+          if (!settlement.exchangeRate || settlement.exchangeRate <= 0) {
+            throw new Error('Stripe settlement exchange rate is unavailable.');
+          }
+          transferAmount = this.toStripeMinorUnit(
+            context.netAmount.mul(settlement.exchangeRate),
+          );
+          transferCurrency = settlement.balanceCurrency;
+        }
+        if (transferAmount > settlement.balanceAmount) {
+          throw new Error('Driver transfer exceeds the settled charge amount.');
+        }
+      } catch (error) {
+        return this.failDriverPayoutAttempt(context, now, {
+          reason:
+            error instanceof Error
+              ? error.message
+              : 'Unable to determine Stripe settlement currency.',
+        });
+      }
+    }
     if (transferAmount <= 0) {
       return this.failDriverPayoutAttempt(context, now, {
         reason: 'Transfer amount is zero or negative.',
@@ -1969,10 +1999,13 @@ export class PaymentsService {
     try {
       const transfer = await this.stripeService.createTransfer({
         amount: transferAmount,
-        currency: context.currency.toLowerCase(),
+        currency: transferCurrency,
         destination: context.destinationAccountId,
         transferGroup: `trip_${context.tripId}`,
-        idempotencyKey: `driver_payout_${context.earningId}`,
+        idempotencyKey:
+          transferCurrency === context.currency.toLowerCase()
+            ? `driver_payout_${context.earningId}`
+            : `driver_payout_${context.earningId}_${transferCurrency}`,
         sourceTransaction: context.stripeChargeId,
         metadata: {
           tripId: context.tripId,

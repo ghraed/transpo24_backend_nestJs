@@ -308,6 +308,90 @@ describe('PaymentsService', () => {
     ).toBe(CustomerWalletTopUpStatus.SUCCEEDED);
   });
 
+  it('transfers a USD driver share in the charge settlement currency', async () => {
+    const settlementUpdate = jest.fn().mockResolvedValue(undefined);
+    const earningUpdate = jest.fn().mockResolvedValue(undefined);
+    const getChargeSettlement = jest.fn().mockResolvedValue({
+      chargeAmount: 1000,
+      chargeCurrency: 'usd',
+      balanceAmount: 835,
+      balanceCurrency: 'chf',
+      exchangeRate: 0.83545,
+    });
+    const createTransfer = jest.fn().mockResolvedValue({ id: 'tr_chf' });
+    const notifyTripFundsTransferred = jest.fn().mockResolvedValue(undefined);
+    const serviceWithMocks = new PaymentsService(
+      {
+        tripPaymentSettlement: { update: settlementUpdate },
+        driverEarning: { update: earningUpdate },
+      } as never,
+      { getChargeSettlement, createTransfer } as never,
+      { notifyTripFundsTransferred } as never,
+      { enqueueDriverPayout: jest.fn() } as never,
+    );
+    (
+      serviceWithMocks as unknown as {
+        getDriverPayoutContext: (tripId: string) => Promise<unknown>;
+      }
+    ).getDriverPayoutContext = jest.fn().mockResolvedValue({
+      tripStatus: TransportRequestStatus.DELIVERED,
+      deliveryConfirmedByCustomerAt: new Date(),
+      settlementId: 'settlement-1',
+      tripId: 'trip-1',
+      customerId: 'customer-1',
+      driverUserId: 'driver-user-1',
+      driverId: 'driver-1',
+      currency: 'USD',
+      earningId: 'earning-1',
+      earningStatus: 'AVAILABLE',
+      availableAt: null,
+      paidOutAt: null,
+      netAmount: new Prisma.Decimal('8.50'),
+      stripeChargeId: 'ch_trip_1',
+      stripeTransferId: null,
+      stripeTransferStatus: 'failed',
+      destinationAccountId: 'acct_driver',
+      stripePayoutsEnabled: true,
+      stripeDetailsSubmitted: true,
+      payoutAttemptCount: 3,
+      settlementStatus: TripPaymentSettlementStatus.COLLECTED,
+      requiresManualReview: false,
+    });
+
+    await expect(
+      (
+        serviceWithMocks as unknown as {
+          attemptDriverPayoutForTrip: (
+            tripId: string,
+            input: { requestedBy: 'driver_manual_retry' },
+          ) => Promise<unknown>;
+        }
+      ).attemptDriverPayoutForTrip('trip-1', {
+        requestedBy: 'driver_manual_retry',
+      }),
+    ).resolves.toEqual({
+      transferred: true,
+      stripeTransferId: 'tr_chf',
+      reason: null,
+    });
+    expect(getChargeSettlement).toHaveBeenCalledWith('ch_trip_1');
+    expect(createTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 710,
+        currency: 'chf',
+        destination: 'acct_driver',
+        sourceTransaction: 'ch_trip_1',
+        idempotencyKey: 'driver_payout_earning-1_chf',
+      }),
+    );
+    expect(earningUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ stripeTransferId: 'tr_chf' }),
+      }),
+    );
+    expect(notifyTripFundsTransferred).toHaveBeenCalled();
+  });
+
   it('blocks driver payouts while a disputed settlement requires manual review', async () => {
     const tripPaymentSettlementUpdate = jest.fn().mockResolvedValue(undefined);
     const serviceWithMocks = new PaymentsService(
