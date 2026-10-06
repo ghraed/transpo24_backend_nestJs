@@ -281,3 +281,103 @@ Before routing real traffic, apply migrations, test Stripe and Twilio in the
 target account, verify Redis availability and queue workers, exercise upload
 storage persistence, and confirm backup/restore and monitoring alerts in the
 deployment environment. Automated tests cannot certify those external systems.
+
+## Registration-card extraction
+
+The customer vehicle form uploads registration-card photos to
+`POST /vehicles/extract-registration`. The endpoint requires an active customer
+Bearer token and accepts multipart `images` (one or two images, at most 8 MiB
+each). It rejects extra fields, image URLs and caller-supplied user/tenant IDs.
+This branch has customer ownership boundaries rather than a tenant identifier;
+the rate-limit identity comes exclusively from the authenticated customer.
+
+Configure these **backend-only** variables locally or in the server environment:
+
+```dotenv
+QWEN_API_KEY=<your Model Studio API key>
+QWEN_BASE_URL=<the HTTPS OpenAI-compatible base URL for your region/workspace>
+QWEN_MODEL=qwen3-vl-plus
+```
+
+The base URL must omit `/chat/completions`; the adapter appends that path. There
+is no default region. Select the endpoint that matches your key and model access
+using the [official regional endpoint reference](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions).
+For example, current workspace endpoints use
+`https://<workspace-id>.<region>.maas.aliyuncs.com/compatible-mode/v1`.
+Never place these variables in either mobile app or an `EXPO_PUBLIC_` variable.
+Scanning returns `REGISTRATION_CONFIGURATION` when unavailable; other features
+continue to operate. Native `fetch` sends Base64 JPEG inputs with non-thinking
+JSON-object output, following [Alibaba's vision input](https://www.alibabacloud.com/help/en/model-studio/vision)
+and [structured output](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output)
+documentation. A different configured model must support those capabilities.
+
+Successful HTTP responses use status **201** and this contract:
+
+```typescript
+type RegistrationExtraction = {
+  status: 'extracted' | 'partial' | 'wrong_document' | 'unreadable';
+  fields: Record<
+    'vin' | 'swissRegistrationNumber' | 'brand' | 'model' |
+    'manufactureYear' | 'emptyWeightKg' | 'bodyType' | 'transmission',
+    {
+      value: string | number | null;
+      status: 'extracted' | 'missing' | 'ambiguous' | 'invalid';
+      evidence: {
+        imageIndex: number; // zero-based, within the uploaded images
+        label: string;
+        printedValue: string;
+        unit: string | null;
+      }[];
+    }
+  >;
+  missingFields: string[];
+  warnings: { code: string; field?: string }[];
+};
+```
+
+All eight fields are always returned. Year and empty weight use numbers when
+usable; other values use strings. Missing/uncertain values are null. Older or
+nonstandard chassis numbers retain their readable value with `invalid` status
+and a warning, for review only. Evidence uses the original printed label/value.
+First-registration/model year cannot supply manufacture year; gross weight,
+payload and mass in service cannot supply empty weight. Recognized weight/year
+labels are conservative; unfamiliar labels require manual review. A plate
+number cannot supply the nine-digit Swiss registration identifier.
+
+Errors use the existing JSON error envelope with stable codes:
+`REGISTRATION_INVALID_UPLOAD` (400/413), `REGISTRATION_CONFIGURATION` (503),
+`REGISTRATION_TIMEOUT` (504), `REGISTRATION_RATE_LIMIT` (429),
+`REGISTRATION_UNAVAILABLE` (503), `REGISTRATION_INVALID_OUTPUT` (502), and
+`REGISTRATION_CANCELLED` (400). Authentication retains the existing 401/403
+boundary. Wrong/unreadable documents are normal typed results.
+
+The endpoint accepts actual JPEG, PNG and static WebP data and normalizes it
+using `sharp`. It rejects animations, corrupt content, dimensions outside
+64–12,000 pixels per side, or over 48 megapixels. Normalized images have a
+maximum 4,000-pixel edge and stripped metadata. Buffers are processed in memory
+and cleared on success/failure. Nothing is saved to public uploads, the database,
+or request documents. Images, keys, Base64, and model/document output are never
+logged. Redis counters allow five attempts per minute and twenty per hour per
+customer; the existing in-process fallback applies when Redis is unavailable.
+Use Redis for limits shared across server instances. The adapter makes at most
+two attempts, 30 seconds each, with a bounded transient retry delay.
+
+Install dependencies with `npm install` (the feature adds `sharp`); no database
+migration is needed. Automated tests use synthetic images and mocked Qwen:
+
+```bash
+npm run test:unit -- --testPathPatterns=registration
+npm run test:e2e -- --testPathPatterns=registration
+npm run build
+```
+
+For a real-photo test, configure the server variables, start the API, rebuild
+the customer development app, and open a Vehicle transport request. Tap
+**Scan registration card**, capture/select the front and optionally the reverse,
+check the preview, then tap **Extract details / Retry**. Compare evidence with
+the actual card, correct values, and confirm selected fields. Existing values
+are kept unless their replacement is selected. Missing/uncertain weight remains
+editable; VIN/Swiss lookup can fill gaps without replacing confirmed values.
+Continue through the ordinary request review and submission. Extraction alone
+does not create a request or verify a vehicle. A live Qwen call and physical
+camera test must be reported separately from mocked/bundle tests.

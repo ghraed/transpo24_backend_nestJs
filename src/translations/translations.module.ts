@@ -18,6 +18,6 @@ import { TranslationService } from './translations.service';
     TranslationRateLimitGuard,
     TranslationService,
   ],
-  exports: [TranslationService],
+  exports: [TranslationService, TranslationCacheService],
 })
 export class TranslationModule {}

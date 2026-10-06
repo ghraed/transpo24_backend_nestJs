@@ -7,11 +7,19 @@ import { VehiclesService } from './vehicles.service';
 import { OneAutoApiVinDecoder } from './vin-decoders/oneautoapi-vin-decoder.service';
 import { SwissCarInfoVinDecoder } from './vin-decoders/swisscarinfo-vin-decoder.service';
 import { VinDecoderService } from './vin-decoders/vin-decoder.service';
+import { TranslationModule } from '../translations/translations.module';
+import { RegistrationController } from './registration/registration.controller';
+import { RegistrationService } from './registration/registration.service';
+import { RegistrationRateLimitGuard } from './registration/registration-rate-limit.guard';
+import { QwenRegistrationProvider } from './registration/qwen-registration.provider';
 
 @Module({
-  imports: [AuthModule],
-  controllers: [VehiclesController],
+  imports: [AuthModule, TranslationModule],
+  controllers: [VehiclesController, RegistrationController],
   providers: [
+    RegistrationService,
+    RegistrationRateLimitGuard,
+    QwenRegistrationProvider,
     VehiclesService,
     PrismaService,
     SwissCarInfoVinDecoder,
