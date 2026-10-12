@@ -306,10 +306,35 @@ For example, current workspace endpoints use
 `https://<workspace-id>.<region>.maas.aliyuncs.com/compatible-mode/v1`.
 Never place these variables in either mobile app or an `EXPO_PUBLIC_` variable.
 Scanning returns `REGISTRATION_CONFIGURATION` when unavailable; other features
-continue to operate. Native `fetch` sends Base64 JPEG inputs with non-thinking
-JSON-object output, following [Alibaba's vision input](https://www.alibabacloud.com/help/en/model-studio/vision)
-and [structured output](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output)
-documentation. A different configured model must support those capabilities.
+continue to operate. Native `fetch` sends Base64 JPEG inputs with a structured extraction prompt,
+following the [Qwen-OCR API reference](https://www.alibabacloud.com/help/en/model-studio/qwen-vl-ocr-api-reference).
+The default `qwen3-vl-plus` model interprets registration-card rows and returns
+structured JSON with thinking disabled, following the
+[Qwen structured-output reference](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output).
+OCR-only models remain configurable, but their plain transcription can confuse
+adjacent rows or VIN characters. The OCR-specific `max_pixels` option is sent
+only to OCR models; it is excluded from structured vision requests.
+Plain JSON, JSON wrapped in a Markdown fence, and JSON surrounded by model
+explanations are parsed and validated. Output formatting failures get one
+automatic retry with the same images and a format correction.
+Qwen maps labels in any language to consistent English JSON field keys while
+preserving printed make and complete model values. A label-based parser also
+accepts plain OCR text. Combined make/type lines can be split using the
+manufacturer catalog. Example vehicle values are excluded from the OCR prompt.
+An empty partial response gets one automatic retry with a format correction.
+Identity values that are row headings or generic body descriptions are rejected.
+If make/model is suspect, or a readable make/model has no valid VIN, the second
+attempt re-reads printed vehicle rows. It recovers missing identity fields while
+preserving already validated weight/year values; a failed recovery still returns
+the validated partial result. Swiss multilingual row labels and leading weight
+padding asterisks are supported without guessing missing or ambiguous digits.
+Image pixel limits are raised to preserve small printed characters.
+Direct values and legacy evidence objects are both accepted. VIN, Swiss number,
+year and weight are checked for format and range; invalid fields stay empty
+without discarding readable fields. Evidence is retained when supplied and
+never fabricated. Weight and year are extracted only when explicitly printed,
+as instructed in the OCR prompt; users review the filled fields.
+A different configured model must support image inputs and the extraction schema.
 
 Successful HTTP responses use status **201** and this contract:
 
@@ -337,12 +362,16 @@ type RegistrationExtraction = {
 
 All eight fields are always returned. Year and empty weight use numbers when
 usable; other values use strings. Missing/uncertain values are null. Older or
-nonstandard chassis numbers retain their readable value with `invalid` status
-and a warning, for review only. Evidence uses the original printed label/value.
-First-registration/model year cannot supply manufacture year; gross weight,
-payload and mass in service cannot supply empty weight. Recognized weight/year
-labels are conservative; unfamiliar labels require manual review. A plate
-number cannot supply the nine-digit Swiss registration identifier.
+nonstandard chassis numbers are not applied; evidence-backed values can retain
+`invalid` status and a warning for review. Evidence, when available, uses the
+original printed label/value. The existing `manufactureYear` key supplies the
+vehicle form's year: prefer an explicit manufacture year; when absent, use the
+printed first-registration date. Full dates in day/month/year or year/month/day
+order are validated and normalized to a four-digit year. Model year, document
+issue/expiry dates and inspection dates are excluded, as are gross weight,
+payload and mass in service from empty weight. Legacy evidence-backed responses additionally
+check recognized printed weight/year labels and units. A plate number cannot
+supply the nine-digit Swiss registration identifier.
 
 Errors use the existing JSON error envelope with stable codes:
 `REGISTRATION_INVALID_UPLOAD` (400/413), `REGISTRATION_CONFIGURATION` (503),
@@ -374,10 +403,20 @@ npm run build
 For a real-photo test, configure the server variables, start the API, rebuild
 the customer development app, and open a Vehicle transport request. Tap
 **Scan registration card**, capture/select the front and optionally the reverse,
-check the preview, then tap **Extract details / Retry**. Compare evidence with
-the actual card, correct values, and confirm selected fields. Existing values
-are kept unless their replacement is selected. Missing/uncertain weight remains
-editable; VIN/Swiss lookup can fill gaps without replacing confirmed values.
+check the preview, then tap **Extract details / Retry**. Readable values fill
+the main vehicle fields automatically, including empty weight in kilograms.
+Make and model are separate (for example, Ford / Transit Courier). Catalog
+matches retain their IDs; unmatched names appear in editable text fields.
+Compare the filled fields with the card and correct or complete them. Missing
+or uncertain values preserve existing inputs, as do edits made during a scan.
 Continue through the ordinary request review and submission. Extraction alone
 does not create a request or verify a vehicle. A live Qwen call and physical
 camera test must be reported separately from mocked/bundle tests.
+
+Registration scan diagnostics use the prefix `Registration OCR parser=4` in
+the API terminal. They show image count, configured model, completion reason,
+response length, field-shape counts, validation stage and readable field count.
+They never log document text, extracted values, image data or API keys. For a
+failed device scan, share these lines; in development, Metro also reports
+whether the failure came from an API error or client response validation, and
+the API origin used by the request.

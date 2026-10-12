@@ -1,12 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpException } from '@nestjs/common';
 import { scanError } from './registration.errors';
-import { REGISTRATION_PROMPT, validateExtraction } from './registration.schema';
-import type { RegistrationExtraction } from './registration.types';
+import { normalizeRegistrationOutput } from './registration.schema';
+import {
+  REGISTRATION_OCR_PROMPT,
+  REGISTRATION_IDENTITY_RETRY_PROMPT,
+  parseRegistrationOcrText,
+} from './registration-ocr';
+import {
+  REGISTRATION_FIELDS,
+  type RegistrationExtraction,
+} from './registration.types';
 
 @Injectable()
 export class QwenRegistrationProvider {
+  private readonly logger = new Logger(QwenRegistrationProvider.name);
   constructor(private readonly config: ConfigService) {}
 
   assertConfigured(): { endpoint: string; apiKey: string; model: string } {
@@ -42,28 +51,71 @@ export class QwenRegistrationProvider {
     clientSignal?: AbortSignal,
   ): Promise<RegistrationExtraction> {
     const { endpoint, apiKey, model } = this.assertConfigured();
-    const body = JSON.stringify({
+    const structuredVision = /^qwen3-vl-(?:plus|flash)(?:-|$)/.test(model);
+    this.logger.log(
+      `Registration OCR parser=7 started images=${images.length} model=${model}`,
+    );
+    const request = {
       model,
-      enable_thinking: false,
       stream: false,
       max_tokens: 4096,
-      response_format: { type: 'json_object' },
+      ...(structuredVision
+        ? {
+            enable_thinking: false,
+            temperature: 0,
+            response_format: { type: 'json_object' },
+          }
+        : {}),
       messages: [
         {
           role: 'user',
           content: [
-            { type: 'text', text: REGISTRATION_PROMPT },
             ...images.map((buffer) => ({
               type: 'image_url',
+              ...(/^qwen-vl-ocr(?:-|$)/.test(model)
+                ? { max_pixels: 23520000 }
+                : {}),
               image_url: {
                 url: `data:image/jpeg;base64,${buffer.toString('base64')}`,
               },
             })),
+            { type: 'text', text: REGISTRATION_OCR_PROMPT },
           ],
         },
       ],
-    });
+    };
+    let recoveryCandidate: RegistrationExtraction | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
+      const body = JSON.stringify(
+        attempt === 0
+          ? request
+          : {
+              ...request,
+              messages: [
+                {
+                  ...request.messages[0],
+                  content: [
+                    ...request.messages[0].content.slice(0, -1),
+                    {
+                      type: 'text',
+                      text:
+                        recoveryCandidate && !structuredVision
+                          ? REGISTRATION_IDENTITY_RETRY_PROMPT
+                          : REGISTRATION_OCR_PROMPT,
+                    },
+                    ...(recoveryCandidate && !structuredVision
+                      ? []
+                      : [
+                          {
+                            type: 'text',
+                            text: 'Read the original printed vehicle labels in any language. Return only the JSON object with status and fields using the exact English keys specified above and simple values or null. Preserve the full model and printed date. Do not return explanations.',
+                          },
+                        ]),
+                  ],
+                },
+              ],
+            },
+      );
       const timeout = AbortSignal.timeout(30000);
       const signal = clientSignal
         ? AbortSignal.any([timeout, clientSignal])
@@ -114,6 +166,7 @@ export class QwenRegistrationProvider {
           await reader.cancel().catch(() => undefined);
           reader.releaseLock();
         }
+        let stage = 'response_json';
         try {
           const payload = JSON.parse(
             Buffer.concat(chunks).toString('utf8'),
@@ -124,23 +177,115 @@ export class QwenRegistrationProvider {
             }[];
           };
           const choice = payload?.choices?.[0];
+          stage = 'completion';
+          const content = choice?.message?.content;
+          const finish = ['stop', 'length', 'content_filter'].includes(
+            choice?.finish_reason ?? '',
+          )
+            ? choice?.finish_reason
+            : 'other';
+          this.logger.log(
+            `Registration OCR parser=7 response attempt=${attempt + 1} finish=${finish} contentType=${typeof content} chars=${typeof content === 'string' ? content.length : 0}`,
+          );
           if (
             choice?.finish_reason !== 'stop' ||
-            typeof choice.message?.content !== 'string' ||
-            !choice.message.content.trim()
+            typeof content !== 'string' ||
+            !content.trim()
           )
             throw new Error();
-          return validateExtraction(
-            JSON.parse(choice.message.content),
-            images.length,
+          stage = 'content_json';
+          let raw: unknown;
+          try {
+            raw = parseRegistrationContent(content);
+          } catch {
+            stage = 'printed_labels';
+            const result = parseRegistrationOcrText(content, images.length);
+            this.logger.log(
+              `Registration OCR parser=7 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
+            );
+            if (
+              !REGISTRATION_FIELDS.some(
+                (name) => result.fields[name].status === 'extracted',
+              ) &&
+              attempt === 0
+            )
+              throw new Error();
+            if (attempt === 0 && needsIdentityRecovery(result)) {
+              recoveryCandidate = result;
+              await this.delay(clientSignal);
+              continue;
+            }
+            if (recoveryCandidate)
+              return mergeIdentityRecovery(recoveryCandidate, result);
+            return result;
+          }
+          const inputs =
+            raw && typeof raw === 'object' && 'fields' in raw
+              ? raw.fields
+              : undefined;
+          const fieldObject =
+            inputs && typeof inputs === 'object' && !Array.isArray(inputs)
+              ? (inputs as Record<string, unknown>)
+              : {};
+          const types = REGISTRATION_FIELDS.map(
+            (name) => typeof fieldObject[name],
           );
+          this.logger.log(
+            `Registration OCR parser=7 shape knownFields=${REGISTRATION_FIELDS.filter((name) => Object.hasOwn(fieldObject, name)).length} objectFields=${types.filter((type) => type === 'object').length} stringFields=${types.filter((type) => type === 'string').length}`,
+          );
+          stage = 'schema';
+          const result = normalizeRegistrationOutput(raw, images.length);
+          this.logger.log(
+            `Registration OCR parser=7 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
+          );
+          if (
+            result.status === 'partial' &&
+            !REGISTRATION_FIELDS.some(
+              (name) => result.fields[name].status === 'extracted',
+            ) &&
+            attempt === 0
+          )
+            throw new Error();
+          if (attempt === 0 && needsIdentityRecovery(result)) {
+            recoveryCandidate = result;
+            await this.delay(clientSignal);
+            continue;
+          }
+          if (recoveryCandidate)
+            return mergeIdentityRecovery(recoveryCandidate, result);
+          return result;
         } catch {
+          this.logger.warn(
+            `Registration OCR parser=7 rejected stage=${stage} attempt=${attempt + 1}`,
+          );
+          if (
+            attempt === 0 &&
+            (stage === 'schema' ||
+              stage === 'content_json' ||
+              stage === 'printed_labels')
+          ) {
+            await this.delay(clientSignal);
+            continue;
+          }
           throw scanError('REGISTRATION_INVALID_OUTPUT', 502);
         }
       } catch (error) {
-        if (error instanceof HttpException) throw error;
         if (clientSignal?.aborted)
           throw scanError('REGISTRATION_CANCELLED', 400);
+        // A failed recovery attempt must not discard already validated fields.
+        if (
+          recoveryCandidate &&
+          attempt === 1 &&
+          (!(error instanceof HttpException) ||
+            [
+              'REGISTRATION_INVALID_OUTPUT',
+              'REGISTRATION_UNAVAILABLE',
+              'REGISTRATION_TIMEOUT',
+              'REGISTRATION_RATE_LIMIT',
+            ].includes((error.getResponse() as { code?: string }).code ?? ''))
+        )
+          return recoveryCandidate;
+        if (error instanceof HttpException) throw error;
         if (attempt === 0) {
           await this.delay(clientSignal);
           continue;
@@ -169,4 +314,88 @@ export class QwenRegistrationProvider {
     });
     if (signal?.aborted) throw scanError('REGISTRATION_CANCELLED', 400);
   }
+}
+
+function needsIdentityRecovery(result: RegistrationExtraction): boolean {
+  if (result.status !== 'partial') return false;
+  return (
+    result.warnings.some(
+      (warning) => warning.field === 'brand' || warning.field === 'model',
+    ) ||
+    (result.fields.vin.status !== 'extracted' &&
+      result.fields.brand.status === 'extracted' &&
+      result.fields.model.status === 'extracted')
+  );
+}
+
+/** Recover missing fields, keeping make/model together and preserving readable details. */
+function mergeIdentityRecovery(
+  first: RegistrationExtraction,
+  second: RegistrationExtraction,
+): RegistrationExtraction {
+  if (second.status === 'wrong_document' || second.status === 'unreadable')
+    return first;
+  const fields = { ...first.fields };
+  const recovered = new Set<(typeof REGISTRATION_FIELDS)[number]>();
+  const pairMissing =
+    first.fields.brand.status !== 'extracted' ||
+    first.fields.model.status !== 'extracted';
+  for (const name of REGISTRATION_FIELDS) {
+    if ((name === 'brand' || name === 'model') && pairMissing) {
+      if (
+        second.fields.brand.status === 'extracted' &&
+        second.fields.model.status === 'extracted'
+      ) {
+        fields[name] = second.fields[name];
+        recovered.add(name);
+      }
+    } else if (
+      first.fields[name].status !== 'extracted' &&
+      second.fields[name].status === 'extracted'
+    ) {
+      fields[name] = second.fields[name];
+      recovered.add(name);
+    }
+  }
+  const missingFields = REGISTRATION_FIELDS.filter(
+    (name) =>
+      fields[name].value === null || fields[name].status !== 'extracted',
+  );
+  return {
+    fields,
+    missingFields,
+    status: missingFields.length ? 'partial' : 'extracted',
+    warnings: first.warnings.filter(
+      (warning) => !warning.field || !recovered.has(warning.field),
+    ),
+  };
+}
+
+/** Accept a JSON object surrounded by OCR formatting, without evaluating text. */
+export function parseRegistrationContent(content: string): unknown {
+  const text = content
+    .trim()
+    .replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1');
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    /* Locate one complete JSON object. */
+  }
+  const start = text.indexOf('{');
+  if (start < 0) throw new Error('REGISTRATION_INVALID_OUTPUT');
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0)
+      return JSON.parse(text.slice(start, i + 1)) as unknown;
+  }
+  throw new Error('REGISTRATION_INVALID_OUTPUT');
 }

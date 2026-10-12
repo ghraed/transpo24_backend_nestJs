@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import sharp from 'sharp';
+import { VehiclesService } from '../vehicles.service';
+import { separatePrintedMakeModel } from './registration-ocr';
 import { scanError } from './registration.errors';
 import { QwenRegistrationProvider } from './qwen-registration.provider';
 
@@ -7,7 +9,10 @@ export const MAX_REGISTRATION_IMAGE_BYTES = 8 * 1024 * 1024;
 
 @Injectable()
 export class RegistrationService {
-  constructor(private readonly provider: QwenRegistrationProvider) {}
+  constructor(
+    private readonly provider: QwenRegistrationProvider,
+    @Optional() private readonly vehicles?: VehiclesService,
+  ) {}
 
   async extract(files: Express.Multer.File[], signal?: AbortSignal) {
     const images: Buffer[] = [];
@@ -80,7 +85,16 @@ export class RegistrationService {
           throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
         }
       }
-      return await this.provider.extract(images, signal);
+      const result = await this.provider.extract(images, signal);
+      if (
+        this.vehicles &&
+        result.fields.brand.value &&
+        result.fields.model.value
+      ) {
+        const brands = await this.vehicles.listBrands().catch(() => []);
+        return separatePrintedMakeModel(result, brands);
+      }
+      return result;
     } finally {
       for (const buffer of images) buffer.fill(0);
       images.length = 0;
