@@ -46,7 +46,7 @@ describe('registration image processing', () => {
   it('supports two sides and bounds output dimensions', async () => {
     provider.extract.mockImplementation(async (images: Buffer[]) => {
       expect(images).toHaveLength(2);
-      expect((await sharp(images[0]).metadata()).width).toBe(4000);
+      expect((await sharp(images[0]).metadata()).width).toBe(3000);
       return { status: 'partial' };
     });
     await service.extract([file(await image(5000, 100)), file(await image())]);

@@ -6,6 +6,7 @@ import { normalizeRegistrationOutput } from './registration.schema';
 import {
   REGISTRATION_OCR_PROMPT,
   REGISTRATION_IDENTITY_RETRY_PROMPT,
+  REGISTRATION_IDENTITY_JSON_RETRY_PROMPT,
   parseRegistrationOcrText,
 } from './registration-ocr';
 import {
@@ -86,6 +87,12 @@ export class QwenRegistrationProvider {
     };
     let recoveryCandidate: RegistrationExtraction | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
+      const candidate = recoveryCandidate;
+      const identityRecovery =
+        candidate &&
+        (['brand', 'model', 'vin'] as const).some(
+          (name) => candidate.fields[name].status !== 'extracted',
+        );
       const body = JSON.stringify(
         attempt === 0
           ? request
@@ -98,12 +105,16 @@ export class QwenRegistrationProvider {
                     ...request.messages[0].content.slice(0, -1),
                     {
                       type: 'text',
-                      text:
-                        recoveryCandidate && !structuredVision
-                          ? REGISTRATION_IDENTITY_RETRY_PROMPT
-                          : REGISTRATION_OCR_PROMPT,
+                      text: recoveryCandidate
+                        ? structuredVision
+                          ? identityRecovery
+                            ? REGISTRATION_IDENTITY_JSON_RETRY_PROMPT
+                            : REGISTRATION_OCR_PROMPT
+                          : REGISTRATION_IDENTITY_RETRY_PROMPT
+                        : REGISTRATION_OCR_PROMPT,
                     },
-                    ...(recoveryCandidate && !structuredVision
+                    ...(recoveryCandidate &&
+                    (!structuredVision || identityRecovery)
                       ? []
                       : [
                           {
@@ -116,9 +127,12 @@ export class QwenRegistrationProvider {
               ],
             },
       );
-      // Reading source labels and units needs more time than six scalar values.
-      // Both attempts still fit within the mobile form's 90-second deadline.
-      const timeout = AbortSignal.timeout(attempt === 0 ? 60000 : 20000);
+      // Leave 30 seconds for upload/normalization within the mobile's 150s budget.
+      const timeout = AbortSignal.timeout(attempt === 0 ? 75000 : 45000);
+      const attemptStarted = Date.now();
+      this.logger.log(
+        `Registration OCR attempt=${attempt + 1} requestBytes=${Buffer.byteLength(body)}`,
+      );
       const signal = clientSignal
         ? AbortSignal.any([timeout, clientSignal])
         : timeout;
@@ -133,6 +147,9 @@ export class QwenRegistrationProvider {
           signal,
           redirect: 'error',
         });
+        this.logger.log(
+          `Registration OCR attempt=${attempt + 1} http=${response.status} elapsedMs=${Date.now() - attemptStarted}`,
+        );
         if (!response.ok) {
           await response.body?.cancel();
           if ([401, 403, 400, 404, 422].includes(response.status))
@@ -272,6 +289,9 @@ export class QwenRegistrationProvider {
           throw scanError('REGISTRATION_INVALID_OUTPUT', 502);
         }
       } catch (error) {
+        this.logger.warn(
+          `Registration OCR attempt=${attempt + 1} elapsedMs=${Date.now() - attemptStarted} timedOut=${timeout.aborted} cancelled=${clientSignal?.aborted ?? false}`,
+        );
         if (clientSignal?.aborted)
           throw scanError('REGISTRATION_CANCELLED', 400);
         // A failed recovery attempt must not discard already validated fields.
@@ -329,9 +349,9 @@ function needsIdentityRecovery(result: RegistrationExtraction): boolean {
         warning.field === 'emptyWeightKg' ||
         warning.field === 'manufactureYear',
     ) ||
-    (result.fields.vin.status !== 'extracted' &&
-      result.fields.brand.status === 'extracted' &&
-      result.fields.model.status === 'extracted')
+    (result.fields.brand.status === 'extracted' &&
+      (result.fields.vin.status !== 'extracted' ||
+        result.fields.model.status !== 'extracted'))
   );
 }
 

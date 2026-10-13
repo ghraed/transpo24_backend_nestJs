@@ -313,6 +313,38 @@ describe('Qwen registration adapter', () => {
     expect(result.fields.model.value).toBe('Transit Courier');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+  it('re-reads missing model and VIN when only make and year were extracted', async () => {
+    const first = syntheticExtraction();
+    first.fields.brand = printedField('TOYOTA', 'الماركة');
+    first.fields.manufactureYear = printedField('2019', 'Manufacture year');
+    fetchMock
+      .mockResolvedValueOnce(reply(JSON.stringify(first)))
+      .mockResolvedValueOnce(
+        reply(
+          JSON.stringify({
+            status: 'partial',
+            fields: {
+              brand: printedField('TOYOTA', 'الماركة', null, 'make'),
+              model: printedField('YARIS', 'طرازها', null, 'model'),
+              vin: printedField('MR2K19F31K1234567', 'رقم الهيكل', null, 'vin'),
+            },
+          }),
+        ),
+      );
+    const result = await make().extract([Buffer.alloc(1)]);
+    expect(result.fields.model.value).toBe('YARIS');
+    expect(result.fields.vin.value).toBe('MR2K19F31K1234567');
+    expect(result.fields.manufactureYear.value).toBe(2019);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retry = JSON.parse(
+      (fetchMock.mock.calls[1][1] as RequestInit).body as string,
+    ) as {
+      messages: { content: { text?: string }[] }[];
+    };
+    expect(retry.messages[0].content.at(-1)?.text).toContain(
+      'Re-read ONLY the make, model and chassis/VIN',
+    );
+  });
   it.each(['unreadable response', 'timeout', 'unavailable'])(
     'preserves validated fields when identity recovery fails: %s',
     async (failure) => {
@@ -420,6 +452,8 @@ describe('Qwen registration adapter', () => {
       response: { code: 'REGISTRATION_TIMEOUT' },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(AbortSignal.timeout).toHaveBeenNthCalledWith(1, 75000);
+    expect(AbortSignal.timeout).toHaveBeenNthCalledWith(2, 45000);
   });
   it.each(['', '{broken', '{}', '[]'])(
     'bounds retries for malformed, empty or incomplete content: %s',

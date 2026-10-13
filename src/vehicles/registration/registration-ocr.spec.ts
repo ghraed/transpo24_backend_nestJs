@@ -5,6 +5,33 @@ import {
 } from './registration-ocr';
 
 describe('printed registration labels', () => {
+  it('reads Lebanese Arabic labels without using body type, engine number or zero weight', () => {
+    const result = parseRegistrationOcrText(
+      `الماركة: TOYOTA
+تاريخ الصنع: 2019
+طرازها: YARIS
+نوعها: SEDAN
+رقم المحرك: 1NR-1234567
+رقم الهيكل: MR2K19F31K1234567
+وزنها فارغة: 0
+وزنها الإجمالي: 0`,
+      1,
+    );
+    expect(result.fields.brand.value).toBe('TOYOTA');
+    expect(result.fields.model.value).toBe('YARIS');
+    expect(result.fields.vin.value).toBe('MR2K19F31K1234567');
+    expect(result.fields.manufactureYear.value).toBe(2019);
+    expect(result.fields.emptyWeightKg.value).toBeNull();
+    expect(result.fields.swissRegistrationNumber.value).toBeNull();
+  });
+  it('validates positive mass with the Lebanese empty-weight label and a printed unit', () => {
+    const result = parseRegistrationOcrText(
+      'وزنها فارغة: 1100 كغ\nتاريخ الصنع: 2020',
+      1,
+    );
+    expect(result.fields.emptyWeightKg.value).toBe(1100);
+    expect(result.fields.manufactureYear.value).toBe(2020);
+  });
   it('reads a VIN and empty weight exactly and keeps the combined make/type for catalog separation', () => {
     const result = parseRegistrationOcrText(
       `Make / model: Renault Kangoo Express

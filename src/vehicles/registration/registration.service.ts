@@ -70,13 +70,13 @@ export class RegistrationService {
           const normalized = await image
             .autoOrient()
             .resize({
-              width: 4000,
-              height: 4000,
+              width: 3000,
+              height: 3000,
               fit: 'inside',
               withoutEnlargement: true,
             })
             .flatten({ background: '#ffffff' })
-            .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+            .jpeg({ quality: 85, chromaSubsampling: '4:4:4' })
             .toBuffer();
           if (normalized.length > MAX_REGISTRATION_IMAGE_BYTES)
             throw new Error();
