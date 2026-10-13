@@ -9,7 +9,13 @@ import sharp from 'sharp';
 import { AuthService } from '../src/auth/auth.service';
 import { CustomerAuthGuard } from '../src/auth/guards/customer-auth.guard';
 import { configureHttpApplication } from '../src/config/http';
-import { TranslationCacheService } from '../src/translations/translation-cache.service';
+import { RegistrationJobStore } from '../src/vehicles/registration/registration-job.store';
+import { RegistrationQueueService } from '../src/vehicles/registration/registration-queue.service';
+import { RegistrationUploadInterceptor } from '../src/vehicles/registration/registration-upload.interceptor';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { RegistrationController } from '../src/vehicles/registration/registration.controller';
 import { RegistrationRateLimitGuard } from '../src/vehicles/registration/registration-rate-limit.guard';
 import {
@@ -20,10 +26,16 @@ import { QwenRegistrationProvider } from '../src/vehicles/registration/qwen-regi
 import { validateExtraction } from '../src/vehicles/registration/registration.schema';
 import { syntheticExtraction } from '../src/vehicles/registration/registration.fixtures';
 
-describe('registration extraction HTTP boundary', () => {
+const redisDescribe = process.env.REGISTRATION_TEST_REDIS_PORT
+  ? describe
+  : describe.skip;
+redisDescribe('registration extraction HTTP boundary', () => {
   let app: INestApplication<App>;
   let fixture: Buffer;
   let active = true;
+  let storage: string;
+  let queue: RegistrationQueueService;
+  let store: RegistrationJobStore;
   const provider = { assertConfigured: jest.fn(), extract: jest.fn() };
   const auth = {
     getUserFromAccessToken: (token: string) =>
@@ -36,6 +48,7 @@ describe('registration extraction HTTP boundary', () => {
     isUserActive: async () => active,
   };
   beforeAll(async () => {
+    storage = await mkdtemp(join(tmpdir(), 'registration-http-'));
     fixture = await sharp({
       create: { width: 256, height: 128, channels: 3, background: '#fff' },
     })
@@ -47,18 +60,27 @@ describe('registration extraction HTTP boundary', () => {
         CustomerAuthGuard,
         RegistrationRateLimitGuard,
         RegistrationService,
+        RegistrationJobStore,
+        RegistrationQueueService,
+        RegistrationUploadInterceptor,
         { provide: AuthService, useValue: auth },
         { provide: QwenRegistrationProvider, useValue: provider },
         {
-          provide: TranslationCacheService,
-          useFactory: () =>
-            new TranslationCacheService(new ConfigService({ REDIS_HOST: '' })),
+          provide: ConfigService,
+          useValue: new ConfigService({
+            REDIS_HOST: '127.0.0.1',
+            REDIS_PORT: process.env.REGISTRATION_TEST_REDIS_PORT,
+            REGISTRATION_QUEUE_PREFIX: `http-${randomUUID()}`,
+            REGISTRATION_STORAGE_DIR: storage,
+          }),
         },
       ],
     }).compile();
     app = module.createNestApplication();
     configureHttpApplication(app);
     await app.init();
+    queue = app.get(RegistrationQueueService);
+    store = app.get(RegistrationJobStore);
   });
   beforeEach(() => {
     active = true;
@@ -69,11 +91,73 @@ describe('registration extraction HTTP boundary', () => {
   });
   afterAll(async () => {
     await app.close();
+    await rm(storage, { recursive: true, force: true });
   });
   const scan = (token: string) =>
     request(app.getHttpServer())
       .post('/vehicles/extract-registration')
       .set('Authorization', `Bearer ${token}`);
+  const queuedScan = (token: string) =>
+    request(app.getHttpServer())
+      .post('/vehicles/registration-extractions')
+      .set('Authorization', `Bearer ${token}`);
+  const poll = async (token: string, id: string) => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const res = await request(app.getHttpServer())
+        .get(`/vehicles/registration-extractions/${id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      if (
+        !['queued', 'processing'].includes(
+          (res.body as { status: string }).status,
+        )
+      )
+        return res;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error('Job did not finish');
+  };
+  it('returns 202 and protects status/cancellation ownership', async () => {
+    const res = await queuedScan('async-one')
+      .attach('images', fixture, 'card.png')
+      .expect(202);
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(
+      (await poll('async-one', (res.body as { jobId: string }).jobId)).body,
+    ).toMatchObject({
+      status: 'completed',
+      result: { status: 'partial' },
+    });
+    for (const method of ['get', 'delete'] as const) {
+      const denied = await request(app.getHttpServer())
+        [method](
+          `/vehicles/registration-extractions/${(res.body as { jobId: string }).jobId}`,
+        )
+        .set('Authorization', 'Bearer async-two')
+        .expect(404);
+      expect(denied.body.code).toBe('REGISTRATION_NOT_FOUND');
+      expect(denied.headers['cache-control']).toBe('private, no-store');
+    }
+    await request(app.getHttpServer())
+      .delete(
+        `/vehicles/registration-extractions/${(res.body as { jobId: string }).jobId}`,
+      )
+      .set('Authorization', 'Bearer async-one')
+      .expect(200);
+    expect(
+      (await queue.status('async-one', (res.body as { jobId: string }).jobId))
+        .status,
+    ).toBe('cancelled');
+  });
+  it('streams uploads privately without retaining Multer buffers', async () => {
+    const res = await queuedScan('private-upload')
+      .attach('images', fixture, 'card.png')
+      .expect(202);
+    await poll('private-upload', (res.body as { jobId: string }).jobId);
+    await queue.sweep();
+    expect(await readdir(storage)).toEqual([]);
+    expect(await store.outstanding()).toEqual([]);
+  });
   it('returns the typed private contract for either customer independently', async () => {
     const one = await scan('customer-one')
       .attach('images', fixture, 'synthetic.png')

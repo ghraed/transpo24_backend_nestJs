@@ -1,5 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import sharp from 'sharp';
+import { readFile, stat } from 'node:fs/promises';
 import { VehiclesService } from '../vehicles.service';
 import { separatePrintedMakeModel } from './registration-ocr';
 import { scanError } from './registration.errors';
@@ -21,6 +22,13 @@ export class RegistrationService {
         throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
       this.provider.assertConfigured();
       for (const file of files) {
+        if (signal?.aborted) throw scanError('REGISTRATION_CANCELLED', 400);
+        if (!file.buffer && file.path) {
+          const info = await stat(file.path).catch(() => null);
+          if (!info?.isFile() || info.size > MAX_REGISTRATION_IMAGE_BYTES)
+            throw scanError('REGISTRATION_UNAVAILABLE', 503);
+          file.buffer = await readFile(file.path);
+        }
         if (
           !file.buffer?.length ||
           file.buffer.length > MAX_REGISTRATION_IMAGE_BYTES
@@ -78,13 +86,18 @@ export class RegistrationService {
             .flatten({ background: '#ffffff' })
             .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
             .toBuffer();
-          if (normalized.length > MAX_REGISTRATION_IMAGE_BYTES)
+          if (normalized.length > MAX_REGISTRATION_IMAGE_BYTES) {
+            normalized.fill(0);
             throw new Error();
+          }
           images.push(normalized);
+          file.buffer.fill(0);
+          file.buffer = Buffer.alloc(0);
         } catch {
           throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
         }
       }
+      if (signal?.aborted) throw scanError('REGISTRATION_CANCELLED', 400);
       const result = await this.provider.extract(images, signal);
       if (
         this.vehicles &&

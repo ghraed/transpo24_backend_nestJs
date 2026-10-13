@@ -12,11 +12,17 @@ import { RegistrationController } from './registration/registration.controller';
 import { RegistrationService } from './registration/registration.service';
 import { RegistrationRateLimitGuard } from './registration/registration-rate-limit.guard';
 import { QwenRegistrationProvider } from './registration/qwen-registration.provider';
+import { RegistrationQueueService } from './registration/registration-queue.service';
+import { RegistrationJobStore } from './registration/registration-job.store';
+import { RegistrationUploadInterceptor } from './registration/registration-upload.interceptor';
 
 @Module({
   imports: [AuthModule, TranslationModule],
   controllers: [VehiclesController, RegistrationController],
   providers: [
+    RegistrationJobStore,
+    RegistrationQueueService,
+    RegistrationUploadInterceptor,
     RegistrationService,
     RegistrationRateLimitGuard,
     QwenRegistrationProvider,

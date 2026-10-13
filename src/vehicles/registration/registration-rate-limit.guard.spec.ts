@@ -1,6 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { RegistrationRateLimitGuard } from './registration-rate-limit.guard';
-import { TranslationCacheService } from '../../translations/translation-cache.service';
+import { RegistrationJobStore } from './registration-job.store';
+import { scanError } from './registration.errors';
 
 describe('registration rate limits', () => {
   const context = (id?: string) =>
@@ -9,35 +10,25 @@ describe('registration rate limits', () => {
         getRequest: () => ({ user: id ? { id } : undefined }),
       }),
     }) as ExecutionContext;
-  it('counts the trusted customer with separate minute/hour windows', async () => {
-    const incrementRateLimitCounter = jest.fn().mockResolvedValue(1);
+  it('counts only the trusted customer with separate minute/hour windows', async () => {
+    const limit = jest.fn().mockResolvedValue(undefined);
     const guard = new RegistrationRateLimitGuard({
-      incrementRateLimitCounter,
-    } as unknown as TranslationCacheService);
+      limit,
+    } as unknown as RegistrationJobStore);
     await expect(guard.canActivate(context('customer'))).resolves.toBe(true);
-    expect(incrementRateLimitCounter).toHaveBeenCalledWith(
-      'registration:minute:customer',
-      60,
-    );
-    expect(incrementRateLimitCounter).toHaveBeenCalledWith(
-      'registration:hour:customer',
-      3600,
-    );
+    expect(limit).toHaveBeenCalledWith('customer', 'minute', 5, 60);
+    expect(limit).toHaveBeenCalledWith('customer', 'hour', 20, 3600);
     await expect(guard.canActivate(context())).rejects.toThrow();
   });
-  it.each([
-    [6, 1],
-    [1, 21],
-  ])('enforces each independent allowance', async (minute, hour) => {
-    const incrementRateLimitCounter = jest
-      .fn()
-      .mockResolvedValueOnce(minute)
-      .mockResolvedValueOnce(hour);
-    const guard = new RegistrationRateLimitGuard({
-      incrementRateLimitCounter,
-    } as unknown as TranslationCacheService);
-    await expect(guard.canActivate(context('customer'))).rejects.toMatchObject({
-      response: { code: 'REGISTRATION_RATE_LIMIT' },
-    });
-  });
+  it.each(['REGISTRATION_RATE_LIMIT', 'REGISTRATION_UNAVAILABLE'])(
+    'propagates %s without a memory fallback',
+    async (code) => {
+      const guard = new RegistrationRateLimitGuard({
+        limit: jest.fn().mockRejectedValue(scanError(code, 429)),
+      } as unknown as RegistrationJobStore);
+      await expect(
+        guard.canActivate(context('customer')),
+      ).rejects.toMatchObject({ response: { code } });
+    },
+  );
 });

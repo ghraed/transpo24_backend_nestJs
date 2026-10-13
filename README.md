@@ -285,7 +285,7 @@ deployment environment. Automated tests cannot certify those external systems.
 ## Registration-card extraction
 
 The customer vehicle form uploads registration-card photos to
-`POST /vehicles/extract-registration`. The endpoint requires an active customer
+`POST /vehicles/registration-extractions`. The endpoint requires an active customer
 Bearer token and accepts multipart `images` (one or two images, at most 8 MiB
 each). It rejects extra fields, image URLs and caller-supplied user/tenant IDs.
 This branch has customer ownership boundaries rather than a tenant identifier;
@@ -342,7 +342,9 @@ readable fields. Evidence is retained and never fabricated. The provider allows
 60 seconds for the first read and 20 for recovery within the mobile deadline.
 A different configured model must support image inputs and the extraction schema.
 
-Successful HTTP responses use status **201** and this contract:
+Completed jobs contain this extraction contract. The legacy synchronous endpoint
+`POST /vehicles/extract-registration` still returns **201** with this same contract,
+but also uses the shared queue and cancels after its 90-second waiting deadline:
 
 ```typescript
 type RegistrationExtraction = {
@@ -390,21 +392,105 @@ boundary. Wrong/unreadable documents are normal typed results.
 The endpoint accepts actual JPEG, PNG and static WebP data and normalizes it
 using `sharp`. It rejects animations, corrupt content, dimensions outside
 64–12,000 pixels per side, or over 48 megapixels. Normalized images have a
-maximum 4,000-pixel edge and stripped metadata. Buffers are processed in memory
-and cleared on success/failure. Nothing is saved to public uploads, the database,
-or request documents. Images, keys, Base64, and model/document output are never
-logged. Redis counters allow five attempts per minute and twenty per hour per
-customer; the existing in-process fallback applies when Redis is unavailable.
-Use Redis for limits shared across server instances. The adapter makes at most
-two attempts, 30 seconds each, with a bounded transient retry delay.
+maximum 4,000-pixel edge and stripped metadata. Uploads stream into private
+temporary files; only workers decode and normalize images. Worker buffers are
+cleared afterward. Scans are never added to public uploads, the database or
+request documents. Redis stores ownership, status and the extraction result;
+BullMQ jobs contain only a job ID. Images, keys, Base64, and model/document output
+are never logged. Scan creation allows five attempts per minute and twenty per
+hour per customer, shared through Redis. Polling has a separate 60-per-minute
+allowance. Scanning fails safely when Redis is unavailable, with no memory fallback.
+The Qwen adapter retains its two attempts (60 seconds for the initial read and
+20 seconds for recovery) and bounded retry delay; the queue adds no normal retries.
+
+### Registration queue operation
+
+New API routes (active customer Bearer token required, `private, no-store`):
+
+- `POST /vehicles/registration-extractions`: multipart upload; **202** with
+  `{ jobId, status, expiresAt }`. Admission is reserved atomically before parsing
+  image files, so uploads count toward the capacity limit.
+- `GET /vehicles/registration-extractions/:jobId`: **200** with the same envelope.
+  Status is `queued`, `processing`, `completed`, `failed`, `cancelled` or `expired`.
+  Completed jobs include `result: RegistrationExtraction`; errors include only
+  `error: { code }`, never provider output or stack traces.
+- `DELETE /vehicles/registration-extractions/:jobId`: **200**, idempotently cancels
+  work and discards results, including completion racing cancellation.
+
+Unknown job IDs and jobs belonging to another customer both return
+`REGISTRATION_NOT_FOUND` (404). Full capacity returns `REGISTRATION_QUEUE_FULL`
+(429); a second outstanding job for the same customer returns
+`REGISTRATION_ALREADY_PENDING` (429). Manual entry remains available.
+
+Workers run inside API processes. Defaults are one extraction **globally**, 20
+outstanding scans (uploading + queued + processing), one outstanding scan per
+customer, a 30-second upload limit, and five minutes from upload acceptance for
+waiting and processing. The app also bounds its whole operation to five minutes.
+Cancellation aborts provider requests when possible and prevents late results
+from applying. A slot is not released until active work stops and files are deleted.
+The sweep runs every 15 seconds independently of client polling, expiring jobs
+and reconciling orphaned files. Terminal results/status live for five minutes
+after cleanup and are then removed by Redis TTL.
+
+Configure `REGISTRATION_QUEUE_PREFIX`, `REGISTRATION_QUEUE_CONCURRENCY`,
+`REGISTRATION_QUEUE_MAX_OUTSTANDING`, `REGISTRATION_JOB_TIMEOUT_MS`,
+`REGISTRATION_UPLOAD_TIMEOUT_MS`, `REGISTRATION_RESULT_TTL_SECONDS`, and
+`REGISTRATION_STORAGE_DIR` using `.env.example`. Use identical settings on all
+replicas and a unique prefix per environment. These starting limits are not a
+capacity guarantee: tune after measuring peak memory and actual Qwen quota.
+
+The default storage directory is a private subdirectory of the OS temporary
+directory, named after the queue prefix, with owner-only permissions. Set a
+dedicated private volume directory in production. Never use `uploads` or a path
+served by a proxy. Multiple API hosts require the **same private shared volume**.
+Allow at least 320 MiB for 20 maximum-size two-image uploads, plus headroom.
+Lost temporary files produce a safe failure; container replacement requires a
+persisted volume if queued scans must survive it.
+
+Configure Redis persistence (normally AOF) and `maxmemory-policy noeviction` for
+BullMQ. Redis results contain registration details, so apply the deployment's
+private access and backup-retention policy. Reserve memory for other Redis users
+and queue bookkeeping. Do not change the payout queue or flush shared Redis.
+See [BullMQ production requirements](https://docs.bullmq.io/guide/going-to-production).
+
+Queue diagnostics log wait/processing duration and periodic outstanding/waiting/
+active counts; monitor these with API RSS, private-volume usage, Redis availability,
+provider errors and expirations. During graceful shutdown new local work stops,
+active provider calls are aborted and workers close before the job-store connection.
+BullMQ may recover a stalled job once, only while its files and deadline remain valid.
+
+Deploy the API before the customer app. The app polls every two seconds without
+overlapping calls, pauses in the background, and checks immediately on return.
+Queued status explains that other scans must finish first. Leaving an active scan
+asks **Cancel this scan?** with **Keep waiting** and **Cancel scan**. Cancellation
+is best effort during a network outage; server expiration still cleans up. If an
+upload response is lost, the app does not automatically upload again, and any
+unacknowledged accepted job expires on the server. There are no completion push
+notifications or cross-session resume features.
 
 Install dependencies with `npm install` (the feature adds `sharp`); no database
 migration is needed. Automated tests use synthetic images and mocked Qwen:
 
 ```bash
 npm run test:unit -- --testPathPatterns=registration
-npm run test:e2e -- --testPathPatterns=registration
+# Against an isolated test Redis (never use a production Redis):
+REGISTRATION_TEST_REDIS_PORT=16379 npm run test:e2e -- --testPathPatterns=registration
 npm run build
+```
+
+The HTTP and queue integration suites are explicitly skipped without
+`REGISTRATION_TEST_REDIS_PORT`. They exercise two real workers, atomic burst
+admission, cancellation races, expiration, recovery, Redis outages and cleanup.
+The burst test prints maximum active extractions, synthetic workload size,
+elapsed time and RSS change; it is a correctness test, not a production benchmark.
+For a disposable local test instance:
+
+```bash
+docker run --rm -d --name transpo24-registration-queue-test \
+  -p 127.0.0.1:16379:6379 --tmpfs /data redis:7-alpine \
+  redis-server --save '' --appendonly no --maxmemory-policy noeviction
+REGISTRATION_TEST_REDIS_PORT=16379 npm run test:e2e -- --testPathPatterns=registration
+docker stop transpo24-registration-queue-test
 ```
 
 For a real-photo test, configure the server variables, start the API, rebuild
@@ -420,7 +506,7 @@ Continue through the ordinary request review and submission. Extraction alone
 does not create a request or verify a vehicle. A live Qwen call and physical
 camera test must be reported separately from mocked/bundle tests.
 
-Registration scan diagnostics use the prefix `Registration OCR parser=4` in
+Registration scan diagnostics use the prefix `Registration OCR parser=8` in
 the API terminal. They show image count, configured model, completion reason,
 response length, field-shape counts, validation stage and readable field count.
 They never log document text, extracted values, image data or API keys. For a
