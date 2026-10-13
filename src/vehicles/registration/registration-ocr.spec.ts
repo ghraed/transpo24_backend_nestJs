@@ -192,8 +192,9 @@ Paisa da vid (kg)
     brand: { value: 'Ford' },
     model: { value: 'Transit Courier' },
     vin: { value: 'WF0WXXTACWKJ75955' },
-    bodyType: { value: 'Fourgon' },
     emptyWeightKg: { value: 1394 },
     manufactureYear: { value: 2019 },
   });
+  expect(result.fields).not.toHaveProperty('bodyType');
+  expect(result.fields).not.toHaveProperty('transmission');
 });

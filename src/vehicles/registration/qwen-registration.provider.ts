@@ -53,7 +53,7 @@ export class QwenRegistrationProvider {
     const { endpoint, apiKey, model } = this.assertConfigured();
     const structuredVision = /^qwen3-vl-(?:plus|flash)(?:-|$)/.test(model);
     this.logger.log(
-      `Registration OCR parser=7 started images=${images.length} model=${model}`,
+      `Registration OCR parser=8 started images=${images.length} model=${model}`,
     );
     const request = {
       model,
@@ -108,7 +108,7 @@ export class QwenRegistrationProvider {
                       : [
                           {
                             type: 'text',
-                            text: 'Read the original printed vehicle labels in any language. Return only the JSON object with status and fields using the exact English keys specified above and simple values or null. Preserve the full model and printed date. Do not return explanations.',
+                            text: 'Read the original printed vehicle labels in any language. Return only the JSON object with status and fields using the exact field objects specified above, original printed labels, values, units and canonical evidence meanings. Re-read the empty-weight mass row independently of engine displacement. Preserve the full model and printed date. Do not return explanations.',
                           },
                         ]),
                   ],
@@ -116,7 +116,9 @@ export class QwenRegistrationProvider {
               ],
             },
       );
-      const timeout = AbortSignal.timeout(30000);
+      // Reading source labels and units needs more time than six scalar values.
+      // Both attempts still fit within the mobile form's 90-second deadline.
+      const timeout = AbortSignal.timeout(attempt === 0 ? 60000 : 20000);
       const signal = clientSignal
         ? AbortSignal.any([timeout, clientSignal])
         : timeout;
@@ -185,7 +187,7 @@ export class QwenRegistrationProvider {
             ? choice?.finish_reason
             : 'other';
           this.logger.log(
-            `Registration OCR parser=7 response attempt=${attempt + 1} finish=${finish} contentType=${typeof content} chars=${typeof content === 'string' ? content.length : 0}`,
+            `Registration OCR parser=8 response attempt=${attempt + 1} finish=${finish} contentType=${typeof content} chars=${typeof content === 'string' ? content.length : 0}`,
           );
           if (
             choice?.finish_reason !== 'stop' ||
@@ -201,7 +203,7 @@ export class QwenRegistrationProvider {
             stage = 'printed_labels';
             const result = parseRegistrationOcrText(content, images.length);
             this.logger.log(
-              `Registration OCR parser=7 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
+              `Registration OCR parser=8 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
             );
             if (
               !REGISTRATION_FIELDS.some(
@@ -231,12 +233,12 @@ export class QwenRegistrationProvider {
             (name) => typeof fieldObject[name],
           );
           this.logger.log(
-            `Registration OCR parser=7 shape knownFields=${REGISTRATION_FIELDS.filter((name) => Object.hasOwn(fieldObject, name)).length} objectFields=${types.filter((type) => type === 'object').length} stringFields=${types.filter((type) => type === 'string').length}`,
+            `Registration OCR parser=8 shape knownFields=${REGISTRATION_FIELDS.filter((name) => Object.hasOwn(fieldObject, name)).length} objectFields=${types.filter((type) => type === 'object').length} stringFields=${types.filter((type) => type === 'string').length}`,
           );
           stage = 'schema';
-          const result = normalizeRegistrationOutput(raw, images.length);
+          const result = normalizeRegistrationOutput(raw, images.length, true);
           this.logger.log(
-            `Registration OCR parser=7 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
+            `Registration OCR parser=8 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
           );
           if (
             result.status === 'partial' &&
@@ -256,7 +258,7 @@ export class QwenRegistrationProvider {
           return result;
         } catch {
           this.logger.warn(
-            `Registration OCR parser=7 rejected stage=${stage} attempt=${attempt + 1}`,
+            `Registration OCR parser=8 rejected stage=${stage} attempt=${attempt + 1}`,
           );
           if (
             attempt === 0 &&
@@ -320,7 +322,12 @@ function needsIdentityRecovery(result: RegistrationExtraction): boolean {
   if (result.status !== 'partial') return false;
   return (
     result.warnings.some(
-      (warning) => warning.field === 'brand' || warning.field === 'model',
+      (warning) =>
+        warning.field === 'brand' ||
+        warning.field === 'model' ||
+        warning.field === 'swissRegistrationNumber' ||
+        warning.field === 'emptyWeightKg' ||
+        warning.field === 'manufactureYear',
     ) ||
     (result.fields.vin.status !== 'extracted' &&
       result.fields.brand.status === 'extracted' &&

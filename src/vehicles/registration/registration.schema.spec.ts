@@ -21,7 +21,7 @@ describe('registration output schema and semantics', () => {
     expect(result.fields.manufactureYear.value).toBe(2019);
     expect(result.fields.emptyWeightKg.value).toBe(1550);
     expect(result.fields.swissRegistrationNumber.value).toBe('653409643');
-    expect(result.missingFields).toContain('transmission');
+    expect(result.missingFields).toContain('model');
   });
   it('extracts separate make and multi-word model from a combined printed line', () => {
     const raw = syntheticExtraction();
@@ -173,6 +173,258 @@ describe('registration output schema and semantics', () => {
 });
 
 describe('OCR output normalization', () => {
+  it('accepts the registry meaning with its parenthetical source label returned for the Ford document', () => {
+    const result = normalizeRegistrationOutput(
+      {
+        fields: {
+          swissRegistrationNumber: {
+            value: '671.912.676',
+            status: 'extracted',
+            evidence: [
+              {
+                imageIndex: 0,
+                label:
+                  'Stammnummer\nN° matricule\nN. di matricola\nNr. da matricla',
+                printedValue: '671.912.676',
+                unit: null,
+                meaning: 'Swiss vehicle registry identifier (Stammnummer)',
+              },
+            ],
+          },
+        },
+      },
+      1,
+      true,
+    );
+    expect(result.fields.swissRegistrationNumber.value).toBe('671912676');
+    expect(result.fields.swissRegistrationNumber.evidence[0].meaning).toBe(
+      'swiss_registration_number',
+    );
+  });
+  it('handles the actual document evidence, including descriptive category names and a canton beside the date', () => {
+    const result = normalizeRegistrationOutput(
+      {
+        fields: {
+          vin: {
+            ...printedField('VF3 0U5 FVA ES09 9966', 'Fahrgestell-Nr.'),
+            evidence: [
+              {
+                imageIndex: 0,
+                label: 'Fahrgestell-Nr.',
+                printedValue: 'VF3 0U5 FVA ES09 9966',
+                unit: null,
+                meaning: 'chassis number / VIN',
+              },
+            ],
+          },
+          swissRegistrationNumber: {
+            ...printedField('649.403.107', 'Stammnummer'),
+            evidence: [
+              {
+                imageIndex: 0,
+                label: 'Stammnummer',
+                printedValue: '649.403.107',
+                unit: null,
+                meaning: 'Swiss vehicle registration number (Stammnummer)',
+              },
+            ],
+          },
+          brand: {
+            ...printedField(
+              'Peugeot 3008 1.6i Turbo',
+              'Marque et type',
+              null,
+              'make_model',
+            ),
+            value: 'Peugeot',
+          },
+          model: {
+            ...printedField(
+              'Peugeot 3008 1.6i Turbo',
+              'Marque et type',
+              null,
+              'make_model',
+            ),
+            value: '3008 1.6i Turbo',
+          },
+          emptyWeightKg: printedField(
+            '**1607',
+            'Leergewicht Poids à vide Peso a vuoto Paisa da vid',
+            'kg',
+            'empty_weight',
+          ),
+          manufactureYear: printedField(
+            '13.06.2014 AG',
+            '1. Inverkehrsetzung',
+            null,
+            'first_registration_date',
+          ),
+        },
+      },
+      1,
+      true,
+    );
+    expect(result.status).toBe('extracted');
+    expect(result.fields).toMatchObject({
+      vin: { value: 'VF30U5FVAES099966' },
+      swissRegistrationNumber: { value: '649403107' },
+      emptyWeightKg: { value: 1607 },
+      manufactureYear: { value: 2014 },
+    });
+    expect(result.fields.manufactureYear.evidence[0].printedValue).toBe(
+      '13.06.2014 AG',
+    );
+  });
+  it('refuses an unsubstantiated plausible number in live extraction instead of treating engine displacement as weight', () => {
+    const result = normalizeRegistrationOutput(
+      {
+        fields: {
+          brand: 'Peugeot',
+          model: '3008 1.6i Turbo',
+          emptyWeightKg: 1598,
+          manufactureYear: 2014,
+        },
+      },
+      1,
+      true,
+    );
+    expect(result.fields.emptyWeightKg).toMatchObject({
+      value: null,
+      status: 'ambiguous',
+    });
+    expect(result.fields.manufactureYear.value).toBeNull();
+    expect(result.warnings).toContainEqual({
+      code: 'EVIDENCE_MISSING',
+      field: 'emptyWeightKg',
+    });
+  });
+  it.each([
+    'Leergewicht',
+    'Poids à vide',
+    'الوزن الفارغ',
+    '空车重量',
+    'Снаряжённая масса',
+    'Boş ağırlık',
+  ])(
+    'validates source meaning and mass units independent of label language: %s',
+    (label) => {
+      const raw = syntheticExtraction();
+      raw.fields.emptyWeightKg = printedField(
+        '**1607',
+        label,
+        'kg',
+        'empty_weight',
+      );
+      raw.fields.manufactureYear = printedField(
+        '13.06.2014',
+        '首次登记日期',
+        null,
+        'first_registration_date',
+      );
+      const result = normalizeRegistrationOutput(raw, 1, true);
+      expect(result.fields.emptyWeightKg.value).toBe(1607);
+      expect(result.fields.manufactureYear.value).toBe(2014);
+      expect(result.fields.emptyWeightKg.evidence[0].label).toBe(label);
+    },
+  );
+  it.each(['engine_displacement', 'gross_weight', 'payload', 'other'] as const)(
+    'rejects a source classified as %s instead of empty weight',
+    (meaning) => {
+      const raw = syntheticExtraction();
+      raw.fields.emptyWeightKg = printedField(
+        '1598',
+        '原始字段',
+        'kg',
+        meaning,
+      );
+      expect(
+        normalizeRegistrationOutput(raw, 1, true).fields.emptyWeightKg.value,
+      ).toBeNull();
+    },
+  );
+  it.each(['cm³', 'cm3', 'cc', 'L', 'kW'])(
+    'rejects a non-mass unit even if the model calls the source empty weight: %s',
+    (unit) => {
+      const raw = syntheticExtraction();
+      raw.fields.emptyWeightKg = printedField(
+        '1598',
+        '原始字段',
+        unit,
+        'empty_weight',
+      );
+      expect(
+        normalizeRegistrationOutput(raw, 1, true).fields.emptyWeightKg.value,
+      ).toBeNull();
+    },
+  );
+  it('rejects a visibly labelled displacement row even if its semantic kind and mass unit are incorrectly reported', () => {
+    const raw = syntheticExtraction();
+    raw.fields.emptyWeightKg = printedField(
+      '1598',
+      'Hubraum / Cylindrée',
+      'kg',
+      'empty_weight',
+    );
+    expect(
+      normalizeRegistrationOutput(raw, 1, true).fields.emptyWeightKg.value,
+    ).toBeNull();
+  });
+  it('takes the printed mass evidence rather than a mismatched scalar estimate', () => {
+    const raw = syntheticExtraction();
+    raw.fields.emptyWeightKg = {
+      ...printedField('**1607', 'Poids à vide', 'kg', 'empty_weight'),
+      value: '1598',
+    };
+    expect(
+      normalizeRegistrationOutput(raw, 1, true).fields.emptyWeightKg.value,
+    ).toBe(1607);
+  });
+  it('validates a registry identifier with a semantically mapped foreign label', () => {
+    const raw = syntheticExtraction();
+    raw.fields.swissRegistrationNumber = printedField(
+      '649.403.107',
+      'رقم التسجيل السويسري',
+      null,
+      'swiss_registration_number',
+    );
+    expect(
+      normalizeRegistrationOutput(raw, 1, true).fields.swissRegistrationNumber
+        .value,
+    ).toBe('649403107');
+  });
+  it('returns only the six requested fields even if the model adds other vehicle details', () => {
+    const result = normalizeRegistrationOutput(
+      {
+        fields: {
+          vin: 'WF0WXXTACWKJ75955',
+          brand: 'Ford',
+          model: 'Transit Courier',
+          emptyWeightKg: 1394,
+          manufactureYear: '30.12.2019',
+          bodyType: 'Fourgon',
+          transmission: 'MANUAL',
+          color: 'white',
+        },
+      },
+      1,
+    );
+    expect(Object.keys(result.fields)).toEqual([
+      'vin',
+      'swissRegistrationNumber',
+      'brand',
+      'model',
+      'manufactureYear',
+      'emptyWeightKg',
+    ]);
+    expect(result.fields.swissRegistrationNumber.value).toBeNull();
+    expect(
+      result.warnings.some(
+        (w) => w.field && !Object.hasOwn(result.fields, w.field),
+      ),
+    ).toBe(false);
+    expect(REGISTRATION_PROMPT).not.toContain('"bodyType"');
+    expect(REGISTRATION_PROMPT).not.toContain('"transmission"');
+  });
   it('retains readable fields when an unrelated field is malformed or omitted', () => {
     const raw = syntheticExtraction();
     raw.fields.vin = printedField('WDD1770511N100321', 'VIN');
@@ -182,22 +434,22 @@ describe('OCR output normalization', () => {
       ...printedField('1550', 'Leergewicht', 'kg'),
       value: 1550,
     } as unknown as typeof raw.fields.emptyWeightKg;
-    raw.fields.transmission = {
+    raw.fields.swissRegistrationNumber = {
       value: {},
       status: 'extracted',
       evidence: [],
-    } as unknown as typeof raw.fields.transmission;
-    delete raw.fields.bodyType;
+    } as unknown as typeof raw.fields.swissRegistrationNumber;
+    delete raw.fields.manufactureYear;
     const result = normalizeRegistrationOutput(raw, 1);
     expect(result.fields.vin.value).toBe('WDD1770511N100321');
     expect(result.fields.brand.value).toBe('Ford');
     expect(result.fields.model.value).toBe('Transit Courier');
     expect(result.fields.emptyWeightKg.value).toBe(1550);
-    expect(result.fields.transmission.value).toBeNull();
-    expect(result.fields.bodyType.value).toBeNull();
+    expect(result.fields.swissRegistrationNumber.value).toBeNull();
+    expect(result.fields.manufactureYear.value).toBeNull();
     expect(result.warnings).toContainEqual({
       code: 'FIELD_REVIEW_REQUIRED',
-      field: 'transmission',
+      field: 'swissRegistrationNumber',
     });
   });
   it('never fabricates evidence or a weight unit for flat or incomplete OCR details', () => {
@@ -219,8 +471,9 @@ describe('OCR output normalization', () => {
     expect(REGISTRATION_PROMPT).not.toContain(
       'extracted|partial|wrong_document|unreadable',
     );
-    expect(REGISTRATION_PROMPT).toContain('Use simple values');
-    expect(REGISTRATION_PROMPT).toContain('Leergewicht');
+    expect(REGISTRATION_PROMPT).toContain('meaning');
+    expect(REGISTRATION_PROMPT).toContain('ANY language');
+    expect(REGISTRATION_PROMPT).toContain('cm³');
   });
 });
 
@@ -251,7 +504,6 @@ it('maps the compact OCR contract to typed fields without inventing evidence', (
         model: 'Transit Courier',
         emptyWeightKg: 1550,
         manufactureYear: null,
-        transmission: null,
       },
     },
     1,

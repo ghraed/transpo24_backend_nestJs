@@ -89,8 +89,18 @@ describe('Qwen registration adapter', () => {
             brand: 'Ford',
             model: 'Transit Courier',
             vin: 'WF0WXXTACWKJ75955',
-            emptyWeightKg: 1349,
-            manufactureYear: '30.12.2019',
+            emptyWeightKg: printedField(
+              '1349',
+              'Leergewicht',
+              'kg',
+              'empty_weight',
+            ),
+            manufactureYear: printedField(
+              '30.12.2019',
+              '1. Inverkehrsetzung',
+              null,
+              'first_registration_date',
+            ),
           },
         }),
       ),
@@ -108,9 +118,92 @@ describe('Qwen registration adapter', () => {
       (fetchMock.mock.calls[0][1] as RequestInit).body as string,
     ) as { messages: { content: { text?: string }[] }[] };
     expect(body.messages[0].content.at(-1)?.text).toBe(REGISTRATION_OCR_PROMPT);
-    expect(REGISTRATION_OCR_PROMPT).toContain('any language');
+    expect(REGISTRATION_OCR_PROMPT).toContain('ANY language');
     expect(REGISTRATION_OCR_PROMPT).not.toContain('WF0WXXTACWKJ75955');
     expect(REGISTRATION_OCR_PROMPT).not.toContain('1349');
+  });
+  it.each(['bare number', 'volume evidence'])(
+    're-reads a rejected displacement value from %s and fills the printed empty weight',
+    async (source) => {
+      fetchMock
+        .mockResolvedValueOnce(
+          reply(
+            JSON.stringify({
+              fields: {
+                vin: 'VF3 0U5 FVA ES09 9966',
+                swissRegistrationNumber: '649.403.107',
+                brand: 'Peugeot',
+                model: '3008 1.6i Turbo',
+                manufactureYear: printedField(
+                  '13.06.2014',
+                  '1re mise en circulation',
+                  null,
+                  'first_registration_date',
+                ),
+                emptyWeightKg:
+                  source === 'bare number'
+                    ? 1598
+                    : printedField(
+                        '1598',
+                        'Cylindrée',
+                        'cm³',
+                        'engine_displacement',
+                      ),
+              },
+            }),
+          ),
+        )
+        .mockResolvedValueOnce(
+          reply(
+            JSON.stringify({
+              fields: {
+                emptyWeightKg: printedField(
+                  '**1607',
+                  'Leergewicht / Poids à vide',
+                  'kg',
+                  'empty_weight',
+                ),
+              },
+            }),
+          ),
+        );
+      const result = await make().extract([Buffer.alloc(1)]);
+      expect(result.fields.vin.value).toBe('VF30U5FVAES099966');
+      expect(result.fields.swissRegistrationNumber.value).toBe('649403107');
+      expect(result.fields.emptyWeightKg).toMatchObject({
+        value: 1607,
+        status: 'extracted',
+      });
+      expect(result.fields.emptyWeightKg.evidence[0].meaning).toBe(
+        'empty_weight',
+      );
+      expect(result.fields.manufactureYear.value).toBe(2014);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
+  it('keeps a weight empty when both model responses substitute engine capacity', async () => {
+    fetchMock.mockImplementation(async () =>
+      reply(
+        JSON.stringify({
+          fields: {
+            vin: 'VF30U5FVAES099966',
+            brand: 'Peugeot',
+            model: '3008 1.6i Turbo',
+            emptyWeightKg: printedField(
+              '1598',
+              'Cylindrée',
+              'cm³',
+              'engine_displacement',
+            ),
+          },
+        }),
+      ),
+    );
+    const result = await make().extract([Buffer.alloc(1)]);
+    expect(result.fields.emptyWeightKg.value).toBeNull();
+    expect(result.fields.model.value).toBe('3008 1.6i Turbo');
+    expect(result.status).toBe('partial');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
   it('retries a valid response that discarded every field, with a multilingual format correction', async () => {
     fetchMock
@@ -159,8 +252,18 @@ describe('Qwen registration adapter', () => {
               vin: null,
               brand: 'fahrgetell-Nr',
               model: 'Fourgon',
-              emptyWeightKg: 1349,
-              manufactureYear: '30.12.2019',
+              emptyWeightKg: printedField(
+                '1349',
+                'Leergewicht',
+                'kg',
+                'empty_weight',
+              ),
+              manufactureYear: printedField(
+                '30.12.2019',
+                '1. Inverkehrsetzung',
+                null,
+                'first_registration_date',
+              ),
             },
           }),
         ),
@@ -177,7 +280,6 @@ describe('Qwen registration adapter', () => {
       vin: { value: 'WF0WXXTACWKJ75955', status: 'extracted' },
       brand: { value: 'FORD TRANSIT COURIER', status: 'extracted' },
       model: { value: 'FORD TRANSIT COURIER', status: 'extracted' },
-      bodyType: { value: 'Fourgon', status: 'extracted' },
       emptyWeightKg: { value: 1349 },
       manufactureYear: { value: 2019 },
     });
@@ -220,8 +322,18 @@ describe('Qwen registration adapter', () => {
             fields: {
               brand: 'fahrgetell-Nr',
               model: 'Fourgon',
-              emptyWeightKg: 1349,
-              manufactureYear: '30.12.2019',
+              emptyWeightKg: printedField(
+                '1349',
+                'Leergewicht',
+                'kg',
+                'empty_weight',
+              ),
+              manufactureYear: printedField(
+                '30.12.2019',
+                '1. Inverkehrsetzung',
+                null,
+                'first_registration_date',
+              ),
             },
           }),
         ),
@@ -405,7 +517,12 @@ it('accepts compact OCR details through the provider without a second request', 
                   brand: 'Ford',
                   model: 'Transit Courier',
                   vin: 'WF0WXXTACWKJ75955',
-                  emptyWeightKg: 1550,
+                  emptyWeightKg: printedField(
+                    '1550',
+                    'Leergewicht',
+                    'kg',
+                    'empty_weight',
+                  ),
                 },
               }),
             },

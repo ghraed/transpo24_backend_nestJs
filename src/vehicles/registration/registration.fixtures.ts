@@ -1,4 +1,7 @@
-import { REGISTRATION_FIELDS } from './registration.types';
+import {
+  REGISTRATION_FIELDS,
+  type RegistrationEvidence,
+} from './registration.types';
 
 // Synthetic structured output only; no real documents or personal information.
 export function syntheticExtraction() {
@@ -10,12 +13,7 @@ export function syntheticExtraction() {
         {
           value: null as string | null,
           status: 'missing',
-          evidence: [] as {
-            imageIndex: number;
-            label: string;
-            printedValue: string;
-            unit: string | null;
-          }[],
+          evidence: [] as RegistrationEvidence[],
         },
       ]),
     ),
@@ -25,10 +23,19 @@ export function printedField(
   value: string,
   label = 'Make',
   unit: string | null = null,
+  meaning?: RegistrationEvidence['meaning'],
 ) {
   return {
     value,
     status: 'extracted',
-    evidence: [{ imageIndex: 0, label, printedValue: value, unit }],
+    evidence: [
+      {
+        imageIndex: 0,
+        label,
+        printedValue: value,
+        unit,
+        ...(meaning ? { meaning } : {}),
+      },
+    ],
   };
 }

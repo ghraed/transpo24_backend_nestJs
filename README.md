@@ -329,11 +329,17 @@ preserving already validated weight/year values; a failed recovery still returns
 the validated partial result. Swiss multilingual row labels and leading weight
 padding asterisks are supported without guessing missing or ambiguous digits.
 Image pixel limits are raised to preserve small printed characters.
-Direct values and legacy evidence objects are both accepted. VIN, Swiss number,
-year and weight are checked for format and range; invalid fields stay empty
-without discarding readable fields. Evidence is retained when supplied and
-never fabricated. Weight and year are extracted only when explicitly printed,
-as instructed in the OCR prompt; users review the filled fields.
+Qwen first identifies each source field's meaning in any language, then returns
+the original label, printed value, unit and semantic category as evidence.
+The live provider requires evidence for weight and year; a plausible scalar
+number alone is never enough. Weight must come from an empty-weight source with
+a mass unit, so displacement in cm³, power, payload and gross weight cannot fill
+it. Original labels may be in any language when their semantic category is
+supplied. Legacy known-label evidence remains supported. The backend derives
+weight/year from the printed evidence and checks format, range, conflicting
+values and image references. Invalid fields stay empty without discarding
+readable fields. Evidence is retained and never fabricated. The provider allows
+60 seconds for the first read and 20 for recovery within the mobile deadline.
 A different configured model must support image inputs and the extraction schema.
 
 Successful HTTP responses use status **201** and this contract:
@@ -343,7 +349,7 @@ type RegistrationExtraction = {
   status: 'extracted' | 'partial' | 'wrong_document' | 'unreadable';
   fields: Record<
     'vin' | 'swissRegistrationNumber' | 'brand' | 'model' |
-    'manufactureYear' | 'emptyWeightKg' | 'bodyType' | 'transmission',
+    'manufactureYear' | 'emptyWeightKg',
     {
       value: string | number | null;
       status: 'extracted' | 'missing' | 'ambiguous' | 'invalid';
@@ -352,6 +358,7 @@ type RegistrationExtraction = {
         label: string;
         printedValue: string;
         unit: string | null;
+        meaning?: string; // canonical source meaning, e.g. empty_weight
       }[];
     }
   >;
@@ -360,7 +367,7 @@ type RegistrationExtraction = {
 };
 ```
 
-All eight fields are always returned. Year and empty weight use numbers when
+Only these six fields are extracted and returned. The Swiss registration number is optional and remains null when absent. Year and empty weight use numbers when
 usable; other values use strings. Missing/uncertain values are null. Older or
 nonstandard chassis numbers are not applied; evidence-backed values can retain
 `invalid` status and a warning for review. Evidence, when available, uses the
