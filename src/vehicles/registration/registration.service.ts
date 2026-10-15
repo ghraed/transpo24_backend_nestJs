@@ -1,5 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import sharp from 'sharp';
+import { renderRegistrationPdf } from './registration-pdf';
+import { MAX_REGISTRATION_PAGES } from './registration.types';
 import { VehiclesService } from '../vehicles.service';
 import { separatePrintedMakeModel } from './registration-ocr';
 import { scanError } from './registration.errors';
@@ -27,6 +29,22 @@ export class RegistrationService {
         )
           throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
         const b = file.buffer;
+        if (b.toString('ascii', 0, 5) === '%PDF-') {
+          try {
+            images.push(
+              ...(await renderRegistrationPdf(
+                b,
+                MAX_REGISTRATION_PAGES - images.length,
+                signal,
+              )),
+            );
+          } catch {
+            throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
+          }
+          continue;
+        }
+        if (images.length >= MAX_REGISTRATION_PAGES)
+          throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
         const jpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
         const png = b
           .subarray(0, 8)
@@ -76,7 +94,7 @@ export class RegistrationService {
               withoutEnlargement: true,
             })
             .flatten({ background: '#ffffff' })
-            .jpeg({ quality: 85, chromaSubsampling: '4:4:4' })
+            .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
             .toBuffer();
           if (normalized.length > MAX_REGISTRATION_IMAGE_BYTES)
             throw new Error();

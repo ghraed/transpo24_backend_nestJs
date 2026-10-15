@@ -652,3 +652,35 @@ it('accepts a visibly labeled VIN without correcting ambiguous characters', () =
     ).fields.vin.value,
   ).toBeNull();
 });
+
+it('accepts evidence on the third PDF page and rejects evidence outside the actual page count', () => {
+  const raw = syntheticExtraction();
+  raw.fields.vin = printedField('WDD1770511N100321', 'E', null, 'vin');
+  raw.fields.vin.evidence[0].imageIndex = 2;
+  expect(validateExtraction(raw, 3).fields.vin.status).toBe('extracted');
+  expect(() => validateExtraction(raw, 2)).toThrow();
+});
+
+it('normalizes the brand semantic category without discarding a readable make', () => {
+  const raw = syntheticExtraction();
+  raw.fields.brand = printedField('Example Make', 'D.1');
+  (raw.fields.brand.evidence[0] as { meaning?: string }).meaning = 'brand';
+  expect(normalizeRegistrationOutput(raw, 1).fields.brand).toMatchObject({
+    value: 'Example Make',
+    status: 'extracted',
+  });
+});
+it.each([
+  ['1M8GDM9AXKP042788', 'extracted'],
+  ['1M8GDM9A6KP042788', 'invalid'],
+  ['WF0WXXTACWKJ75955', 'extracted'],
+])(
+  'flags North American checksum errors without changing printed characters: %s',
+  (vin, status) => {
+    const raw = syntheticExtraction();
+    raw.fields.vin = printedField(vin, 'VIN', null, 'vin');
+    const result = normalizeRegistrationOutput(raw, 1);
+    expect(result.fields.vin).toMatchObject({ value: vin, status });
+    expect(result.fields.vin.evidence[0].printedValue).toBe(vin);
+  },
+);

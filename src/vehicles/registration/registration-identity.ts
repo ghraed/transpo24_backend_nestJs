@@ -25,3 +25,20 @@ export function printedVin(value: string): string {
     .replace(/\s/g, '')
     .toUpperCase();
 }
+
+/** Flag transcription errors for North American VINs; never repair a digit.
+ * Algorithm: 49 CFR 565.15(c). Other regions may use a different ninth character.
+ */
+export function northAmericanVinChecksumMismatch(vin: string): boolean {
+  if (!/^[1-5][A-HJ-NPR-Z0-9]{16}$/.test(vin)) return false;
+  const groups = ['AJ', 'BKS', 'CLT', 'DMU', 'ENV', 'FW', 'GPX', 'HY', 'RZ'];
+  const weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+  const remainder =
+    [...vin].reduce((sum, character, index) => {
+      const value = /\d/.test(character)
+        ? Number(character)
+        : groups.findIndex((group) => group.includes(character)) + 1;
+      return sum + value * weights[index];
+    }, 0) % 11;
+  return vin[8] !== (remainder === 10 ? 'X' : String(remainder));
+}

@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpException } from '@nestjs/common';
 import { scanError } from './registration.errors';
-import { normalizeRegistrationOutput } from './registration.schema';
+import {
+  normalizeRegistrationOutput,
+  REGISTRATION_JSON_SCHEMA,
+} from './registration.schema';
 import {
   REGISTRATION_OCR_PROMPT,
   REGISTRATION_IDENTITY_RETRY_PROMPT,
@@ -23,7 +26,7 @@ export class QwenRegistrationProvider {
     const apiKey = this.config.get<string>('QWEN_API_KEY')?.trim();
     const base = this.config.get<string>('QWEN_BASE_URL')?.trim();
     const model =
-      this.config.get<string>('QWEN_MODEL')?.trim() || 'qwen3-vl-plus';
+      this.config.get<string>('QWEN_MODEL')?.trim() || 'qwen3.7-plus';
     try {
       if (!apiKey || !base || /replace_with|your.*key/i.test(apiKey))
         throw new Error();
@@ -52,9 +55,10 @@ export class QwenRegistrationProvider {
     clientSignal?: AbortSignal,
   ): Promise<RegistrationExtraction> {
     const { endpoint, apiKey, model } = this.assertConfigured();
-    const structuredVision = /^qwen3-vl-(?:plus|flash)(?:-|$)/.test(model);
+    const structuredVision =
+      /^qwen(?:3-vl|3\.[567])-(?:plus|flash)(?:-|$)/.test(model);
     this.logger.log(
-      `Registration OCR parser=8 started images=${images.length} model=${model}`,
+      `Registration OCR parser=9 started images=${images.length} model=${model}`,
     );
     const request = {
       model,
@@ -64,7 +68,9 @@ export class QwenRegistrationProvider {
         ? {
             enable_thinking: false,
             temperature: 0,
-            response_format: { type: 'json_object' },
+            response_format: /^qwen3\.7-(?:plus|flash)(?:-|$)/.test(model)
+              ? { type: 'json_schema', json_schema: REGISTRATION_JSON_SCHEMA }
+              : { type: 'json_object' },
           }
         : {}),
       messages: [
@@ -85,6 +91,7 @@ export class QwenRegistrationProvider {
         },
       ],
     };
+    const deadline = Date.now() + 120_000;
     let recoveryCandidate: RegistrationExtraction | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
       const candidate = recoveryCandidate;
@@ -98,6 +105,10 @@ export class QwenRegistrationProvider {
           ? request
           : {
               ...request,
+              ...(recoveryCandidate &&
+              /^qwen3\.7-(?:plus|flash)(?:-|$)/.test(model)
+                ? { enable_thinking: true, thinking_budget: 1024 }
+                : {}),
               messages: [
                 {
                   ...request.messages[0],
@@ -127,8 +138,19 @@ export class QwenRegistrationProvider {
               ],
             },
       );
+      // Multi-page documents need more first-pass time; all attempts share 120s.
       // Leave 30 seconds for upload/normalization within the mobile's 150s budget.
-      const timeout = AbortSignal.timeout(attempt === 0 ? 75000 : 45000);
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        if (recoveryCandidate) return recoveryCandidate;
+        throw scanError('REGISTRATION_TIMEOUT', 504);
+      }
+      const timeout = AbortSignal.timeout(
+        Math.min(
+          attempt === 0 ? (images.length > 2 ? 120_000 : 75_000) : 45_000,
+          remaining,
+        ),
+      );
       const attemptStarted = Date.now();
       this.logger.log(
         `Registration OCR attempt=${attempt + 1} requestBytes=${Buffer.byteLength(body)}`,
@@ -204,7 +226,7 @@ export class QwenRegistrationProvider {
             ? choice?.finish_reason
             : 'other';
           this.logger.log(
-            `Registration OCR parser=8 response attempt=${attempt + 1} finish=${finish} contentType=${typeof content} chars=${typeof content === 'string' ? content.length : 0}`,
+            `Registration OCR parser=9 response attempt=${attempt + 1} finish=${finish} contentType=${typeof content} chars=${typeof content === 'string' ? content.length : 0}`,
           );
           if (
             choice?.finish_reason !== 'stop' ||
@@ -220,7 +242,7 @@ export class QwenRegistrationProvider {
             stage = 'printed_labels';
             const result = parseRegistrationOcrText(content, images.length);
             this.logger.log(
-              `Registration OCR parser=8 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
+              `Registration OCR parser=9 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
             );
             if (
               !REGISTRATION_FIELDS.some(
@@ -250,12 +272,12 @@ export class QwenRegistrationProvider {
             (name) => typeof fieldObject[name],
           );
           this.logger.log(
-            `Registration OCR parser=8 shape knownFields=${REGISTRATION_FIELDS.filter((name) => Object.hasOwn(fieldObject, name)).length} objectFields=${types.filter((type) => type === 'object').length} stringFields=${types.filter((type) => type === 'string').length}`,
+            `Registration OCR parser=9 shape knownFields=${REGISTRATION_FIELDS.filter((name) => Object.hasOwn(fieldObject, name)).length} objectFields=${types.filter((type) => type === 'object').length} stringFields=${types.filter((type) => type === 'string').length}`,
           );
           stage = 'schema';
           const result = normalizeRegistrationOutput(raw, images.length, true);
           this.logger.log(
-            `Registration OCR parser=8 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
+            `Registration OCR parser=9 accepted status=${result.status} readableFields=${REGISTRATION_FIELDS.filter((name) => result.fields[name].status === 'extracted').length}`,
           );
           if (
             result.status === 'partial' &&
@@ -275,7 +297,7 @@ export class QwenRegistrationProvider {
           return result;
         } catch {
           this.logger.warn(
-            `Registration OCR parser=8 rejected stage=${stage} attempt=${attempt + 1}`,
+            `Registration OCR parser=9 rejected stage=${stage} attempt=${attempt + 1}`,
           );
           if (
             attempt === 0 &&

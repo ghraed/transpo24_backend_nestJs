@@ -49,15 +49,67 @@ describe('Qwen registration adapter', () => {
       messages: { content: { image_url?: { url: string } }[] }[];
     };
     expect(body).toMatchObject({
-      model: 'qwen3-vl-plus',
+      model: 'qwen3.7-plus',
       enable_thinking: false,
       temperature: 0,
-      response_format: { type: 'json_object' },
+      response_format: {
+        type: 'json_schema',
+        json_schema: expect.objectContaining({ strict: true }),
+      },
     });
     expect(body.messages[0].content[0].image_url?.url).toBe(
       'data:image/jpeg;base64,c3ludGhldGlj',
     );
     expect(body.messages[0].content[0]).not.toHaveProperty('max_pixels');
+  });
+  it.each([
+    'qwen3.7-plus',
+    'qwen3.7-plus-2026-05-26',
+    'qwen3.7-flash',
+    'qwen3-vl-plus',
+  ])('uses non-thinking structured JSON for %s', async (model) => {
+    await make({ QWEN_MODEL: model }).extract([Buffer.from('synthetic')]);
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(body).toMatchObject({
+      model,
+      enable_thinking: false,
+      temperature: 0,
+      response_format: model.startsWith('qwen3.7-')
+        ? {
+            type: 'json_schema',
+            json_schema: expect.objectContaining({ strict: true }),
+          }
+        : { type: 'json_object' },
+    });
+    expect(body.messages[0].content[0]).not.toHaveProperty('max_pixels');
+  });
+  it('keeps a readable VIN when the model describes its evidence as chassis/VIN', async () => {
+    const result = syntheticExtraction();
+    result.fields.vin = printedField('WDD1770511N100321', 'رقم الهيكل');
+    (result.fields.vin.evidence[0] as { meaning?: string }).meaning =
+      'chassis/VIN';
+    result.fields.brand = printedField('Example Make');
+    result.fields.model = printedField('Example Model');
+    fetchMock.mockResolvedValueOnce(reply(JSON.stringify(result)));
+    const output = await make().extract([Buffer.from('synthetic')]);
+    expect(output.fields.vin).toMatchObject({
+      value: 'WDD1770511N100321',
+      status: 'extracted',
+    });
+    expect(output.fields.vin.evidence[0].meaning).toBe('vin');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('allows a three-page document a longer first pass within the total server budget', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    await make().extract([
+      Buffer.from('page1'),
+      Buffer.from('page2'),
+      Buffer.from('page3'),
+    ]);
+    expect(timeout.mock.calls[0][0]).toBeGreaterThan(75_000);
+    expect(timeout.mock.calls[0][0]).toBeLessThanOrEqual(120_000);
   });
   it('keeps OCR-specific parameters only for an explicitly configured OCR model', async () => {
     await make({ QWEN_MODEL: 'qwen-vl-ocr' }).extract([Buffer.alloc(1)]);
@@ -341,8 +393,12 @@ describe('Qwen registration adapter', () => {
     ) as {
       messages: { content: { text?: string }[] }[];
     };
+    expect(retry).toMatchObject({
+      enable_thinking: true,
+      thinking_budget: 1024,
+    });
     expect(retry.messages[0].content.at(-1)?.text).toContain(
-      'Re-read ONLY the make, model and chassis/VIN',
+      'Re-read missing or invalid fields',
     );
   });
   it.each(['unreadable response', 'timeout', 'unavailable'])(

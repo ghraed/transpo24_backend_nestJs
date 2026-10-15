@@ -1,3 +1,5 @@
+export const MAX_REGISTRATION_PAGES = 6;
+
 export const REGISTRATION_FIELDS = [
   'vin',
   'swissRegistrationNumber',

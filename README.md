@@ -286,8 +286,8 @@ deployment environment. Automated tests cannot certify those external systems.
 
 The customer vehicle form uploads registration-card photos to
 `POST /vehicles/extract-registration`. The endpoint requires an active customer
-Bearer token and accepts multipart `images` (one or two images, at most 8 MiB
-each). It rejects extra fields, image URLs and caller-supplied user/tenant IDs.
+Bearer token and accepts multipart `images` (one or two JPEG/PNG/WebP/PDF files, at most 8 MiB
+each and six rendered pages total). It rejects extra fields, image URLs and caller-supplied user/tenant IDs.
 This branch has customer ownership boundaries rather than a tenant identifier;
 the rate-limit identity comes exclusively from the authenticated customer.
 
@@ -296,7 +296,7 @@ Configure these **backend-only** variables locally or in the server environment:
 ```dotenv
 QWEN_API_KEY=<your Model Studio API key>
 QWEN_BASE_URL=<the HTTPS OpenAI-compatible base URL for your region/workspace>
-QWEN_MODEL=qwen3-vl-plus
+QWEN_MODEL=qwen3.7-plus
 ```
 
 The base URL must omit `/chat/completions`; the adapter appends that path. There
@@ -308,9 +308,17 @@ Never place these variables in either mobile app or an `EXPO_PUBLIC_` variable.
 Scanning returns `REGISTRATION_CONFIGURATION` when unavailable; other features
 continue to operate. Native `fetch` sends Base64 JPEG inputs with a structured extraction prompt,
 following the [Qwen-OCR API reference](https://www.alibabacloud.com/help/en/model-studio/qwen-vl-ocr-api-reference).
-The default `qwen3-vl-plus` model interprets registration-card rows and returns
-structured JSON with thinking disabled, following the
+The default `qwen3.7-plus` model interprets registration-card rows and returns
+structured JSON Schema output with thinking disabled on the first pass, following the
 [Qwen structured-output reference](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output).
+Qwen3.7 Plus/Flash use strict JSON Schema output; Qwen3.5/3.6 and Qwen3-VL
+Plus/Flash use JSON Object mode, with thinking disabled on the first pass. A Qwen3.7 recovery pass uses
+a bounded 1,024-token thinking budget to re-read invalid or uncertain fields.
+North American VIN checksum mismatches are flagged for review without repairing
+or guessing a character; other regions retain the standard VIN format checks.
+PDFs are rasterized locally, with up to six pages total across two uploads (8 MB per file).
+The model interprets source labels/legends in any language, including EU field codes;
+unknown or conflicting values stay empty.
 OCR-only models remain configurable, but their plain transcription can confuse
 adjacent rows or VIN characters. The OCR-specific `max_pixels` option is sent
 only to OCR models; it is excluded from structured vision requests.

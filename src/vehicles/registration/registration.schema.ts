@@ -18,17 +18,19 @@ import { printedDigits, registrationYear } from './registration-values';
 import {
   invalidRegistrationIdentity,
   printedVin,
+  northAmericanVinChecksumMismatch,
 } from './registration-identity';
 import {
   REGISTRATION_FIELDS,
   REGISTRATION_EVIDENCE_MEANINGS,
   RegistrationEvidence,
+  MAX_REGISTRATION_PAGES,
   RegistrationExtraction,
   RegistrationField,
 } from './registration.types';
 
 class EvidenceDto {
-  @IsInt() @Min(0) @Max(1) imageIndex!: number;
+  @IsInt() @Min(0) @Max(MAX_REGISTRATION_PAGES - 1) imageIndex!: number;
   @IsString() @MaxLength(120) label!: string;
   @IsString() @MaxLength(160) printedValue!: string;
   @ValidateIf((_object, value: unknown) => value !== null)
@@ -85,8 +87,10 @@ const swissLabel =
 function evidenceMeaning(value: unknown): unknown {
   if (typeof value !== 'string') return value;
   const aliases: Record<string, RegistrationEvidence['meaning']> = {
-    'chassis number / vin': 'vin',
-    'vin / chassis number': 'vin',
+    'chassis number/vin': 'vin',
+    'vin/chassis number': 'vin',
+    'chassis/vin': 'vin',
+    'vin/chassis': 'vin',
     'chassis number': 'vin',
     'vehicle identification number': 'vin',
     'swiss vehicle registration number (stammnummer)':
@@ -105,11 +109,14 @@ function evidenceMeaning(value: unknown): unknown {
     'make and model': 'make_model',
     'make/model': 'make_model',
     manufacturer: 'make',
+    brand: 'make',
     'engine displacement': 'engine_displacement',
     'gross weight': 'gross_weight',
     'document issue date': 'document_date',
   };
-  const normalized = key(value).replace(/\s*\((?:stammnummer|vin)\)$/, '');
+  const normalized = key(value)
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s*\((?:stammnummer|vin)\)$/, '');
   return (
     aliases[normalized] ??
     (REGISTRATION_EVIDENCE_MEANINGS.includes(
@@ -309,7 +316,10 @@ export function validateExtraction(
         reject();
       else {
         field.value = vin;
-        if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
+        if (
+          !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin) ||
+          northAmericanVinChecksumMismatch(vin)
+        ) {
           field.status = 'invalid';
           warnings.push({ code: 'VIN_REVIEW_REQUIRED', field: name });
         }
@@ -540,7 +550,11 @@ function directRegistrationField(
     return field;
   if (name === 'vin') {
     value = printedVin(value);
-    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(value)) return field;
+    if (
+      !/^[A-HJ-NPR-Z0-9]{17}$/.test(value) ||
+      northAmericanVinChecksumMismatch(value)
+    )
+      return field;
   } else if (name === 'swissRegistrationNumber') {
     value = value.replace(/[\s.]/g, '');
     if (!/^\d{9}$/.test(value)) return field;
@@ -569,7 +583,71 @@ On Arabic registration cards, الماركة is make, طرازها/الطراز 
 First find the source row and its label. Then transcribe its associated value and unit. Check that the label, value and unit belong to the SAME row or cell, including wrapped text. Do not shift a value from an adjacent row or column. Labels are never field values.
 vin: Read the chassis/VIN field character by character, preserving the complete printed string in evidence, including spaces. The normalized value has 17 uppercase letters/digits without spaces. Do not add, remove or guess characters to achieve this length. If a character is unclear, mark the field ambiguous.
 swissRegistrationNumber: The Swiss vehicle registry identifier (Stammnummer or its equivalent), NOT the licence plate or type-approval code. Keep the printed separators in evidence; the value contains nine digits.
+On EU registration certificates, harmonized codes E, D.1, D.3, G and B identify VIN, make, commercial model, mass in service (kg), and first registration date. Use the printed legend, including another page if supplied, to interpret coded fields. Prefer the commercial model (D.3) over type/variant/version codes (D.2). A printed mass range is uncertain; never select an endpoint or average.
 brand: The manufacturer only. model: The COMPLETE model including printed engine/trim wording, without the manufacturer. For a shared make/model row, both fields use meaning make_model and evidence contains the entire combined printed value. Preserve all model words in the original script. Ignore body descriptions and type-approval codes.
 emptyWeightKg: Find the explicitly labelled EMPTY/UNLADEN/CURB/KERB weight row and its MASS unit. Engine displacement/cylinder capacity is a VOLUME (cm3, cm³, cc or litres), never a weight, even when the number seems plausible. Also exclude gross weight, payload, roof load, towing capacity and power. For a Swiss card the empty-weight row is field 30; field 37 is engine displacement. Read the empty-weight row a second time and check the unit before returning its value. Evidence must have meaning empty_weight, the exact printed amount (including any padding asterisks), and the actual mass unit expressed canonically as kg, t or lb. Translate the printed mass unit to its canonical unit if necessary, but never change a volume/power unit into a mass unit. If the empty-weight label or MASS unit is not readable, leave the field null. The value is kilograms, converted only from an explicitly printed mass unit; never use an engine specification as an estimate.
-manufactureYear: Prefer an explicitly printed manufacture year. If absent, use the printed first-registration/first-entry-into-service DATE. Evidence contains the date itself, excluding adjacent jurisdiction codes or notes, with meaning manufacture_year or first_registration_date. Do not use document issue, inspection or expiry dates or infer the year from the model. Return the full readable date or year as value; the application normalizes the year.
-Use status extracted when all six fields are readable, partial if any requested field is absent/uncertain, wrong_document for an unrelated document, and unreadable if no requested vehicle fields can be read. Multiple images are sides of the same document: conflicting values remain null. Do not extract any other fields or provide explanations.`;
+manufactureYear: Prefer an explicitly printed manufacture year. If absent, use the printed first-registration/first-entry-into-service DATE. Evidence contains the date itself, excluding adjacent jurisdiction codes or notes, with meaning manufacture_year or first_registration_date. Do not use document issue, inspection or expiry dates or infer the year from the model. When a date uses a two-digit year, look for the same first-registration date with its full four-digit year on another supplied page; prefer that complete printed evidence. Never guess a century. Return the full readable date or year as value; the application normalizes the year.
+Use status extracted when all six fields are readable, partial if any requested field is absent/uncertain, wrong_document for an unrelated document, and unreadable if no requested vehicle fields can be read. Multiple images/pages belong to the same vehicle registration document: conflicting values remain null. Do not extract any other fields or provide explanations.`;
+
+/** Constrain semantic categories at generation time on models supporting JSON Schema. */
+export const REGISTRATION_JSON_SCHEMA = {
+  name: 'registration_extraction',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['status', 'fields'],
+    properties: {
+      status: {
+        type: 'string',
+        enum: ['extracted', 'partial', 'wrong_document', 'unreadable'],
+      },
+      fields: {
+        type: 'object',
+        additionalProperties: false,
+        required: [...REGISTRATION_FIELDS],
+        properties: Object.fromEntries(
+          REGISTRATION_FIELDS.map((name) => [
+            name,
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['value', 'status', 'evidence'],
+              properties: {
+                value: { type: ['string', 'null'] },
+                status: {
+                  type: 'string',
+                  enum: ['extracted', 'missing', 'ambiguous', 'invalid'],
+                },
+                evidence: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: [
+                      'imageIndex',
+                      'label',
+                      'printedValue',
+                      'unit',
+                      'meaning',
+                    ],
+                    properties: {
+                      imageIndex: { type: 'integer' },
+                      label: { type: 'string' },
+                      printedValue: { type: 'string' },
+                      unit: { type: ['string', 'null'] },
+                      meaning: {
+                        type: 'string',
+                        enum: [...REGISTRATION_EVIDENCE_MEANINGS],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ]),
+        ),
+      },
+    },
+  },
+};

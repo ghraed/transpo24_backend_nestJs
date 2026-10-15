@@ -1,4 +1,6 @@
 import sharp from 'sharp';
+import { renderRegistrationPdf } from './registration-pdf';
+jest.mock('./registration-pdf', () => ({ renderRegistrationPdf: jest.fn() }));
 import {
   RegistrationService,
   MAX_REGISTRATION_IMAGE_BYTES,
@@ -23,6 +25,69 @@ describe('registration image processing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     provider.extract.mockResolvedValue({ status: 'partial' });
+  });
+  it('renders PDFs and forwards only page images, then clears both upload and rendered buffers', async () => {
+    const pages = [await image(), await image()];
+    jest.mocked(renderRegistrationPdf).mockResolvedValueOnce(pages);
+    const uploaded = file(Buffer.from('%PDF-1.7 synthetic'));
+    provider.extract.mockImplementationOnce((images: Buffer[]) => {
+      expect(images).toEqual(pages);
+      expect(images).toHaveLength(2);
+      return { status: 'partial' };
+    });
+    await service.extract([uploaded]);
+    expect(renderRegistrationPdf).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      6,
+      undefined,
+    );
+    expect(provider.extract).toHaveBeenCalledTimes(1);
+    expect(uploaded.buffer).toHaveLength(0);
+    expect(pages.every((page) => page.every((byte) => byte === 0))).toBe(true);
+  });
+  it('enforces the remaining page allowance for a PDF combined with an image', async () => {
+    jest
+      .mocked(renderRegistrationPdf)
+      .mockRejectedValueOnce(new Error('Too many pages'));
+    await expect(
+      service.extract([
+        file(await image()),
+        file(Buffer.from('%PDF-1.7 synthetic')),
+      ]),
+    ).rejects.toThrow();
+    expect(renderRegistrationPdf).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      5,
+      undefined,
+    );
+    expect(provider.extract).not.toHaveBeenCalled();
+  });
+  it('rejects an extra image after a six-page PDF', async () => {
+    jest
+      .mocked(renderRegistrationPdf)
+      .mockResolvedValueOnce(
+        await Promise.all(Array.from({ length: 6 }, () => image())),
+      );
+    await expect(
+      service.extract([
+        file(Buffer.from('%PDF-1.7 synthetic')),
+        file(await image()),
+      ]),
+    ).rejects.toThrow();
+    expect(provider.extract).not.toHaveBeenCalled();
+  });
+  it('passes all three pages of a registration PDF to the provider', async () => {
+    jest
+      .mocked(renderRegistrationPdf)
+      .mockResolvedValueOnce(
+        await Promise.all(Array.from({ length: 3 }, () => image())),
+      );
+    provider.extract.mockImplementationOnce((images: Buffer[]) => {
+      expect(images).toHaveLength(3);
+      return { status: 'partial' };
+    });
+    await service.extract([file(Buffer.from('%PDF-1.3 synthetic'))]);
+    expect(provider.extract).toHaveBeenCalledTimes(1);
   });
   it('decodes actual content, auto-orients and strips metadata, then clears buffers', async () => {
     const buffer = await sharp(await image())
