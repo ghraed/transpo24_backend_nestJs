@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsNotEmptyObject,
   IsOptional,
+  IsTimeZone,
   IsString,
   Max,
   MaxLength,
@@ -99,6 +100,14 @@ export class CreateFurnitureTransportRequestDto {
   @IsOptional()
   @IsDateString()
   scheduledPickupAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  scheduledDeliveryAt?: string;
+
+  @IsOptional()
+  @IsTimeZone()
+  scheduleTimeZone?: string;
 
   @IsDateString()
   movingDate!: string;

@@ -1,3 +1,4 @@
+import { FurnitureReservationsService } from './furniture-reservations.service';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { EditCustomerRequestDto } from './dto/edit-customer-request.dto';
 import { unlink } from 'node:fs/promises';
@@ -64,6 +65,7 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
 export class CustomerRequestsController {
   constructor(
     private readonly customerRequestsService: CustomerRequestsService,
+    private readonly furnitureReservations: FurnitureReservationsService,
   ) {}
 
   @Get()
@@ -73,6 +75,11 @@ export class CustomerRequestsController {
     return this.customerRequestsService.listCustomerRequests({
       customerId: request.user.id,
     });
+  }
+
+  @Get('reservations/payment-due')
+  paymentDue(@Req() request: AuthenticatedRequest) {
+    return this.furnitureReservations.paymentDue(request.user.id);
   }
 
   @Post()
@@ -114,6 +121,10 @@ export class CustomerRequestsController {
       requiresSpecialWrapping: dto.requiresSpecialWrapping,
       requiresDedicatedCarrier: dto.requiresDedicatedCarrier,
       isImmediate: dto.isImmediate,
+      scheduleTimeZone: dto.scheduleTimeZone,
+      scheduledDeliveryAt: dto.scheduledDeliveryAt
+        ? new Date(dto.scheduledDeliveryAt)
+        : undefined,
       scheduledPickupAt: dto.scheduledPickupAt
         ? new Date(dto.scheduledPickupAt)
         : undefined,
@@ -137,6 +148,10 @@ export class CustomerRequestsController {
       requiresRefrigeration: dto.requiresRefrigeration,
       heavyShipmentType: dto.heavyShipmentType,
       isImmediate: dto.isImmediate,
+      scheduleTimeZone: dto.scheduleTimeZone,
+      scheduledDeliveryAt: dto.scheduledDeliveryAt
+        ? new Date(dto.scheduledDeliveryAt)
+        : undefined,
       scheduledPickupAt: dto.scheduledPickupAt
         ? new Date(dto.scheduledPickupAt)
         : undefined,
@@ -193,6 +208,10 @@ export class CustomerRequestsController {
       needsHelpers: dto.needsHelpers ?? false,
       helpersCount: dto.helpersCount,
       isImmediate: dto.isImmediate,
+      scheduleTimeZone: dto.scheduleTimeZone,
+      scheduledDeliveryAt: dto.scheduledDeliveryAt
+        ? new Date(dto.scheduledDeliveryAt)
+        : undefined,
       scheduledPickupAt: dto.scheduledPickupAt
         ? new Date(dto.scheduledPickupAt)
         : undefined,
@@ -379,6 +398,10 @@ export class CustomerRequestsController {
       customerId: request.user.id,
       requestId,
       isImmediate: dto.isImmediate,
+      scheduleTimeZone: dto.scheduleTimeZone,
+      scheduledDeliveryAt: dto.scheduledDeliveryAt
+        ? new Date(dto.scheduledDeliveryAt)
+        : undefined,
       scheduledPickupAt: dto.scheduledPickupAt
         ? new Date(dto.scheduledPickupAt)
         : undefined,
@@ -512,9 +535,34 @@ export class CustomerRequestsController {
       requestId,
       offerId,
       confirm: dto.confirm ?? true,
+      supportsDeferredFurniture: dto.supportsDeferredFurniture,
+      supportsDeferredVehicle: dto.supportsDeferredVehicle,
       paymentMethod: dto.paymentMethod,
       stripePaymentMethodId: dto.stripePaymentMethodId,
     });
+  }
+
+  @Post(':requestId/reservation/confirm')
+  async confirmFurnitureReservation(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+    @Body() dto: AcceptDriverOfferDto,
+  ) {
+    return this.furnitureReservations.confirm({
+      customerId: request.user.id,
+      requestId,
+      confirm: dto.confirm === true,
+      paymentMethod: dto.paymentMethod,
+      stripePaymentMethodId: dto.stripePaymentMethodId,
+    });
+  }
+
+  @Post(':requestId/reservation/cancel')
+  async cancelFurnitureReservation(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.furnitureReservations.cancel(request.user.id, requestId);
   }
 
   @Post(':requestId/payment/finalize')

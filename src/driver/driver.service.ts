@@ -1,3 +1,4 @@
+import { reservationSummary } from '../customer-requests/furniture-reservation-policy';
 import {
   requestDetailsVersion,
   REQUEST_VERSION_SELECT,
@@ -575,6 +576,11 @@ type RequestDetailsSource = RequestVersionSource & {
 };
 
 type AcceptedJobRequestSource = {
+  deferredPaymentState?: string | null;
+  confirmationOpensAt?: Date | null;
+  paymentDeadlineAt?: Date | null;
+  pickupConfirmedAt?: Date | null;
+  reservationPaidAt?: Date | null;
   id: string;
   status: TransportRequestStatus;
   acceptedAt: Date | null;
@@ -866,6 +872,7 @@ const SUPPORTED_OFFER_CURRENCIES = new Set([
   'USD',
 ]);
 const ACCEPTED_JOB_REQUEST_STATUSES: TransportRequestStatus[] = [
+  TransportRequestStatus.RESERVED,
   TransportRequestStatus.ACCEPTED,
   TransportRequestStatus.DRIVER_ASSIGNED,
   TransportRequestStatus.DRIVER_GOING_TO_PICKUP,
@@ -1246,19 +1253,31 @@ export class DriverService {
 
   private normalizeDriverNickname(nickname: string): string {
     const value = typeof nickname === 'string' ? nickname.trim() : '';
-    if (value.length < 2 || value.length > 40 || /[\u0000-\u001f\u007f]/u.test(value)) {
-      throw new BadRequestException('Nickname must be between 2 and 40 characters.');
+    if (
+      value.length < 2 ||
+      value.length > 40 ||
+      // Nicknames intentionally reject ASCII control characters.
+      // eslint-disable-next-line no-control-regex
+      /[\u0000-\u001f\u007f]/u.test(value)
+    ) {
+      throw new BadRequestException(
+        'Nickname must be between 2 and 40 characters.',
+      );
     }
     return value;
   }
 
-  async updateNickname(userId: string, nickname: string): Promise<DriverMeResponseDto> {
+  async updateNickname(
+    userId: string,
+    nickname: string,
+  ): Promise<DriverMeResponseDto> {
     const normalizedNickname = this.normalizeDriverNickname(nickname);
     const updated = await this.prisma.driverProfile.updateMany({
       where: { userId, user: { deletedAt: null } },
       data: { nickname: normalizedNickname },
     });
-    if (updated.count !== 1) throw new NotFoundException('Driver profile not found.');
+    if (updated.count !== 1)
+      throw new NotFoundException('Driver profile not found.');
     return this.getMe({ userId });
   }
 
@@ -2238,8 +2257,7 @@ export class DriverService {
       const estimatedPickupAt = customerOffer.estimatedPickupAt
         ? customerOffer.estimatedPickupAt.toISOString()
         : null;
-      const driverName =
-        customerOffer.driver.nickname?.trim() || 'Driver';
+      const driverName = customerOffer.driver.nickname?.trim() || 'Driver';
       const payload: OfferNewPayload = {
         requestId: result.updatedRequest.id,
         requestStatus: result.updatedRequest.status,
@@ -2728,6 +2746,11 @@ export class DriverService {
         dropoffLongitude: true,
         dropoffAddress: true,
         isImmediate: true,
+        deferredPaymentState: true,
+        confirmationOpensAt: true,
+        paymentDeadlineAt: true,
+        pickupConfirmedAt: true,
+        reservationPaidAt: true,
         scheduledPickupAt: true,
         itemTitle: true,
         itemType: true,
@@ -2812,6 +2835,11 @@ export class DriverService {
         dropoffLongitude: true,
         dropoffAddress: true,
         isImmediate: true,
+        deferredPaymentState: true,
+        confirmationOpensAt: true,
+        paymentDeadlineAt: true,
+        pickupConfirmedAt: true,
+        reservationPaidAt: true,
         scheduledPickupAt: true,
         itemTitle: true,
         itemType: true,
@@ -3540,7 +3568,9 @@ export class DriverService {
       );
     }
 
-    const nextNickname = this.normalizeDriverNickname(input.changes.nickname ?? input.existingProfile.nickname ?? '');
+    const nextNickname = this.normalizeDriverNickname(
+      input.changes.nickname ?? input.existingProfile.nickname ?? '',
+    );
     const nextFirstName =
       input.changes.firstName !== undefined
         ? input.changes.firstName.trim()
@@ -5639,6 +5669,43 @@ export class DriverService {
     };
   }
 
+  async startReservedPickup(driverUserId: string, requestId: string) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${requestId} FOR UPDATE`;
+      const row = await tx.transportRequest.findUnique({
+        where: { id: requestId },
+        include: { assignedDriver: true },
+      });
+      if (!row || row.assignedDriver?.userId !== driverUserId)
+        throw new ForbiddenException('This job is not assigned to you.');
+      if (
+        row.status === 'DRIVER_GOING_TO_PICKUP' &&
+        row.deferredPaymentState === 'PAID'
+      )
+        return { requestId, status: row.status };
+      if (
+        row.status !== 'DRIVER_ASSIGNED' ||
+        row.deferredPaymentState !== 'PAID' ||
+        row.paymentStatus !== 'PAYMENT_CAPTURED'
+      )
+        throw new ConflictException(
+          'The customer must confirm pickup and pay before this trip can start.',
+        );
+      if (row.assignedDriver.status !== DriverStatus.APPROVED)
+        throw new ForbiddenException('Driver approval is required.');
+      await tx.transportRequest.update({
+        where: { id: requestId },
+        data: { status: 'DRIVER_GOING_TO_PICKUP' },
+      });
+      return { requestId, status: 'DRIVER_GOING_TO_PICKUP' as const };
+    });
+    await this.notificationsService.notifyCustomerTripUpdate(
+      requestId,
+      'DRIVER_GOING_TO_PICKUP',
+    );
+    return result;
+  }
+
   private toAcceptedJobSummaryResponse(
     request: AcceptedJobRequestSource,
   ): DriverAcceptedJobSummaryDto {
@@ -5649,6 +5716,7 @@ export class DriverService {
     }
 
     return {
+      reservation: reservationSummary(request),
       customerNickname: request.customer?.nickname?.trim() || 'Customer',
       requestId: request.id,
       requestStatus: request.status,

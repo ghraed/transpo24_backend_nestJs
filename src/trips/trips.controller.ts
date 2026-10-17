@@ -54,6 +54,8 @@ export class TripsController {
       requestId: tripId,
       offerId,
       confirm: dto.confirm ?? true,
+      supportsDeferredFurniture: dto.supportsDeferredFurniture,
+      supportsDeferredVehicle: dto.supportsDeferredVehicle,
       paymentMethod: dto.paymentMethod,
       stripePaymentMethodId: dto.stripePaymentMethodId,
     });

@@ -15,6 +15,7 @@ const payload = (): EditCustomerRequestDto => ({
   pickupLocation: { latitude: 47, longitude: 8, address: 'New pickup' },
   dropoffLocation: { latitude: 48, longitude: 9, address: 'New dropoff' },
   isImmediate: true,
+  scheduledDeliveryAt: new Date(Date.now() + 2 * 86400000).toISOString(),
   requiresLoadingHelp: false,
   itemTitle: 'Boxes',
   goodsShipmentSize: 'S',
@@ -59,6 +60,9 @@ function setup() {
         .fn()
         .mockImplementation(({ data }: { data: Record<string, unknown> }) => {
           row = { ...row, ...data };
+          // Prisma returns Date objects for persisted DateTime fields.
+          if (typeof row.scheduledDeliveryAt === 'string')
+            row.scheduledDeliveryAt = new Date(row.scheduledDeliveryAt);
           return Promise.resolve(row);
         }),
       findUniqueOrThrow: jest
@@ -110,6 +114,21 @@ function setup() {
 }
 
 describe('editing submitted requests', () => {
+  it('rejects an incomplete delivery date without saving or notifying drivers', async () => {
+    const { instance, db, notifications } = setup();
+    await expect(
+      instance.editCustomerRequest(
+        'customer',
+        'request',
+        { ...payload(), scheduledDeliveryAt: undefined },
+        [],
+      ),
+    ).rejects.toThrow('Please select a delivery date.');
+    expect(
+      notifications.notifyDriversAboutNewTransportRequest,
+    ).not.toHaveBeenCalled();
+    expect(db.driverRequestAlert.updateMany).not.toHaveBeenCalled();
+  });
   it('saves the original request atomically and synchronizes matching fields', async () => {
     const { instance, db, row } = setup();
     await instance.editCustomerRequest('customer', 'request', payload(), []);

@@ -1,3 +1,5 @@
+import { FurnitureReservationsService } from './furniture-reservations.service';
+import { ConfigModule } from '@nestjs/config';
 import { Module, forwardRef } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
@@ -15,6 +17,7 @@ import { CustomerPlacesService } from './customer-places.service';
 
 @Module({
   imports: [
+    ConfigModule,
     AuthModule,
     forwardRef(() => ChatModule),
     NotificationsModule,
@@ -26,7 +29,12 @@ import { CustomerPlacesService } from './customer-places.service';
     CustomerHomeController,
     CustomerRequestsController,
   ],
-  providers: [CustomerPlacesService, CustomerRequestsService, PrismaService],
-  exports: [CustomerRequestsService],
+  providers: [
+    FurnitureReservationsService,
+    CustomerPlacesService,
+    CustomerRequestsService,
+    PrismaService,
+  ],
+  exports: [CustomerRequestsService, FurnitureReservationsService],
 })
 export class CustomerRequestsModule {}

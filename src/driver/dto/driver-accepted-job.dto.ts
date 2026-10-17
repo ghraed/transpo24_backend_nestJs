@@ -1,8 +1,10 @@
+import type { ReservationSummary } from '../../customer-requests/furniture-reservation-policy';
 import { TransportRequestStatus, VehicleCondition } from '@prisma/client';
 
 import { DriverOfferResponseDto } from './driver-offer.dto';
 
 export interface DriverAcceptedJobSummaryDto {
+  reservation?: ReservationSummary | null;
   customerNickname: string;
   requestId: string;
   requestStatus: TransportRequestStatus;

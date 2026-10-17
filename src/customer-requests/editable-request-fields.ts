@@ -1,6 +1,8 @@
 export const EDITABLE_REQUEST_FIELDS = [
   'isImmediate',
   'scheduledPickupAt',
+  'scheduledDeliveryAt',
+  'scheduleTimeZone',
   'itemTitle',
   'itemDescription',
   'itemType',

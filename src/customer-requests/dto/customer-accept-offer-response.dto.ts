@@ -1,3 +1,4 @@
+import type { ReservationSummary } from '../furniture-reservation-policy';
 import { DriverOfferStatus, TransportRequestStatus } from '@prisma/client';
 import { PaymentSummaryDto } from '../../payments/dto/request-payment.dto';
 
@@ -25,7 +26,8 @@ export interface CustomerAcceptOfferResponseDto {
     acceptedAt: string | null;
   };
   acceptedOffer: AcceptedOfferResponseDto;
-  payment: PaymentSummaryDto;
+  payment: PaymentSummaryDto | null;
+  reservation?: ReservationSummary | null;
   rejectedOffersCount: number;
-  nextStep: 'CONFIRM_PAYMENT' | 'TRACK_REQUEST';
+  nextStep: 'CONFIRM_PAYMENT' | 'TRACK_REQUEST' | 'RESERVATION_CONFIRMED';
 }

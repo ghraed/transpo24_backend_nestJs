@@ -910,6 +910,14 @@ export class DriverController {
     return result.response;
   }
 
+  @Post('trips/:tripId/start-pickup')
+  async startReservedPickup(
+    @Req() request: AuthenticatedRequest,
+    @Param('tripId') tripId: string,
+  ) {
+    return this.driverService.startReservedPickup(request.user.id, tripId);
+  }
+
   @Patch('trips/:tripId/start-delivery')
   async startDelivery(
     @Req() request: AuthenticatedRequest,

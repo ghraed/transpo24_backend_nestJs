@@ -1,3 +1,4 @@
+import type { ReservationSummary } from '../furniture-reservation-policy';
 import {
   GoodsHeavyShipmentType,
   GoodsShipmentSize,
@@ -27,6 +28,7 @@ export class CustomerRequestResponseDto {
   schedule!: {
     isImmediate: boolean;
     scheduledPickupAt: string | null;
+    scheduledDeliveryAt?: string | null;
   };
   itemDetails!: {
     title: string | null;
@@ -103,6 +105,9 @@ export class CustomerRequestResponseDto {
 }
 
 export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto {
+  reservation?: ReservationSummary | null;
+  deferredFurnitureEligible?: boolean;
+  deferredReservationEligible?: boolean;
   canEdit!: boolean;
   cancellation!: {
     canCancelCollectedTrip: boolean;
@@ -153,6 +158,7 @@ export class CustomerHomeRequestSummaryDto {
   pickupAddress!: string | null;
   dropoffAddress!: string | null;
   scheduledPickupAt!: string | null;
+  scheduledDeliveryAt?: string | null;
   submittedAt!: string | null;
   createdAt?: string;
 }

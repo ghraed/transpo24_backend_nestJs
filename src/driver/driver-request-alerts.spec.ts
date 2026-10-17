@@ -240,6 +240,7 @@ describe('job navigation and assignment access', () => {
   it('returns all active accepted jobs independently of alert viewing or online state', async () => {
     const { service, findMany } = setup(false);
     const statuses = [
+      'RESERVED',
       'ACCEPTED',
       'DRIVER_ASSIGNED',
       'DRIVER_GOING_TO_PICKUP',

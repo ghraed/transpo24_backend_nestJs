@@ -1,3 +1,9 @@
+import { FurnitureReservationsService } from './furniture-reservations.service';
+import {
+  reservationSummary,
+  shouldDeferTransportPayment,
+} from './furniture-reservation-policy';
+import { assertScheduleWindow } from './schedule-window';
 import {
   EditCustomerRequestDto,
   EDITABLE_REQUEST_FIELDS,
@@ -15,6 +21,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Optional,
   Logger,
   NotFoundException,
   forwardRef,
@@ -112,6 +119,8 @@ interface UpdateScheduleAndItemDetailsInput {
   requestId: string;
   isImmediate: boolean;
   scheduledPickupAt?: Date;
+  scheduledDeliveryAt?: Date;
+  scheduleTimeZone?: string;
   itemTitle?: string;
   itemDescription?: string;
   itemType?: ItemType;
@@ -163,6 +172,8 @@ interface CreateMotorcycleTransportRequestInput {
   requiresDedicatedCarrier: boolean;
   isImmediate?: boolean;
   scheduledPickupAt?: Date;
+  scheduledDeliveryAt?: Date;
+  scheduleTimeZone?: string;
   pickupLocation: MotorcycleRequestLocationInput;
   deliveryLocation: MotorcycleRequestLocationInput;
 }
@@ -185,6 +196,8 @@ interface CreateGoodsTransportRequestInput {
   heavyShipmentType?: GoodsHeavyShipmentType;
   isImmediate?: boolean;
   scheduledPickupAt?: Date;
+  scheduledDeliveryAt?: Date;
+  scheduleTimeZone?: string;
   pickupLocation: GoodsRequestLocationInput;
   deliveryLocation: GoodsRequestLocationInput;
 }
@@ -204,6 +217,8 @@ interface CreateFurnitureTransportRequestInput {
   helpersCount?: number;
   isImmediate?: boolean;
   scheduledPickupAt?: Date;
+  scheduledDeliveryAt?: Date;
+  scheduleTimeZone?: string;
   movingDate: Date;
   customerCanHelpLoading?: boolean;
   pickupLocation: FurnitureRequestLocationInput;
@@ -234,7 +249,9 @@ interface AcceptDriverOfferInput {
   requestId: string;
   offerId: string;
   confirm: boolean;
-  paymentMethod: PaymentMethod;
+  paymentMethod?: PaymentMethod;
+  supportsDeferredFurniture?: boolean;
+  supportsDeferredVehicle?: boolean;
   stripePaymentMethodId?: string;
 }
 
@@ -293,6 +310,7 @@ type RequestLocationResponse = {
 type ScheduleResponse = {
   isImmediate: boolean;
   scheduledPickupAt: string | null;
+  scheduledDeliveryAt?: string | null;
 };
 
 type ItemDetailsResponse = {
@@ -340,6 +358,13 @@ type TransportRequestResponseSource = {
   dropoffAddress: string | null;
   dropoffPlaceId: string | null;
   scheduledPickupAt: Date | null;
+  scheduledDeliveryAt?: Date | null;
+  scheduleTimeZone?: string | null;
+  deferredPaymentState?: string | null;
+  confirmationOpensAt?: Date | null;
+  paymentDeadlineAt?: Date | null;
+  pickupConfirmedAt?: Date | null;
+  reservationPaidAt?: Date | null;
   isImmediate: boolean;
   itemTitle: string | null;
   itemDescription: string | null;
@@ -446,6 +471,8 @@ type CustomerHomeRequestSource = {
   pickupAddress: string | null;
   dropoffAddress: string | null;
   scheduledPickupAt: Date | null;
+  scheduledDeliveryAt?: Date | null;
+  scheduleTimeZone?: string | null;
   submittedAt: Date | null;
   createdAt: Date;
   service: {
@@ -555,6 +582,7 @@ type DriverRequestAlertSummaryPayload = {
   schedule: {
     isImmediate: boolean;
     scheduledPickupAt: string | null;
+    scheduledDeliveryAt?: string | null;
   };
   item: {
     title: string | null;
@@ -606,6 +634,13 @@ const REQUEST_SELECT = {
   dropoffAddress: true,
   dropoffPlaceId: true,
   scheduledPickupAt: true,
+  scheduledDeliveryAt: true,
+  scheduleTimeZone: true,
+  deferredPaymentState: true,
+  confirmationOpensAt: true,
+  paymentDeadlineAt: true,
+  pickupConfirmedAt: true,
+  reservationPaidAt: true,
   isImmediate: true,
   itemTitle: true,
   itemDescription: true,
@@ -731,6 +766,7 @@ const REQUEST_STATUS_SELECT = {
 } satisfies Prisma.TransportRequestSelect;
 
 const STATUS_LABELS: Record<TransportRequestStatus, string> = {
+  RESERVED: 'Driver reserved — awaiting payment',
   DRAFT: 'Draft',
   PENDING_QUOTES: 'Waiting for driver offers',
   QUOTED: 'Offers received',
@@ -810,6 +846,8 @@ export class CustomerRequestsService {
     @Inject(forwardRef(() => TripsGateway))
     private readonly tripsGateway: TripsGateway,
     private readonly notificationsService: NotificationsService,
+    @Optional()
+    private readonly furnitureReservations?: FurnitureReservationsService,
   ) {}
 
   async createDraftRequest(
@@ -923,6 +961,13 @@ export class CustomerRequestsService {
       throw new BadRequestException('scheduledPickupAt cannot be in the past.');
     }
 
+    assertScheduleWindow({
+      immediate: input.isImmediate ?? true,
+      pickup: input.scheduledPickupAt,
+      delivery: input.scheduledDeliveryAt,
+      timeZone: input.scheduleTimeZone,
+      furniture: false,
+    });
     const request = await this.prisma.transportRequest.create({
       data: {
         customerId: input.customerId,
@@ -930,6 +975,8 @@ export class CustomerRequestsService {
         status: TransportRequestStatus.DRAFT,
         submittedAt: null,
         isImmediate: input.isImmediate ?? true,
+        scheduleTimeZone: input.scheduleTimeZone ?? null,
+        scheduledDeliveryAt: input.scheduledDeliveryAt ?? null,
         scheduledPickupAt:
           input.isImmediate === false
             ? (input.scheduledPickupAt ?? null)
@@ -1021,12 +1068,21 @@ export class CustomerRequestsService {
       throw new BadRequestException('scheduledPickupAt cannot be in the past.');
     }
 
+    assertScheduleWindow({
+      immediate: input.isImmediate ?? true,
+      pickup: input.scheduledPickupAt,
+      delivery: input.scheduledDeliveryAt,
+      timeZone: input.scheduleTimeZone,
+      furniture: false,
+    });
     const request = await this.prisma.transportRequest.create({
       data: {
         customerId: input.customerId,
         serviceId: service.id,
         status: TransportRequestStatus.DRAFT,
         isImmediate: input.isImmediate ?? true,
+        scheduleTimeZone: input.scheduleTimeZone ?? null,
+        scheduledDeliveryAt: input.scheduledDeliveryAt ?? null,
         scheduledPickupAt:
           input.isImmediate === false
             ? (input.scheduledPickupAt ?? null)
@@ -1174,6 +1230,13 @@ export class CustomerRequestsService {
     });
 
     try {
+      assertScheduleWindow({
+        immediate: input.isImmediate ?? false,
+        pickup: effectiveMovingDate,
+        delivery: input.scheduledDeliveryAt,
+        timeZone: input.scheduleTimeZone,
+        furniture: true,
+      });
       const request = await this.prisma.transportRequest.create({
         data: {
           customerId: input.customerId,
@@ -1181,6 +1244,8 @@ export class CustomerRequestsService {
           status: TransportRequestStatus.DRAFT,
           submittedAt: null,
           isImmediate: input.isImmediate ?? false,
+          scheduleTimeZone: input.scheduleTimeZone ?? null,
+          scheduledDeliveryAt: input.scheduledDeliveryAt ?? null,
           scheduledPickupAt: effectiveMovingDate,
           pickupLatitude: input.pickupLocation.latitude,
           pickupLongitude: input.pickupLocation.longitude,
@@ -1410,6 +1475,14 @@ export class CustomerRequestsService {
       throw new BadRequestException('scheduledPickupAt cannot be in the past.');
     }
 
+    assertScheduleWindow({
+      immediate: input.isImmediate,
+      pickup: input.scheduledPickupAt,
+      delivery: input.scheduledDeliveryAt,
+      timeZone: input.scheduleTimeZone,
+      furniture: existingRequest.service.key === ServiceKey.FURNITURE_TRANSPORT,
+    });
+
     const isVehicle =
       existingRequest.service.key === ServiceKey.VEHICLE_TRANSPORT;
     if (isVehicle && input.itemType && input.itemType !== ItemType.VEHICLE) {
@@ -1497,6 +1570,8 @@ export class CustomerRequestsService {
       where: { id: input.requestId },
       data: {
         isImmediate: input.isImmediate,
+        scheduleTimeZone: input.scheduleTimeZone,
+        scheduledDeliveryAt: input.scheduledDeliveryAt,
         scheduledPickupAt: input.isImmediate
           ? null
           : (input.scheduledPickupAt ?? null),
@@ -1799,6 +1874,15 @@ export class CustomerRequestsService {
       throw new BadRequestException('Service is invalid for this request.');
     }
 
+    assertScheduleWindow({
+      requireDates: true,
+      immediate: request.isImmediate,
+      pickup: request.scheduledPickupAt ?? undefined,
+      delivery: request.scheduledDeliveryAt ?? undefined,
+      timeZone: request.scheduleTimeZone ?? undefined,
+      furniture: service.key === ServiceKey.FURNITURE_TRANSPORT,
+    });
+
     if (service.key === ServiceKey.VEHICLE_TRANSPORT) {
       if (!request.vehicleBrand?.trim()) {
         throw new BadRequestException(
@@ -2026,6 +2110,18 @@ export class CustomerRequestsService {
           });
           if (!service?.isActive)
             throw new BadRequestException('Service is unavailable.');
+          assertScheduleWindow({
+            immediate: dto.isImmediate,
+            pickup: dto.scheduledPickupAt
+              ? new Date(dto.scheduledPickupAt)
+              : undefined,
+            timeZone:
+              dto.scheduleTimeZone ?? request.scheduleTimeZone ?? undefined,
+            delivery: dto.scheduledDeliveryAt
+              ? new Date(dto.scheduledDeliveryAt)
+              : (request.scheduledDeliveryAt ?? undefined),
+            furniture: service.key === ServiceKey.FURNITURE_TRANSPORT,
+          });
           const data: Prisma.TransportRequestUncheckedUpdateInput = {
             ...Object.fromEntries(
               EDITABLE_REQUEST_FIELDS.filter(
@@ -2553,11 +2649,16 @@ export class CustomerRequestsService {
       throw new BadRequestException('confirm must be true to accept an offer.');
     }
 
+    const reserved = await this.furnitureReservations?.tryReserve(input);
+    if (reserved) return reserved;
+
     if (!input.paymentMethod) {
       throw new BadRequestException('paymentMethod is required.');
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
+      if (tx.$queryRaw)
+        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${input.requestId} FOR UPDATE`;
       const request = await tx.transportRequest.findUnique({
         where: { id: input.requestId },
         select: {
@@ -2794,7 +2895,7 @@ export class CustomerRequestsService {
           driverId: offer.driverId,
           amount: offer.price,
           currency: offer.currency,
-          paymentMethod: input.paymentMethod,
+          paymentMethod: input.paymentMethod!,
           stripePaymentMethodId: input.stripePaymentMethodId,
         },
       );
@@ -2845,6 +2946,11 @@ export class CustomerRequestsService {
   async finalizeAcceptedOfferPayment(
     input: FinalizeAcceptedOfferPaymentInput,
   ): Promise<CustomerAcceptOfferResponseDto> {
+    const reserved = await this.furnitureReservations?.finalize(
+      input.customerId,
+      input.requestId,
+    );
+    if (reserved) return reserved;
     let result: {
       acceptedOffer: AcceptedOfferSource;
       payment: PaymentSummaryDto;
@@ -3259,6 +3365,8 @@ export class CustomerRequestsService {
           pickupAddress: true,
           dropoffAddress: true,
           scheduledPickupAt: true,
+          scheduledDeliveryAt: true,
+          scheduleTimeZone: true,
           submittedAt: true,
           createdAt: true,
           service: {
@@ -3279,6 +3387,8 @@ export class CustomerRequestsService {
           pickupAddress: true,
           dropoffAddress: true,
           scheduledPickupAt: true,
+          scheduledDeliveryAt: true,
+          scheduleTimeZone: true,
           submittedAt: true,
           createdAt: true,
           service: {
@@ -3362,6 +3472,8 @@ export class CustomerRequestsService {
         pickupAddress: true,
         dropoffAddress: true,
         scheduledPickupAt: true,
+        scheduledDeliveryAt: true,
+        scheduleTimeZone: true,
         submittedAt: true,
         createdAt: true,
         service: {
@@ -3526,6 +3638,7 @@ export class CustomerRequestsService {
   ): CustomerRequestResponseDto {
     const schedule: ScheduleResponse = {
       isImmediate: request.isImmediate,
+      scheduledDeliveryAt: request.scheduledDeliveryAt?.toISOString() ?? null,
       scheduledPickupAt: request.scheduledPickupAt
         ? request.scheduledPickupAt.toISOString()
         : null,
@@ -3698,6 +3811,19 @@ export class CustomerRequestsService {
 
     return {
       ...baseResponse,
+      reservation: reservationSummary(request),
+      deferredFurnitureEligible:
+        request.service.key === ServiceKey.FURNITURE_TRANSPORT &&
+        shouldDeferTransportPayment(
+          request.service.key,
+          request.scheduledPickupAt,
+          request.scheduleTimeZone ?? null,
+        ),
+      deferredReservationEligible: shouldDeferTransportPayment(
+        request.service.key,
+        request.scheduledPickupAt,
+        request.scheduleTimeZone ?? null,
+      ),
       canEdit: false,
       cancellation: this.toCancellationStatus(request),
       service: {
@@ -3821,6 +3947,7 @@ export class CustomerRequestsService {
       statusLabel: STATUS_LABELS[request.status] ?? request.status,
       pickupAddress: request.pickupAddress,
       dropoffAddress: request.dropoffAddress,
+      scheduledDeliveryAt: request.scheduledDeliveryAt?.toISOString() ?? null,
       scheduledPickupAt: request.scheduledPickupAt
         ? request.scheduledPickupAt.toISOString()
         : null,
@@ -4158,6 +4285,7 @@ export class CustomerRequestsService {
       },
       schedule: {
         isImmediate: request.isImmediate,
+        scheduledDeliveryAt: request.scheduledDeliveryAt?.toISOString() ?? null,
         scheduledPickupAt: request.scheduledPickupAt
           ? request.scheduledPickupAt.toISOString()
           : null,

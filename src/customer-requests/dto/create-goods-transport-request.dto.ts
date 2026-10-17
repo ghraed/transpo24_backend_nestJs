@@ -9,6 +9,7 @@ import {
   IsNotEmptyObject,
   IsNumber,
   IsOptional,
+  IsTimeZone,
   IsString,
   Max,
   MaxLength,
@@ -90,6 +91,14 @@ export class CreateGoodsTransportRequestDto {
   @IsOptional()
   @IsDateString()
   scheduledPickupAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  scheduledDeliveryAt?: string;
+
+  @IsOptional()
+  @IsTimeZone()
+  scheduleTimeZone?: string;
 
   @IsNotEmptyObject()
   @ValidateNested()

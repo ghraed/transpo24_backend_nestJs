@@ -1,3 +1,4 @@
+import type { ReservationSummary } from '../../customer-requests/furniture-reservation-policy';
 export interface AdminDeliveryOperationsPartyDto {
   id: string;
   name: string;
@@ -28,6 +29,7 @@ export interface AdminDeliveryOperationsPhotoDto {
 }
 
 export interface AdminDeliveryOperationsItemDto {
+  reservation?: ReservationSummary | null;
   id: string;
   status: string;
   service: string;

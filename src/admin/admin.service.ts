@@ -1,3 +1,4 @@
+import { reservationSummary } from '../customer-requests/furniture-reservation-policy';
 import {
   BadRequestException,
   ConflictException,
@@ -261,6 +262,11 @@ type ReviewProfileSource = {
 };
 
 type DeliveryOperationsSource = {
+  deferredPaymentState?: string | null;
+  confirmationOpensAt?: Date | null;
+  paymentDeadlineAt?: Date | null;
+  pickupConfirmedAt?: Date | null;
+  reservationPaidAt?: Date | null;
   id: string;
   status: string;
   createdAt: Date;
@@ -3146,6 +3152,7 @@ export class AdminService {
     if (query.view === 'active') {
       where.status = {
         in: [
+          'RESERVED',
           'ACCEPTED',
           'DRIVER_ASSIGNED',
           'DRIVER_GOING_TO_PICKUP',
@@ -3199,6 +3206,7 @@ export class AdminService {
         where: {
           status: {
             in: [
+              'RESERVED',
               'ACCEPTED',
               'DRIVER_ASSIGNED',
               'DRIVER_GOING_TO_PICKUP',
@@ -3231,6 +3239,11 @@ export class AdminService {
       status: true,
       createdAt: true,
       submittedAt: true,
+      deferredPaymentState: true,
+      confirmationOpensAt: true,
+      paymentDeadlineAt: true,
+      pickupConfirmedAt: true,
+      reservationPaidAt: true,
       scheduledPickupAt: true,
       isImmediate: true,
       pickupAddress: true,
@@ -3332,6 +3345,7 @@ export class AdminService {
     record: DeliveryOperationsSource,
   ): AdminDeliveryOperationsItemDto {
     return {
+      reservation: reservationSummary(record),
       id: record.id,
       status: record.status,
       service: record.service.nameEn,

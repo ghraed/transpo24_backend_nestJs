@@ -237,6 +237,8 @@ type DriverPayoutContext = {
 };
 
 type StripePaymentIntentRecord = {
+  amount?: number;
+  currency?: string;
   id: string;
   status: string;
   latest_charge?: string | { id: string } | null;
@@ -554,10 +556,37 @@ export class PaymentsService {
       });
   }
 
+  async refundUnpaidReservation(input: CancelPaymentInput) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${input.requestId} FOR UPDATE`;
+        const row = await tx.transportRequest.findUniqueOrThrow({
+          where: { id: input.requestId },
+        });
+        if (
+          row.customerId !== input.customerId ||
+          row.status !== 'CANCELLED' ||
+          !['EXPIRED', 'CANCELLED'].includes(row.deferredPaymentState ?? '')
+        )
+          throw new ConflictException(
+            'Only cancelled unpaid furniture reservations qualify for a full refund.',
+          );
+        return this.cancelCollectedTripTx(
+          tx,
+          input.requestId,
+          input.customerId,
+          true,
+        );
+      },
+      { timeout: 30000 },
+    );
+  }
+
   private async cancelCollectedTripTx(
     tx: Prisma.TransactionClient,
     requestId: string,
     customerId: string,
+    fullRefund = false,
   ): Promise<
     CancelTripPaymentResponseDto & {
       driverShareAmount: number;
@@ -589,7 +618,13 @@ export class PaymentsService {
       throw new ConflictException('Collected trip payment not found.');
     }
 
-    if (request.status === TransportRequestStatus.CANCELLED) {
+    if (
+      request.status === TransportRequestStatus.CANCELLED &&
+      (!fullRefund ||
+        request.paymentSettlement.refundedAmount.gte(
+          request.paymentSettlement.collectedAmount,
+        ))
+    ) {
       return {
         requestStatus: request.status,
         currency: request.paymentSettlement.currency,
@@ -631,9 +666,11 @@ export class PaymentsService {
       );
     }
 
-    const refundableAmount = this.calculateCustomerCancellationRefund(
-      request.paymentSettlement.collectedAmount,
-    );
+    const refundableAmount = fullRefund
+      ? request.paymentSettlement.collectedAmount
+      : this.calculateCustomerCancellationRefund(
+          request.paymentSettlement.collectedAmount,
+        );
     const retainedAmount = request.paymentSettlement.collectedAmount
       .sub(refundableAmount)
       .toDecimalPlaces(2);
@@ -681,7 +718,9 @@ export class PaymentsService {
           requestId,
           kind: 'trip_cancellation_refund',
         },
-        idempotencyKey: `trip_cancel_refund_${requestId}_${request.paymentSettlement.updatedAt.getTime()}`,
+        idempotencyKey: fullRefund
+          ? `reservation_full_refund_${requestId}`
+          : `trip_cancel_refund_${requestId}_${request.paymentSettlement.updatedAt.getTime()}`,
       });
       refundId = refund.id;
     }
@@ -718,7 +757,9 @@ export class PaymentsService {
         retainedAmount,
         driverShareAmount,
         platformShareAmount,
-        status: TripPaymentSettlementStatus.PARTIALLY_REFUNDED,
+        status: fullRefund
+          ? TripPaymentSettlementStatus.REFUNDED
+          : TripPaymentSettlementStatus.PARTIALLY_REFUNDED,
         driverPayoutState: driverShareAmount.gt(0)
           ? DriverPayoutState.EARNING_CREATED
           : DriverPayoutState.NOT_APPLICABLE,
@@ -735,7 +776,9 @@ export class PaymentsService {
     await tx.paymentHold.update({
       where: { id: request.paymentHold.id },
       data: {
-        status: PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
+        status: fullRefund
+          ? PaymentStatus.PAYMENT_REFUNDED
+          : PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
       },
       select: PAYMENT_HOLD_SELECT,
     });
@@ -744,7 +787,9 @@ export class PaymentsService {
       where: { id: requestId },
       data: {
         status: TransportRequestStatus.CANCELLED,
-        paymentStatus: PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
+        paymentStatus: fullRefund
+          ? PaymentStatus.PAYMENT_REFUNDED
+          : PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
         capturedAmount: retainedAmount,
       },
     });
@@ -2288,12 +2333,39 @@ export class PaymentsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      const hold = await tx.paymentHold.findUnique({
+      let hold = await tx.paymentHold.findUnique({
         where: { stripePaymentIntentId: paymentIntent.id },
         select: PAYMENT_HOLD_SELECT,
       });
 
-      if (!hold || hold.status === nextStatus) {
+      if (hold && tx.$queryRaw) {
+        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${hold.requestId} FOR UPDATE`;
+        hold = await tx.paymentHold.findUnique({
+          where: { stripePaymentIntentId: paymentIntent.id },
+          select: PAYMENT_HOLD_SELECT,
+        });
+      }
+      if (
+        hold &&
+        ((paymentIntent.amount !== undefined &&
+          paymentIntent.amount !== this.toStripeMinorUnit(hold.amount)) ||
+          (paymentIntent.currency &&
+            paymentIntent.currency.toUpperCase() !==
+              hold.currency.toUpperCase()))
+      )
+        throw new ConflictException(
+          'Stripe payment amount or currency does not match the booking.',
+        );
+      if (
+        !hold ||
+        hold.status === nextStatus ||
+        [
+          PaymentStatus.PAYMENT_REFUNDED,
+          PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
+        ].includes(hold.status as never) ||
+        (hold.status === PaymentStatus.PAYMENT_CAPTURED &&
+          nextStatus !== PaymentStatus.PAYMENT_CAPTURED)
+      ) {
         return;
       }
 
@@ -2850,6 +2922,7 @@ export class PaymentsService {
         paymentMethod: input.paymentMethod,
         provider: PaymentProvider.APP_WALLET,
         status: PaymentStatus.PAYMENT_CAPTURED,
+        capturedAt: new Date(),
       },
       select: PAYMENT_HOLD_SELECT,
     });

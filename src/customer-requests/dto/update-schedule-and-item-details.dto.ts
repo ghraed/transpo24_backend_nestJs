@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsNumber,
   IsOptional,
+  IsTimeZone,
   IsPositive,
   IsString,
   IsIn,
@@ -25,6 +26,14 @@ export class UpdateScheduleAndItemDetailsDto {
   @IsOptional()
   @IsDateString()
   scheduledPickupAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  scheduledDeliveryAt?: string;
+
+  @IsOptional()
+  @IsTimeZone()
+  scheduleTimeZone?: string;
 
   @IsOptional()
   @IsString()

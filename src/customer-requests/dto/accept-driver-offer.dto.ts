@@ -6,8 +6,17 @@ export class AcceptDriverOfferDto {
   @IsBoolean()
   confirm?: boolean;
 
+  @IsOptional()
   @IsEnum(PaymentMethod)
-  paymentMethod!: PaymentMethod;
+  paymentMethod?: PaymentMethod;
+
+  @IsOptional()
+  @IsBoolean()
+  supportsDeferredFurniture?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  supportsDeferredVehicle?: boolean;
 
   @IsOptional()
   @IsString()

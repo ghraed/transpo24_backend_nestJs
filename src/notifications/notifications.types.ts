@@ -5,6 +5,7 @@ export type NotificationRecipientApp = PushApp;
 export type PushNotificationType = string;
 
 export interface SendPushNotificationInput {
+  retryPersistedEvent?: boolean;
   userIds: string[];
   app: NotificationRecipientApp;
   title: string;

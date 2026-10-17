@@ -17,6 +17,7 @@ enum ServiceKey {
 }
 
 enum TransportRequestStatus {
+  RESERVED
   DRAFT
   PENDING_QUOTES
   QUOTED
@@ -532,6 +533,15 @@ model Service {
   requests      TransportRequest[]
 }
 
+enum DeferredFurniturePaymentState {
+  WAITING
+  CONFIRMATION_DUE
+  PAYMENT_PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
 model TransportRequest {
   id                  String                 @id @default(cuid())
   customerId          String
@@ -545,6 +555,18 @@ model TransportRequest {
   dropoffLongitude    Float?
   dropoffAddress      String?
   dropoffPlaceId      String?
+  deferredPaymentState DeferredFurniturePaymentState?
+  confirmationOpensAt DateTime?
+  paymentDeadlineAt DateTime?
+  pickupConfirmedAt DateTime?
+  reservationPaidAt DateTime?
+  reservationSelectedNotifiedAt DateTime?
+  reservationPaymentNotifiedAt DateTime?
+  reservationReminderSentAt DateTime?
+  reservationCancellationNotifiedAt DateTime?
+  reservationRefundedAt DateTime?
+  scheduleTimeZone    String?
+  scheduledDeliveryAt DateTime?
   scheduledPickupAt   DateTime?
   isImmediate         Boolean                @default(false)
   itemTitle           String?
@@ -645,6 +667,8 @@ model TransportRequest {
   @@index([assignedDriverId, status])
   @@index([paymentStatus])
   @@unique([customerId, clientDraftId])
+  @@index([deferredPaymentState, confirmationOpensAt])
+  @@index([deferredPaymentState, paymentDeadlineAt])
   @@map("transport_requests")
 }
 

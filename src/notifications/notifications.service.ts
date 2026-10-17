@@ -107,6 +107,14 @@ export class NotificationsService {
       // Save before inspecting device tokens: Alerts must work without push permission.
       if (input.app === PushApp.CUSTOMER) {
         const milestoneTypes = new Set([
+          'VEHICLE_RESERVED',
+          'VEHICLE_CONFIRMATION_DUE',
+          'VEHICLE_PAYMENT_CONFIRMED',
+          'VEHICLE_RESERVATION_CANCELLED',
+          'FURNITURE_PAYMENT_CONFIRMED',
+          'FURNITURE_RESERVED',
+          'FURNITURE_CONFIRMATION_DUE',
+          'FURNITURE_RESERVATION_CANCELLED',
           'NEW_DRIVER_OFFER',
           'DRIVER_GOING_TO_PICKUP',
           'DRIVER_ARRIVED_PICKUP',
@@ -137,7 +145,7 @@ export class NotificationsService {
           })),
           skipDuplicates: true,
         });
-        if (saved.count === 0) return;
+        if (saved.count === 0 && !input.retryPersistedEvent) return;
       }
 
       const storedTokens = await this.prisma.pushToken.findMany({
@@ -203,6 +211,7 @@ export class NotificationsService {
           this.logger.error(
             `Failed to send Expo push notification chunk: ${this.toErrorMessage(error)}`,
           );
+          if (input.retryPersistedEvent) throw error;
           continue;
         }
 
@@ -219,6 +228,7 @@ export class NotificationsService {
       this.logger.error(
         `Push notification dispatch failed for ${input.type}: ${this.toErrorMessage(error)}`,
       );
+      if (input.retryPersistedEvent) throw error;
     }
   }
 

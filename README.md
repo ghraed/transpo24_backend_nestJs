@@ -435,3 +435,19 @@ They never log document text, extracted values, image data or API keys. For a
 failed device scan, share these lines; in development, Metro also reports
 whether the failure came from an API error or client response validation, and
 the API origin used by the request.
+
+## Deferred furniture reservations
+
+Apply database migrations with `npx prisma migrate deploy` and regenerate the Prisma client before deploying the API. Deploy compatible customer and driver apps, then set `FURNITURE_RESERVATIONS_ENABLED=true` with the existing Redis configuration (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`). The default is disabled; new compatible clients receive an unavailable response for distant reservations until the worker is ready. Existing clients and paid bookings retain their current payment flow.
+
+Only furniture offers accepted for pickup beyond today plus five days in `scheduleTimeZone` become unpaid exclusive reservations. Confirmation opens exactly 48 hours before pickup and closes 24 hours before pickup. A minute-based persistent BullMQ sweep and delayed jobs recover reminders, expiry, payment reconciliation, notification retries, and full refunds after late payment success. No payment intent or wallet reservation is created by acceptance or reminders. Driver payout continues through delivery confirmation.
+
+Customers see a confirmation popup on app launch/resume while an unpaid furniture reservation is inside the 48-hour to 24-hour window. The authenticated `GET /customer/requests/reservations/payment-due` endpoint returns only their active unpaid reservations. The popup rechecks the booking and accepted offer before opening payment. Reminder entries in Alerts use the app’s amber theme.
+
+For a safe phone preview, build the API and run `node scripts/test-pickup-reminder.cjs <push-token-id>` from this directory. The script only accepts an active customer token registered for `com.transpo24.app.dev` in the DEVELOPMENT push environment. It persists a labelled test alert and sends a push only to that device. Development clients can display the preview without a booking or payment; production clients ignore preview data. Earlier test previews are marked read before creating the next one.
+
+Monitor `FurnitureReservationsService` worker/queue errors and per-request retry logs. Inspect overdue `RESERVED` rows using `paymentDeadlineAt`, notification timestamps, `deferredPaymentState`, and `reservationRefundedAt`; admin Delivery Operations shows reservation state and deadline. Do not disable all workers while unpaid reservations remain: the feature flag controls new reservation eligibility, while recovery workers must continue processing existing rows.
+
+### Other transport services
+
+Vehicle transport follows the same schedule and immediate-payment rules as goods and other non-furniture services. Pickup is limited to today through five calendar days ahead; delivery must be on a later calendar day than pickup and within that same window. New unpaid deferred reservations are exclusive to furniture. Recovery workers continue processing any previously persisted reservations.
