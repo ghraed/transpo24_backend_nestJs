@@ -412,3 +412,54 @@ describe('dispatch, Jobs and map consistency', () => {
     },
   );
 });
+
+it('includes offline capable drivers for furniture beyond the six-day calendar window', () => {
+  const a = { ...availability(), isOnline: false };
+  const r: MatchingRequest = {
+    ...request(),
+    service: { key: 'FURNITURE_TRANSPORT' },
+    itemType: 'FURNITURE',
+    isImmediate: false,
+    scheduleTimeZone: 'Europe/Zurich',
+    scheduledPickupAt: new Date('2026-09-16T10:00:00Z'),
+  };
+  const v: MatchingVehicle[] = [
+    { ...vehicles[0], allowedCargoTypes: ['FURNITURE'] },
+  ];
+  expect(isEligibleRequest(r, a, v, now)).toBe(true);
+  expect(
+    isEligibleRequest(
+      { ...r, scheduledPickupAt: new Date('2026-09-15T10:00:00Z') },
+      a,
+      v,
+      now,
+    ),
+  ).toBe(false);
+  expect(isEligibleRequest(r, a, [], now)).toBe(false);
+  expect(
+    isEligibleRequest(
+      {
+        ...r,
+        status: 'RESERVED',
+        assignedDriverId: 'selected',
+        acceptedOfferId: 'offer',
+      },
+      a,
+      v,
+      now,
+    ),
+  ).toBe(false);
+  expect(
+    isEligibleRequest(
+      {
+        ...r,
+        status: 'DRIVER_ASSIGNED',
+        assignedDriverId: 'selected',
+        acceptedOfferId: 'offer',
+      },
+      a,
+      v,
+      now,
+    ),
+  ).toBe(false);
+});

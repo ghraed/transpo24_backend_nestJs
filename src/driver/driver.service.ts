@@ -511,6 +511,7 @@ type DriverRatingSource = {
 };
 
 type RequestDetailsSource = RequestVersionSource & {
+  deferredPaymentState?: string | null;
   createdAt: Date;
   acceptedOfferId: string | null;
   id: string;
@@ -734,6 +735,7 @@ const DRIVER_REQUEST_ALERT_SELECT = {
 } satisfies Prisma.DriverRequestAlertSelect;
 
 const DRIVER_REQUEST_DETAILS_SELECT = {
+  deferredPaymentState: true,
   ...REQUEST_VERSION_SELECT,
   createdAt: true,
   acceptedOfferId: true,
@@ -1754,26 +1756,29 @@ export class DriverService {
 
     const requests = await this.prisma.transportRequest.findMany({
       where: {
-        status: {
-          in: [
-            TransportRequestStatus.PENDING_QUOTES,
-            TransportRequestStatus.QUOTED,
-          ],
-        },
-        assignedDriverId: null,
-        acceptedOfferId: null,
-        // Seen, dismissed, and previously quoted requests remain in Jobs until
-        // the customer completes a booking. Offline drivers retain known jobs.
-        ...(!availability.isOnline
-          ? { driverAlerts: { some: { driverId: profile.id } } }
-          : {}),
+        OR: [
+          {
+            status: { in: ['PENDING_QUOTES', 'QUOTED'] },
+            assignedDriverId: null,
+            acceptedOfferId: null,
+          },
+          {
+            service: { key: 'FURNITURE_TRANSPORT' },
+            deferredPaymentState: {
+              in: ['WAITING', 'CONFIRMATION_DUE', 'PAYMENT_PENDING', 'PAID'],
+            },
+            status: { notIn: ['CANCELLED', 'DELIVERED', 'COMPLETED'] },
+          },
+        ],
         pickupLatitude: { not: null },
         pickupLongitude: { not: null },
         dropoffLatitude: { not: null },
         dropoffLongitude: { not: null },
         itemTitle: { not: null },
         itemType: { not: null },
-        OR: [{ isImmediate: true }, { scheduledPickupAt: { not: null } }],
+        AND: [
+          { OR: [{ isImmediate: true }, { scheduledPickupAt: { not: null } }] },
+        ],
       },
       select: DRIVER_REQUEST_DETAILS_SELECT,
       orderBy: { submittedAt: 'desc' },
@@ -1786,7 +1791,24 @@ export class DriverService {
       const existingAlert = request.driverAlerts.find(
         (alert) => alert.driverId === profile.id,
       );
-      const eligible = isEligibleRequest(request, availability, vehicles);
+      const lockedFurniture =
+        request.service?.key === 'FURNITURE_TRANSPORT' &&
+        !!request.deferredPaymentState;
+      const eligible = isEligibleRequest(
+        lockedFurniture
+          ? {
+              ...request,
+              status: 'PENDING_QUOTES',
+              assignedDriverId: null,
+              acceptedOfferId: null,
+            }
+          : request,
+        availability,
+        vehicles,
+        new Date(),
+        !lockedFurniture,
+      );
+      if (lockedFurniture && !eligible) continue;
       if (!existingAlert && !eligible) continue;
       const distanceKm = coverageDistance(request, availability);
 
@@ -1797,7 +1819,7 @@ export class DriverService {
 
       alerts.push({
         ...this.toRequestAlertSummary(request, alert, distanceKm),
-        isCurrentlyEligible: eligible,
+        isCurrentlyEligible: eligible && !lockedFurniture,
       });
     }
 
@@ -1827,7 +1849,33 @@ export class DriverService {
       !request.assignedDriverId &&
       (request.status === TransportRequestStatus.PENDING_QUOTES ||
         request.status === TransportRequestStatus.QUOTED);
-    if (!isSelectedDriver && !isOpenForQuotes) {
+    const isFurnitureBooking =
+      request.service?.key === 'FURNITURE_TRANSPORT' &&
+      !!request.deferredPaymentState &&
+      !['CANCELLED', 'DELIVERED', 'COMPLETED'].includes(request.status);
+    let canViewFurnitureBooking = false;
+    if (isFurnitureBooking) {
+      const [availability, vehicles] = await Promise.all([
+        this.prisma.driverAvailability.findUnique({
+          where: { driverId: profile.id },
+          select: MATCHING_AVAILABILITY_SELECT,
+        }),
+        this.getApprovedDriverVehicles(profile.id),
+      ]);
+      canViewFurnitureBooking = isEligibleRequest(
+        {
+          ...request,
+          status: 'PENDING_QUOTES',
+          assignedDriverId: null,
+          acceptedOfferId: null,
+        },
+        availability,
+        vehicles,
+        new Date(),
+        false,
+      );
+    }
+    if (!isSelectedDriver && !isOpenForQuotes && !canViewFurnitureBooking) {
       throw new NotFoundException('Request not available for this driver.');
     }
 
@@ -1849,7 +1897,12 @@ export class DriverService {
     const hasOfferAccess = Boolean(offer);
     const hasAlertAccess = existingAlert !== null;
 
-    if (!hasAlertAccess && !hasOfferAccess && !isSelectedDriver) {
+    if (
+      !hasAlertAccess &&
+      !hasOfferAccess &&
+      !isSelectedDriver &&
+      !canViewFurnitureBooking
+    ) {
       throw new NotFoundException('Request not available for this driver.');
     }
 
@@ -1863,7 +1916,10 @@ export class DriverService {
       : null;
 
     let alert = existingAlert;
-    if (!alert && (hasOfferAccess || isSelectedDriver)) {
+    if (
+      !alert &&
+      (hasOfferAccess || isSelectedDriver || canViewFurnitureBooking)
+    ) {
       alert = await this.ensureDriverRequestAlert({
         requestId: request.id,
         driverId: profile.id,

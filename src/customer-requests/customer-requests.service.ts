@@ -3378,7 +3378,7 @@ export class CustomerRequestsService {
         },
       }),
       this.prisma.transportRequest.findMany({
-        where: { customerId: input.customerId },
+        where: { customerId: input.customerId, status: { not: 'RESERVED' } },
         orderBy: { createdAt: 'desc' },
         take: 5,
         select: {
@@ -4100,7 +4100,13 @@ export class CustomerRequestsService {
       where: {
         status: DriverStatus.APPROVED,
         isProfileCompleted: true,
-        availability: { is: { isOnline: true } },
+        ...(shouldDeferTransportPayment(
+          request.service?.key ?? '',
+          request.scheduledPickupAt,
+          request.scheduleTimeZone ?? null,
+        )
+          ? {}
+          : { availability: { is: { isOnline: true } } }),
         vehicles: {
           some: APPROVED_MATCHING_VEHICLE_WHERE,
         },

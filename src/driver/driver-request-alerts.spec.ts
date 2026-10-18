@@ -102,15 +102,111 @@ describe('unresolved driver job requests', () => {
       expect(result.alerts[59].requestId).toBe('request-59');
       const query = findMany.mock.calls[0][0];
       expect(query.take).toBeUndefined();
-      expect(query.where.status.in).toEqual(['PENDING_QUOTES', 'QUOTED']);
-      expect(query.where.assignedDriverId).toBeNull();
-      expect(query.where.acceptedOfferId).toBeNull();
+      expect(query.where.OR[0].status.in).toEqual(['PENDING_QUOTES', 'QUOTED']);
+      expect(query.where.OR[0].assignedDriverId).toBeNull();
+      expect(query.where.OR[0].acceptedOfferId).toBeNull();
       expect(query.where.offers).toBeUndefined();
-      expect(query.where.driverAlerts).toEqual(
-        online ? undefined : { some: { driverId: 'driver' } },
-      );
+      expect(query.where.OR[1].deferredPaymentState.in).toContain('PAID');
     },
   );
+
+  it.each(['RESERVED', 'DRIVER_ASSIGNED'])(
+    'keeps %s furniture visible without allowing offers',
+    async (status) => {
+      const { service, findMany } = setup(false);
+      Object.assign(service, {
+        getApprovedDriverVehicles: jest.fn().mockResolvedValue([
+          {
+            vehicleType: 'VAN',
+            capacityKg: 1000,
+            allowedCargoTypes: ['FURNITURE'],
+            workingSchedule: [],
+          },
+        ]),
+      });
+      const prisma = (service as any).prisma;
+      const availability = await prisma.driverAvailability.findUnique();
+      availability.driver.cities = ['Zurich'];
+      availability.cityCoverage = [
+        { city: 'Zurich', latitude: 0, longitude: 0 },
+      ];
+      const row = {
+        id: 'furniture',
+        status,
+        deferredPaymentState: status === 'RESERVED' ? 'WAITING' : 'PAID',
+        assignedDriverId: 'other',
+        acceptedOfferId: 'selected',
+        service: { key: 'FURNITURE_TRANSPORT' },
+        isImmediate: false,
+        scheduledPickupAt: new Date(Date.now() + 7 * 86400000),
+        pickupLatitude: 0,
+        pickupLongitude: 0,
+        itemType: 'FURNITURE',
+        driverAlerts: [],
+      };
+      findMany.mockResolvedValue([row]);
+      expect(
+        (await service.getDriverRequestAlerts({ userId: 'user' })).alerts,
+      ).toEqual([{ requestId: 'furniture', isCurrentlyEligible: false }]);
+      availability.driver.cities = [];
+      expect(
+        (await service.getDriverRequestAlerts({ userId: 'user' })).alerts,
+      ).toEqual([]);
+    },
+  );
+
+  it('allows an eligible unselected driver to inspect pending furniture', async () => {
+    const { service } = setup(false);
+    const prisma = (service as any).prisma;
+    const availability = await prisma.driverAvailability.findUnique();
+    availability.driver.cities = ['Zurich'];
+    availability.cityCoverage = [{ city: 'Zurich', latitude: 0, longitude: 0 }];
+    Object.assign(service, {
+      getApprovedDriverVehicles: jest.fn().mockResolvedValue([
+        {
+          vehicleType: 'VAN',
+          capacityKg: 1000,
+          allowedCargoTypes: ['FURNITURE'],
+          workingSchedule: [],
+        },
+      ]),
+      toRequestDetailsResponse: jest.fn((request) => ({
+        requestId: request.id,
+        requestStatus: request.status,
+      })),
+    });
+    prisma.driverOffer = { findUnique: jest.fn().mockResolvedValue(null) };
+    prisma.transportRequest.findUnique.mockResolvedValue({
+      id: 'furniture',
+      status: 'RESERVED',
+      deferredPaymentState: 'WAITING',
+      assignedDriverId: 'other',
+      acceptedOfferId: 'selected',
+      service: { key: 'FURNITURE_TRANSPORT' },
+      isImmediate: false,
+      scheduledPickupAt: new Date(Date.now() + 7 * 86400000),
+      pickupLatitude: 0,
+      pickupLongitude: 0,
+      itemType: 'FURNITURE',
+      driverAlerts: [],
+    });
+    expect(
+      await service.getDriverRequestDetails({
+        userId: 'user',
+        requestId: 'furniture',
+      }),
+    ).toEqual({
+      requestId: 'furniture',
+      requestStatus: 'RESERVED',
+    });
+    availability.driver.cities = [];
+    await expect(
+      service.getDriverRequestDetails({
+        userId: 'user',
+        requestId: 'furniture',
+      }),
+    ).rejects.toThrow('Request not available for this driver.');
+  });
 
   it('keeps dismissed and expired alerts visible while the request remains open', async () => {
     const { service, findMany } = setup();

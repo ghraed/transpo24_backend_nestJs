@@ -1,3 +1,4 @@
+import { shouldDeferTransportPayment } from '../customer-requests/furniture-reservation-policy';
 import {
   DocumentStatus,
   DriverDocumentType,
@@ -45,6 +46,7 @@ export type MatchingAvailability = Prisma.DriverAvailabilityGetPayload<{
 }>;
 export type MatchingRequest = {
   status: string;
+  scheduleTimeZone?: string | null;
   assignedDriverId: string | null;
   acceptedOfferId: string | null;
   isImmediate: boolean;
@@ -257,7 +259,14 @@ export function isEligibleRequest(
 ): boolean {
   if (
     !a ||
-    (requireOnline && !a.isOnline) ||
+    (requireOnline &&
+      !a.isOnline &&
+      !shouldDeferTransportPayment(
+        request.service?.key ?? '',
+        request.scheduledPickupAt,
+        request.scheduleTimeZone ?? null,
+        now,
+      )) ||
     a.driver.status !== DriverStatus.APPROVED ||
     !a.driver.isProfileCompleted
   )
