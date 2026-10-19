@@ -5,6 +5,7 @@ export interface CustomerRequestOfferSummaryDto {
   offerId: string;
   requestId: string;
   driverId: string;
+  driverType?: 'PERSONAL' | 'COMPANY' | null;
   driverName: string | null;
   driverVehiclePhoto: string | null;
   driverRating: number | null;

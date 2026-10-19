@@ -9,6 +9,8 @@ export type DriverNextStep =
 
 export interface DriverProfileResponseDto {
   nickname: string | null;
+  driverType: 'PERSONAL' | 'COMPANY';
+  trn: string | null;
   id: string;
   userId: string;
   firstName: string;

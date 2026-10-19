@@ -1,17 +1,16 @@
 import {
   IsNotEmpty,
   IsString,
+  IsOptional,
   Length,
   MaxLength,
   MinLength,
 } from 'class-validator';
 
 export class UpdateCustomerProfileDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  @MinLength(2)
-  @MaxLength(40)
-  nickname!: string;
+  nickname?: string;
 
   @IsString()
   @IsNotEmpty()

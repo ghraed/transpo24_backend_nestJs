@@ -21,7 +21,9 @@ describe('customer booking disclosure', () => {
       },
       assignedDriverId: 'driver',
       assignedDriver: {
-        nickname: 'Alex',
+        firstName: 'Alex',
+        lastName: '',
+        driverType: 'COMPANY',
         vehicles: [
           {
             make: 'Truck',
@@ -47,7 +49,9 @@ describe('customer booking disclosure', () => {
       acceptedAt: now,
       message: 'Contact Alex directly',
       driver: {
-        nickname: 'Alex',
+        firstName: 'Alex',
+        lastName: '',
+        driverType: 'COMPANY',
         profilePhotoUrl: 'profile-photo',
         averageRating: new Prisma.Decimal(4.5),
         vehicles: [{ documents: [{ url: 'vehicle-photo' }] }],
@@ -79,6 +83,8 @@ describe('customer booking disclosure', () => {
       customerId: 'customer',
     });
     expect(status.driverDetailsAvailable).toBe(visible);
+    expect(status.driverSummary.driverType).toBe('COMPANY');
+    expect(tracking.driverType).toBe('COMPANY');
     expect(status.driverSummary.driverName).toBe(visible ? 'Alex' : null);
     expect(status.driverSummary.vehicleInfo).toBe(
       visible ? 'Truck A (ABC)' : null,

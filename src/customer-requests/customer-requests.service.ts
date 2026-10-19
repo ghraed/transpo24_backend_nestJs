@@ -347,7 +347,7 @@ type RequestPhotoResponse = {
 
 type TransportRequestResponseSource = {
   createdAt: Date;
-  customer?: { nickname: string | null } | null;
+  customer?: { name?: string | null; nickname?: string | null } | null;
   assignedDriverId: string | null;
   acceptedOfferId: string | null;
   id: string;
@@ -441,6 +441,7 @@ type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
   };
   assignedDriver: {
     nickname?: string | null;
+    driverType?: string;
     firstName: string;
     lastName: string;
     vehicles: Array<{
@@ -516,6 +517,7 @@ type CustomerRequestOfferSource = {
   acceptedAt: Date | null;
   driver: {
     nickname?: string | null;
+    driverType?: string;
     firstName: string;
     lastName: string;
     averageRating: Prisma.Decimal | null;
@@ -544,6 +546,7 @@ type EligibleDriverDispatchCandidate = {
   id: string;
   userId: string;
   nickname?: string | null;
+  driverType?: string;
   firstName: string;
   lastName: string;
   status: DriverStatus;
@@ -623,7 +626,7 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
 ]);
 const REQUEST_SELECT = {
   createdAt: true,
-  customer: { select: { nickname: true } },
+  customer: { select: { name: true } },
   assignedDriverId: true,
   acceptedOfferId: true,
   id: true,
@@ -725,6 +728,7 @@ const REQUEST_STATUS_SELECT = {
   assignedDriver: {
     select: {
       nickname: true,
+      driverType: true,
       firstName: true,
       lastName: true,
       vehicles: {
@@ -2460,6 +2464,7 @@ export class CustomerRequestsService {
         driver: {
           select: {
             nickname: true,
+            driverType: true,
             firstName: true,
             lastName: true,
             averageRating: true,
@@ -2562,6 +2567,7 @@ export class CustomerRequestsService {
         assignedDriver: {
           select: {
             nickname: true,
+            driverType: true,
             firstName: true,
             lastName: true,
             vehicles: {
@@ -2618,9 +2624,15 @@ export class CustomerRequestsService {
       requestId: request.id,
       currentStatus: request.status,
       assignedDriverId: detailsAvailable ? request.assignedDriverId : null,
+      driverType: request.assignedDriver
+        ? request.assignedDriver.driverType === 'COMPANY'
+          ? 'COMPANY'
+          : 'PERSONAL'
+        : null,
       driverName:
         detailsAvailable && request.assignedDriver
-          ? request.assignedDriver.nickname?.trim() || 'Driver'
+          ? `${request.assignedDriver.firstName ?? ''} ${request.assignedDriver.lastName ?? ''}`.trim() ||
+            'Driver'
           : null,
       driverVehiclePhoto: detailsAvailable
         ? (request.assignedDriver?.vehicles[0]?.documents[0]?.url ?? null)
@@ -3831,7 +3843,8 @@ export class CustomerRequestsService {
     );
     const driverName =
       detailsAvailable && request.assignedDriver
-        ? request.assignedDriver.nickname?.trim() || 'Driver'
+        ? `${request.assignedDriver.firstName ?? ''} ${request.assignedDriver.lastName ?? ''}`.trim() ||
+          'Driver'
         : null;
     const primaryVehicle = detailsAvailable
       ? (request.assignedDriver?.vehicles[0] ?? null)
@@ -3883,6 +3896,11 @@ export class CustomerRequestsService {
           ).toISOString()
         : null,
       driverSummary: {
+        driverType: request.assignedDriver
+          ? request.assignedDriver.driverType === 'COMPANY'
+            ? 'COMPANY'
+            : 'PERSONAL'
+          : null,
         assigned: Boolean(request.assignedDriverId),
         driverId: detailsAvailable ? request.assignedDriverId : null,
         driverName: driverName || null,
@@ -4077,7 +4095,9 @@ export class CustomerRequestsService {
     offer: CustomerRequestOfferSource,
     detailsAvailable = false,
   ): CustomerRequestOfferSummaryDto {
-    const driverName = offer.driver.nickname?.trim() || 'Driver';
+    const driverName =
+      `${offer.driver.firstName ?? ''} ${offer.driver.lastName ?? ''}`.trim() ||
+      'Driver';
     const driverVehiclePhoto =
       offer.driver.vehicles[0]?.documents[0]?.url ??
       offer.driver.profilePhotoUrl ??
@@ -4095,6 +4115,8 @@ export class CustomerRequestsService {
       offerId: offer.id,
       requestId: offer.requestId,
       driverId: offer.driverId,
+      driverType:
+        offer.driver.driverType === 'COMPANY' ? 'COMPANY' : 'PERSONAL',
       driverName: detailsAvailable ? driverName : null,
       driverVehiclePhoto: detailsAvailable ? driverVehiclePhoto : null,
       driverRating,
@@ -4161,6 +4183,7 @@ export class CustomerRequestsService {
         id: true,
         userId: true,
         nickname: true,
+        driverType: true,
         firstName: true,
         lastName: true,
         status: true,
@@ -4311,7 +4334,7 @@ export class CustomerRequestsService {
     distanceKm: number | null,
   ): DriverRequestAlertSummaryPayload {
     return {
-      customerNickname: request.customer?.nickname?.trim() || 'Customer',
+      customerNickname: request.customer?.name?.trim() || 'Customer',
       alertId: alert.id,
       requestId: request.id,
       alertStatus: alert.status,

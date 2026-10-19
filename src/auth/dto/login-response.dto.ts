@@ -9,6 +9,8 @@ export interface LoginResponseDto {
   driver?: {
     id: string;
     nickname?: string | null;
+    driverType?: 'PERSONAL' | 'COMPANY';
+    trn?: string | null;
     firstName: string;
     lastName: string;
     phone: string;

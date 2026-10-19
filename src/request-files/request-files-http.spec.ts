@@ -54,6 +54,7 @@ describe('private file HTTP boundary', () => {
                   }
                 : null,
             isUserActive: async () => true,
+            assertDriverApproved: async () => undefined,
           },
         },
       ],

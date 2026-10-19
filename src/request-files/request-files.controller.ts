@@ -1,3 +1,4 @@
+import { ApprovedDriverGuard } from '../auth/guards/approved-driver.guard';
 import {
   Body,
   Controller,
@@ -19,7 +20,7 @@ import { RequestFilesService } from './request-files.service';
 import { type IncomingFile, MAX_FILE_SIZE } from './file-validation';
 
 @Controller('request-files')
-@UseGuards(AuthenticatedUserGuard)
+@UseGuards(AuthenticatedUserGuard, ApprovedDriverGuard)
 export class RequestFilesController {
   constructor(private readonly files: RequestFilesService) {}
   @Get('request/:requestId')

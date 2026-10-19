@@ -275,7 +275,7 @@ describe('AuthService phone authentication', () => {
     });
 
     const response = await service.registerDriver({
-      nickname: 'Night Rider',
+      driverType: 'PERSONAL',
       firstName: 'New',
       lastName: 'Driver',
       email: 'driver@example.com',
@@ -498,27 +498,31 @@ describe('AuthService phone authentication', () => {
   });
 });
 
-
-describe('customer nickname profiles', () => {
-  it('requires a nonblank nickname before completing a profile', async () => {
-    const { service, prisma } = createHarness();
-    for (const nickname of ['', '  ', 'a', 'x'.repeat(41), 'ab\ncd']) {
-      await expect(service.completeCustomerProfile('customer-1', 'Private Name', 'LB', nickname)).rejects.toThrow('Nickname');
-    }
-    expect(prisma.user.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('stores and returns the trimmed nickname separately from the full name', async () => {
+describe('customer profiles without nicknames', () => {
+  it('completes and updates profiles using the full name', async () => {
     const { service, prisma } = createHarness();
     prisma.user.updateMany.mockResolvedValue({ count: 1 });
-    const result = await service.completeCustomerProfile('customer-1', 'Private Name', 'lb', '  Road Runner  ');
-    expect(result).toEqual({ success: true, name: 'Private Name', nickname: 'Road Runner', countryCode: 'LB' });
-    expect(prisma.user.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: {
-      name: 'Private Name', nickname: 'Road Runner', countryCode: 'LB', isProfileCompleted: true,
-    } }));
-    await service.updateCustomerProfile('customer-1', 'Private Name', 'LB', 'New Nickname');
-    expect(prisma.user.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: {
-      name: 'Private Name', nickname: 'New Nickname', countryCode: 'LB',
-    } }));
+    expect(
+      await service.completeCustomerProfile('customer-1', 'Private Name', 'lb'),
+    ).toEqual({
+      success: true,
+      name: 'Private Name',
+      nickname: 'Private Name',
+      countryCode: 'LB',
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: 'Private Name',
+          isProfileCompleted: true,
+        }),
+      }),
+    );
+    await service.updateCustomerProfile('customer-1', 'Updated Name', 'LB');
+    expect(prisma.user.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ name: 'Updated Name' }),
+      }),
+    );
   });
 });

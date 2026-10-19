@@ -1,3 +1,4 @@
+import { ApprovedDriverGuard } from '../auth/guards/approved-driver.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   type IncomingFile,
@@ -35,7 +36,7 @@ import type {
 } from './chat.types';
 
 @Controller('chat')
-@UseGuards(AuthenticatedUserGuard)
+@UseGuards(AuthenticatedUserGuard, ApprovedDriverGuard)
 export class ChatController {
   constructor(
     private readonly chatService: ChatService,

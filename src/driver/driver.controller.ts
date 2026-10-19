@@ -1,4 +1,4 @@
-import { UpdateDriverNicknameDto } from './dto/update-driver-nickname.dto';
+import { ApprovedDriverGuard } from '../auth/guards/approved-driver.guard';
 import { UpdateDriverMatchingLocationDto } from './dto/update-driver-availability.dto';
 import {
   BadRequestException,
@@ -179,7 +179,8 @@ export class DriverController {
   ): Promise<DriverOnboardingResponseDto> {
     return this.driverService.upsertPersonalInfo({
       userId: request.user.id,
-      nickname: dto.nickname,
+      driverType: dto.driverType,
+      trn: dto.trn,
       fullNameOnId: dto.fullNameOnId,
       dateOfBirth: new Date(dto.dateOfBirth),
       idOrResidencyNumber: dto.idOrResidencyNumber,
@@ -296,14 +297,6 @@ export class DriverController {
     });
   }
 
-  @Patch('me/nickname')
-  async updateMyNickname(
-    @Req() request: AuthenticatedRequest,
-    @Body() dto: UpdateDriverNicknameDto,
-  ): Promise<DriverMeResponseDto> {
-    return this.driverService.updateNickname(request.user.id, dto.nickname);
-  }
-
   @Patch('me/profile')
   async updateMyProfile(
     @Req() request: AuthenticatedRequest,
@@ -311,7 +304,8 @@ export class DriverController {
   ): Promise<DriverMeResponseDto> {
     return this.driverService.updateProfile({
       userId: request.user.id,
-      nickname: dto.nickname,
+      driverType: dto.driverType,
+      trn: dto.trn,
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone,
@@ -392,6 +386,7 @@ export class DriverController {
     return this.driverService.approveForTesting({ userId: request.user.id });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Post('me/testing/send-customer-notification')
   @UseGuards(TestingOnlyGuard)
   async sendCustomerTestNotification(
@@ -413,6 +408,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Get('requests/:requestId')
   async getRequestDetails(
     @Req() request: AuthenticatedRequest,
@@ -424,6 +420,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Patch('requests/:requestId/seen')
   async markRequestSeen(
     @Req() request: AuthenticatedRequest,
@@ -435,6 +432,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Post('requests/:requestId/accept-alert')
   async acceptRequestAlert(
     @Req() request: AuthenticatedRequest,
@@ -446,6 +444,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Post('requests/:requestId/ignore-alert')
   async ignoreRequestAlert(
     @Req() request: AuthenticatedRequest,
@@ -457,6 +456,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Post('requests/:requestId/offers')
   async sendPriceOffer(
     @Req() request: AuthenticatedRequest,
@@ -480,6 +480,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Post('requests/:requestId/additional-charges')
   @UseInterceptors(
     FileInterceptor('invoice', {
@@ -551,6 +552,7 @@ export class DriverController {
     return charge;
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Get('jobs/accepted')
   async getAcceptedJobs(
     @Req() request: AuthenticatedRequest,
@@ -560,6 +562,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Get('jobs/:requestId')
   async getAcceptedJobDetails(
     @Req() request: AuthenticatedRequest,
@@ -836,6 +839,7 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Patch('trips/:tripId/pickup-item')
   @UseInterceptors(
     FilesInterceptor('photos', MAX_TRIP_PROOF_PHOTOS, {
@@ -910,6 +914,7 @@ export class DriverController {
     return result.response;
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Post('trips/:tripId/start-pickup')
   async startReservedPickup(
     @Req() request: AuthenticatedRequest,
@@ -918,6 +923,7 @@ export class DriverController {
     return this.driverService.startReservedPickup(request.user.id, tripId);
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Patch('trips/:tripId/start-delivery')
   async startDelivery(
     @Req() request: AuthenticatedRequest,
@@ -938,6 +944,7 @@ export class DriverController {
     return result.response;
   }
 
+  @UseGuards(ApprovedDriverGuard)
   @Patch('trips/:tripId/deliver-item')
   @UseInterceptors(
     FilesInterceptor('photos', MAX_TRIP_PROOF_PHOTOS, {

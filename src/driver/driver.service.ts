@@ -1,3 +1,5 @@
+import { assertDriverApproved } from '../auth/driver-approval';
+import { normalizeDriverBusiness } from './driver-business';
 import { reservationSummary } from '../customer-requests/furniture-reservation-policy';
 import {
   requestDetailsVersion,
@@ -118,7 +120,9 @@ interface GetDriverMeInput {
 }
 
 interface UpdateDriverProfileInput {
-  nickname: string;
+  nickname?: string;
+  driverType?: 'PERSONAL' | 'COMPANY';
+  trn?: string | null;
   userId: string;
   firstName: string;
   lastName: string;
@@ -145,7 +149,9 @@ interface GetDriverOnboardingStatusInput {
 }
 
 interface UpsertDriverPersonalInfoInput {
-  nickname: string;
+  nickname?: string;
+  driverType?: 'PERSONAL' | 'COMPANY';
+  trn?: string | null;
   userId: string;
   fullNameOnId: string;
   dateOfBirth: Date;
@@ -339,6 +345,8 @@ interface GetDriverAcceptedJobDetailsInput {
 
 type DriverProfileSource = {
   nickname?: string | null;
+  driverType?: string;
+  trn?: string | null;
   id: string;
   userId: string;
   firstName: string;
@@ -506,6 +514,7 @@ type DriverRatingSource = {
   comment: string | null;
   createdAt: Date;
   customer: {
+    name?: string | null;
     nickname?: string | null;
   } | null;
 };
@@ -563,6 +572,7 @@ type RequestDetailsSource = RequestVersionSource & {
     icon: string;
   } | null;
   customer: {
+    name?: string | null;
     nickname?: string | null;
   } | null;
   photos: Array<{
@@ -629,6 +639,7 @@ type AcceptedJobRequestSource = {
     icon: string;
   } | null;
   customer: {
+    name?: string | null;
     nickname?: string | null;
   } | null;
   photos: Array<{
@@ -651,6 +662,8 @@ const DRIVER_ME_SELECT = {
       id: true,
       userId: true,
       nickname: true,
+      driverType: true,
+      trn: true,
       firstName: true,
       lastName: true,
       phone: true,
@@ -791,7 +804,7 @@ const DRIVER_REQUEST_DETAILS_SELECT = {
   customerId: true,
   customer: {
     select: {
-      nickname: true,
+      name: true,
     },
   },
   photos: {
@@ -1241,7 +1254,8 @@ export class DriverService {
       userId: input.userId,
       existingProfile: user.driverProfile,
       changes: {
-        nickname: input.nickname,
+        driverType: input.driverType,
+        trn: input.trn,
         fullNameOnId: input.fullNameOnId,
         dateOfBirth: input.dateOfBirth,
         idOrResidencyNumber: input.idOrResidencyNumber,
@@ -1251,36 +1265,6 @@ export class DriverService {
     });
 
     return this.toDriverOnboardingResponse(updatedProfile);
-  }
-
-  private normalizeDriverNickname(nickname: string): string {
-    const value = typeof nickname === 'string' ? nickname.trim() : '';
-    if (
-      value.length < 2 ||
-      value.length > 40 ||
-      // Nicknames intentionally reject ASCII control characters.
-      // eslint-disable-next-line no-control-regex
-      /[\u0000-\u001f\u007f]/u.test(value)
-    ) {
-      throw new BadRequestException(
-        'Nickname must be between 2 and 40 characters.',
-      );
-    }
-    return value;
-  }
-
-  async updateNickname(
-    userId: string,
-    nickname: string,
-  ): Promise<DriverMeResponseDto> {
-    const normalizedNickname = this.normalizeDriverNickname(nickname);
-    const updated = await this.prisma.driverProfile.updateMany({
-      where: { userId, user: { deletedAt: null } },
-      data: { nickname: normalizedNickname },
-    });
-    if (updated.count !== 1)
-      throw new NotFoundException('Driver profile not found.');
-    return this.getMe({ userId });
   }
 
   async updateProfile(
@@ -1741,6 +1725,12 @@ export class DriverService {
     input: GetDriverRequestAlertsInput,
   ): Promise<DriverRequestAlertsResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
+    if (
+      profile.status !== DriverStatus.APPROVED ||
+      !profile.isProfileCompleted
+    ) {
+      return { alerts: [], locationReference: 'NONE' };
+    }
     this.ensureDriverOnboardingForAlerts(profile);
 
     const availability = await this.prisma.driverAvailability.findUnique({
@@ -1951,6 +1941,7 @@ export class DriverService {
     input: UpdateDriverRequestAlertInput,
   ): Promise<DriverRequestAlertActionResponseDto> {
     const profile = await this.ensureDriverProfile(input.userId);
+    assertDriverApproved(profile);
 
     const request = await this.prisma.transportRequest.findUnique({
       where: { id: input.requestId },
@@ -2287,6 +2278,8 @@ export class DriverService {
         driver: {
           select: {
             nickname: true,
+            driverType: true,
+            trn: true,
             firstName: true,
             lastName: true,
             averageRating: true,
@@ -2313,7 +2306,9 @@ export class DriverService {
       const estimatedPickupAt = customerOffer.estimatedPickupAt
         ? customerOffer.estimatedPickupAt.toISOString()
         : null;
-      const driverName = customerOffer.driver.nickname?.trim() || 'Driver';
+      const driverName =
+        `${customerOffer.driver.firstName ?? ''} ${customerOffer.driver.lastName ?? ''}`.trim() ||
+        'Driver';
       const payload: OfferNewPayload = {
         requestId: result.updatedRequest.id,
         requestStatus: result.updatedRequest.status,
@@ -2322,6 +2317,10 @@ export class DriverService {
           offerId: customerOffer.id,
           requestId: customerOffer.requestId,
           driverId: customerOffer.driverId,
+          driverType:
+            customerOffer.driver.driverType === 'COMPANY'
+              ? 'COMPANY'
+              : 'PERSONAL',
           driverName: driverName || null,
           driverVehiclePhoto:
             customerOffer.driver.vehicles[0]?.documents[0]?.url ??
@@ -2761,7 +2760,7 @@ export class DriverService {
           createdAt: true,
           customer: {
             select: {
-              nickname: true,
+              name: true,
             },
           },
         },
@@ -2847,7 +2846,7 @@ export class DriverService {
         },
         customer: {
           select: {
-            nickname: true,
+            name: true,
           },
         },
         photos: {
@@ -2936,7 +2935,7 @@ export class DriverService {
         },
         customer: {
           select: {
-            nickname: true,
+            name: true,
           },
         },
         photos: {
@@ -3624,8 +3623,13 @@ export class DriverService {
       );
     }
 
-    const nextNickname = this.normalizeDriverNickname(
-      input.changes.nickname ?? input.existingProfile.nickname ?? '',
+    const business = normalizeDriverBusiness(
+      input.changes.driverType ??
+        input.existingProfile.driverType ??
+        'PERSONAL',
+      input.changes.trn !== undefined
+        ? input.changes.trn
+        : input.existingProfile.trn,
     );
     const nextFirstName =
       input.changes.firstName !== undefined
@@ -3753,7 +3757,8 @@ export class DriverService {
     return this.prisma.driverProfile.update({
       where: { userId: input.userId },
       data: {
-        nickname: nextNickname,
+        ...business,
+        nickname: null,
         firstName: nextFirstName,
         lastName: nextLastName,
         phone: nextPhone,
@@ -4256,31 +4261,7 @@ export class DriverService {
     status: DriverStatus;
     isProfileCompleted: boolean;
   }): void {
-    if (
-      !profile.isProfileCompleted ||
-      profile.status === DriverStatus.PENDING_PROFILE
-    ) {
-      throw new BadRequestException('Driver profile must be completed first.');
-    }
-
-    if (
-      profile.status === DriverStatus.SUSPENDED ||
-      profile.status === DriverStatus.REJECTED
-    ) {
-      throw new BadRequestException(
-        'Driver account is not eligible for request alerts.',
-      );
-    }
-
-    // TODO: once manual review flow is finalized, restrict to APPROVED only.
-    if (
-      profile.status !== DriverStatus.APPROVED &&
-      profile.status !== DriverStatus.PENDING_REVIEW
-    ) {
-      throw new BadRequestException(
-        'Driver is not ready to receive request alerts.',
-      );
-    }
+    assertDriverApproved(profile);
   }
 
   private async getApprovedDriverVehicles(
@@ -4492,7 +4473,7 @@ export class DriverService {
     distanceKm: number | null,
   ): DriverRequestAlertSummaryDto {
     return {
-      customerNickname: request.customer?.nickname?.trim() || 'Customer',
+      customerNickname: request.customer?.name?.trim() || 'Customer',
       alertId: alert.id,
       requestId: request.id,
       alertStatus: alert.status,
@@ -4558,7 +4539,7 @@ export class DriverService {
     offerStatus: DriverOfferStatus | null,
   ): DriverRequestDetailsResponseDto {
     const summary = this.toRequestAlertSummary(request, alert, distanceKm);
-    const customerFirstName = request.customer?.nickname?.trim() || 'Customer';
+    const customerFirstName = request.customer?.name?.trim() || 'Customer';
 
     return {
       ...summary,
@@ -5291,7 +5272,7 @@ export class DriverService {
       tripId: item.tripId,
       rating: item.rating,
       comment: item.comment,
-      customerName: item.customer?.nickname?.trim() || 'Customer',
+      customerName: item.customer?.name?.trim() || 'Customer',
       createdAt: item.createdAt.toISOString(),
     };
   }
@@ -5773,7 +5754,7 @@ export class DriverService {
 
     return {
       reservation: reservationSummary(request),
-      customerNickname: request.customer?.nickname?.trim() || 'Customer',
+      customerNickname: request.customer?.name?.trim() || 'Customer',
       requestId: request.id,
       requestStatus: request.status,
       acceptedAt: request.acceptedAt ? request.acceptedAt.toISOString() : null,
@@ -5831,7 +5812,7 @@ export class DriverService {
     request: AcceptedJobRequestSource,
   ): DriverAcceptedJobDetailsResponseDto {
     const summary = this.toAcceptedJobSummaryResponse(request);
-    const customerFirstName = request.customer?.nickname?.trim() || 'Customer';
+    const customerFirstName = request.customer?.name?.trim() || 'Customer';
 
     return {
       ...summary,
@@ -5876,7 +5857,9 @@ export class DriverService {
     return {
       id: profile.id,
       userId: profile.userId,
-      nickname: profile.nickname ?? null,
+      nickname: null,
+      driverType: profile.driverType === 'COMPANY' ? 'COMPANY' : 'PERSONAL',
+      trn: profile.trn ?? null,
       firstName: profile.firstName,
       lastName: profile.lastName,
       phone: profile.phone,

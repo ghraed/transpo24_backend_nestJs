@@ -1,3 +1,4 @@
+import { ApprovedDriverGuard } from './guards/approved-driver.guard';
 import { Module } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,12 +13,13 @@ import { TestingOnlyGuard } from './guards/testing-only.guard';
   controllers: [AuthController],
   providers: [
     AuthService,
+    ApprovedDriverGuard,
     CustomerAuthGuard,
     TestingOnlyGuard,
     PhoneAuthRateLimitService,
     PrismaService,
     TwilioVerifyService,
   ],
-  exports: [AuthService, TestingOnlyGuard],
+  exports: [AuthService, TestingOnlyGuard, ApprovedDriverGuard],
 })
 export class AuthModule {}

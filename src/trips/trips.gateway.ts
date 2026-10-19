@@ -85,7 +85,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly chatService: ChatService,
   ) {}
 
-  handleConnection(client: Socket): void {
+  async handleConnection(client: Socket): Promise<void> {
     const token = this.getSocketToken(client);
 
     if (!token) {
@@ -106,6 +106,14 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    if (user.role === UserRole.DRIVER) {
+      try {
+        await this.authService.assertDriverApproved(user.id);
+      } catch {
+        client.disconnect();
+        return;
+      }
+    }
     const socketData = client.data as { user?: SocketUser };
     socketData.user = user;
     this.logger.log(

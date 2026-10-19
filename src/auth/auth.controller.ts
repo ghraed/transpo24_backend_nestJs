@@ -1,11 +1,17 @@
-import { Body, Controller, Delete, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Body,
+  Controller,
+  Delete,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
-import { RegisterDriverResponseDto } from './dto/register-driver-response.dto';
-import { RegisterDriverDto } from './dto/register-driver.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { PhoneAuthResponseDto } from './dto/phone-auth-response.dto';
@@ -30,15 +36,17 @@ export class AuthController {
   }
 
   @Post('driver/register')
-  registerDriver(
-    @Body() dto: RegisterDriverDto,
-  ): Promise<RegisterDriverResponseDto> {
-    return this.authService.registerDriver(dto);
+  registerDriver(): never {
+    throw new ForbiddenException(
+      'Drivers must register using a phone verification code.',
+    );
   }
 
   @Post('driver/login')
-  loginDriver(@Body() dto: LoginDto): Promise<LoginResponseDto> {
-    return this.authService.loginDriver(dto);
+  loginDriver(): never {
+    throw new ForbiddenException(
+      'Drivers must sign in using a phone verification code.',
+    );
   }
 
   @Post('driver/phone/send-code')
@@ -144,12 +152,16 @@ export class AuthController {
   completeCustomerProfile(
     @Body() dto: CompleteCustomerProfileDto,
     @Req() request: AuthenticatedRequest,
-  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
+  ): Promise<{
+    success: true;
+    name: string;
+    nickname: string;
+    countryCode: string;
+  }> {
     return this.authService.completeCustomerProfile(
       request.user.id,
       dto.name,
       dto.countryCode,
-      dto.nickname,
     );
   }
 
@@ -158,12 +170,16 @@ export class AuthController {
   updateCustomerProfile(
     @Body() dto: UpdateCustomerProfileDto,
     @Req() request: AuthenticatedRequest,
-  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
+  ): Promise<{
+    success: true;
+    name: string;
+    nickname: string;
+    countryCode: string;
+  }> {
     return this.authService.updateCustomerProfile(
       request.user.id,
       dto.name,
       dto.countryCode,
-      dto.nickname,
     );
   }
 }

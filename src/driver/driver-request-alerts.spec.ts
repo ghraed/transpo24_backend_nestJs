@@ -47,7 +47,11 @@ function setup(isOnline = true) {
     {} as never,
   );
   Object.assign(service, {
-    ensureDriverProfile: jest.fn().mockResolvedValue({ id: 'driver' }),
+    ensureDriverProfile: jest.fn().mockResolvedValue({
+      id: 'driver',
+      status: 'APPROVED',
+      isProfileCompleted: true,
+    }),
     ensureDriverOnboardingForAlerts: jest.fn(),
     getApprovedDriverVehicles: jest.fn().mockResolvedValue([]),
     getApprovedDriverVehiclesTx: jest.fn().mockResolvedValue([

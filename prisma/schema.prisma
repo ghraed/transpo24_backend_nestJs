@@ -733,6 +733,8 @@ model TransportRequestProofPhoto {
 }
 
 model DriverProfile {
+  driverType            String             @default("PERSONAL") @db.VarChar(8)
+  trn                   String?            @db.VarChar(100)
   nickname              String?            @db.VarChar(40)
   id                    String             @id @default(cuid())
   userId                String             @unique

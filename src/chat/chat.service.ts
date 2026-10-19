@@ -1,3 +1,4 @@
+import { assertDriverApproved } from '../auth/driver-approval';
 import { driverDetailsAvailable } from '../payments/booking-policy';
 import { validateFile, IncomingFile } from '../request-files/file-validation';
 import {
@@ -30,7 +31,7 @@ import type {
 } from './chat.types';
 
 type RoomAccessRecord = {
-  client?: { nickname: string | null };
+  client?: { nickname?: string | null; name?: string | null };
   id: string;
   transportRequestId: string;
   clientId: string;
@@ -46,6 +47,8 @@ type RoomAccessRecord = {
   } | null;
   driver: {
     nickname?: string | null;
+    firstName?: string;
+    lastName?: string;
     id: string;
     userId: string;
   };
@@ -80,7 +83,7 @@ const ROOM_ACCESS_SELECT = {
   transportRequest: {
     select: { status: true, paymentHold: { select: { capturedAt: true } } },
   },
-  client: { select: { nickname: true } },
+  client: { select: { name: true } },
   id: true,
   transportRequestId: true,
   clientId: true,
@@ -98,7 +101,8 @@ const ROOM_ACCESS_SELECT = {
   },
   driver: {
     select: {
-      nickname: true,
+      firstName: true,
+      lastName: true,
       id: true,
       userId: true,
     },
@@ -301,8 +305,9 @@ export class ChatService {
         recipientApp: access.recipientApp,
         senderNickname:
           access.recipientApp === PushApp.DRIVER
-            ? access.room.client?.nickname?.trim() || 'Customer'
-            : access.room.driver.nickname?.trim() || 'Driver',
+            ? access.room.client?.name?.trim() || 'Customer'
+            : `${access.room.driver.firstName ?? ''} ${access.room.driver.lastName ?? ''}`.trim() ||
+              'Driver',
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: normalizedBody,
@@ -371,8 +376,9 @@ export class ChatService {
         recipientApp: access.recipientApp,
         senderNickname:
           access.recipientApp === PushApp.DRIVER
-            ? access.room.client?.nickname?.trim() || 'Customer'
-            : access.room.driver.nickname?.trim() || 'Driver',
+            ? access.room.client?.name?.trim() || 'Customer'
+            : `${access.room.driver.firstName ?? ''} ${access.room.driver.lastName ?? ''}`.trim() ||
+              'Driver',
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: validated.fileName,
@@ -713,9 +719,12 @@ export class ChatService {
       },
       select: {
         id: true,
+        status: true,
+        isProfileCompleted: true,
       },
     });
 
+    assertDriverApproved(profile);
     return {
       user,
       driverProfileId: profile?.id ?? null,
@@ -763,9 +772,11 @@ export class ChatService {
       id: room.id,
       transportRequestId: room.transportRequestId,
       clientId: room.clientId,
-      clientNickname: room.client?.nickname?.trim() || 'Customer',
+      clientNickname: room.client?.name?.trim() || 'Customer',
       driverId: room.driverId,
-      driverNickname: room.driver.nickname?.trim() || 'Driver',
+      driverNickname:
+        `${room.driver.firstName ?? ''} ${room.driver.lastName ?? ''}`.trim() ||
+        'Driver',
       acceptedOfferId: room.acceptedOfferId,
       status: room.status,
       createdAt: room.createdAt.toISOString(),

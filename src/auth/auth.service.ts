@@ -1,3 +1,5 @@
+import { assertDriverApproved } from './driver-approval';
+import { normalizeDriverBusiness } from '../driver/driver-business';
 import {
   createHash,
   createHmac,
@@ -50,7 +52,8 @@ type AccessTokenPayload = {
 };
 
 interface RegisterDriverInput {
-  nickname: string;
+  driverType: 'PERSONAL' | 'COMPANY';
+  trn: string | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -107,6 +110,8 @@ export class AuthService {
       select: {
         id: true,
         nickname: true,
+        driverType: true,
+        trn: true,
         firstName: true,
         lastName: true,
         phone: true,
@@ -527,22 +532,17 @@ export class AuthService {
     return { success: true };
   }
 
-  private normalizeNickname(nickname: string): string {
-    const value = typeof nickname === 'string' ? nickname.trim() : '';
-    if (value.length < 2 || value.length > 40 || /[\u0000-\u001f\u007f]/u.test(value)) {
-      throw new BadRequestException('Nickname must be between 2 and 40 characters.');
-    }
-    return value;
-  }
-
   async completeCustomerProfile(
     userId: string,
     name: string,
     countryCode: string,
-    nickname: string,
-  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
+  ): Promise<{
+    success: true;
+    name: string;
+    nickname: string;
+    countryCode: string;
+  }> {
     const normalizedName = name.trim();
-    const normalizedNickname = this.normalizeNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -553,7 +553,7 @@ export class AuthService {
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
       data: {
         name: normalizedName,
-        nickname: normalizedNickname,
+        nickname: null,
         countryCode: normalizedCountryCode,
         isProfileCompleted: true,
       },
@@ -563,7 +563,7 @@ export class AuthService {
     }
     return {
       success: true,
-      nickname: normalizedNickname,
+      nickname: normalizedName,
       name: normalizedName,
       countryCode: normalizedCountryCode,
     };
@@ -573,10 +573,13 @@ export class AuthService {
     userId: string,
     name: string,
     countryCode: string,
-    nickname: string,
-  ): Promise<{ success: true; name: string; nickname: string; countryCode: string }> {
+  ): Promise<{
+    success: true;
+    name: string;
+    nickname: string;
+    countryCode: string;
+  }> {
     const normalizedName = name.trim();
-    const normalizedNickname = this.normalizeNickname(nickname);
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -585,14 +588,18 @@ export class AuthService {
     }
     const updated = await this.prisma.user.updateMany({
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
-      data: { name: normalizedName, nickname: normalizedNickname, countryCode: normalizedCountryCode },
+      data: {
+        name: normalizedName,
+        nickname: null,
+        countryCode: normalizedCountryCode,
+      },
     });
     if (updated.count !== 1) {
       throw new ForbiddenException('Customer access is required.');
     }
     return {
       success: true,
-      nickname: normalizedNickname,
+      nickname: normalizedName,
       name: normalizedName,
       countryCode: normalizedCountryCode,
     };
@@ -645,7 +652,7 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
-        nickname: this.normalizeNickname(dto.nickname),
+        nickname: null,
         email: normalizedEmail,
         passwordHash: hashPassword(dto.password),
         role: UserRole.CUSTOMER,
@@ -680,7 +687,8 @@ export class AuthService {
     const input: RegisterDriverInput = {
       firstName: normalizedNames.firstName,
       lastName: normalizedNames.lastName,
-      nickname: this.normalizeNickname(dto.nickname),
+      driverType: dto.driverType,
+      trn: normalizeDriverBusiness(dto.driverType, dto.trn).trn,
       email: dto.email.trim().toLowerCase(),
       phone: dto.phone.trim(),
       password: dto.password,
@@ -726,6 +734,8 @@ export class AuthService {
       driverProfile: {
         id: string;
         nickname?: string | null;
+        driverType?: string;
+        trn?: string | null;
         firstName: string;
         lastName: string;
         phone: string;
@@ -758,7 +768,9 @@ export class AuthService {
             `${input.firstName} ${input.lastName}`.trim() || existingUser.name,
           driverProfile: {
             create: {
-              nickname: input.nickname,
+              nickname: null,
+              driverType: input.driverType,
+              trn: input.trn,
               firstName: input.firstName,
               lastName: input.lastName,
               phone: input.phone,
@@ -779,6 +791,8 @@ export class AuthService {
             select: {
               id: true,
               nickname: true,
+              driverType: true,
+              trn: true,
               firstName: true,
               lastName: true,
               phone: true,
@@ -801,7 +815,9 @@ export class AuthService {
           role: UserRole.DRIVER,
           driverProfile: {
             create: {
-              nickname: input.nickname,
+              nickname: null,
+              driverType: input.driverType,
+              trn: input.trn,
               firstName: input.firstName,
               lastName: input.lastName,
               phone: input.phone,
@@ -822,6 +838,8 @@ export class AuthService {
             select: {
               id: true,
               nickname: true,
+              driverType: true,
+              trn: true,
               firstName: true,
               lastName: true,
               phone: true,
@@ -858,7 +876,12 @@ export class AuthService {
       },
       driver: {
         id: created.driverProfile.id,
-        nickname: created.driverProfile.nickname ?? null,
+        nickname: null,
+        driverType:
+          created.driverProfile.driverType === 'COMPANY'
+            ? 'COMPANY'
+            : 'PERSONAL',
+        trn: created.driverProfile.trn ?? null,
         firstName: created.driverProfile.firstName,
         lastName: created.driverProfile.lastName,
         phone: created.driverProfile.phone,
@@ -888,6 +911,8 @@ export class AuthService {
           select: {
             id: true,
             nickname: true,
+            driverType: true,
+            trn: true,
             firstName: true,
             lastName: true,
             phone: true,
@@ -910,6 +935,12 @@ export class AuthService {
 
     if (!isValidPassword) {
       throw new UnauthorizedException('Invalid email or password.');
+    }
+
+    if (user.role === UserRole.DRIVER) {
+      throw new ForbiddenException(
+        'Drivers must sign in using a phone verification code.',
+      );
     }
 
     const accessToken = this.createAccessToken({
@@ -939,7 +970,10 @@ export class AuthService {
       driver: driverProfile
         ? {
             id: driverProfile.id,
-            nickname: driverProfile.nickname ?? null,
+            nickname: null,
+            driverType:
+              driverProfile.driverType === 'COMPANY' ? 'COMPANY' : 'PERSONAL',
+            trn: driverProfile.trn ?? null,
             firstName: driverProfile.firstName,
             lastName: driverProfile.lastName,
             phone: driverProfile.phone,
@@ -1142,6 +1176,8 @@ export class AuthService {
     driverProfile: {
       id: string;
       nickname?: string | null;
+      driverType?: string;
+      trn?: string | null;
       firstName: string;
       lastName: string;
       phone: string;
@@ -1182,7 +1218,10 @@ export class AuthService {
       },
       driver: {
         id: user.driverProfile.id,
-        nickname: user.driverProfile.nickname ?? null,
+        nickname: null,
+        driverType:
+          user.driverProfile.driverType === 'COMPANY' ? 'COMPANY' : 'PERSONAL',
+        trn: user.driverProfile.trn ?? null,
         firstName: user.driverProfile.firstName,
         lastName: user.driverProfile.lastName,
         phone: user.driverProfile.phone,
@@ -1256,6 +1295,14 @@ export class AuthService {
 
   getUserFromAccessToken(token: string): AuthenticatedUser | null {
     return this.getUserFromSignedAccessToken(token, false);
+  }
+
+  async assertDriverApproved(userId: string): Promise<void> {
+    const profile = await this.prisma.driverProfile.findUnique({
+      where: { userId },
+      select: { status: true, isProfileCompleted: true },
+    });
+    assertDriverApproved(profile);
   }
 
   async isUserActive(user: AuthenticatedUser): Promise<boolean> {

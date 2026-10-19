@@ -1,4 +1,4 @@
-import { UpdateDriverNicknameDto } from './update-driver-nickname.dto';
+import { DriverBusinessDto } from './driver-business.dto';
 import {
   ArrayUnique,
   IsArray,
@@ -8,7 +8,7 @@ import {
   IsString,
 } from 'class-validator';
 
-export class UpsertDriverPersonalInfoDto extends UpdateDriverNicknameDto {
+export class UpsertDriverPersonalInfoDto extends DriverBusinessDto {
   @IsString()
   @IsNotEmpty()
   fullNameOnId!: string;

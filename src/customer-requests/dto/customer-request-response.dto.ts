@@ -140,6 +140,7 @@ export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto
   driverSummary!: {
     assigned: boolean;
     driverId: string | null;
+    driverType?: 'PERSONAL' | 'COMPANY' | null;
     driverName: string | null;
     vehicleInfo: string | null;
   };

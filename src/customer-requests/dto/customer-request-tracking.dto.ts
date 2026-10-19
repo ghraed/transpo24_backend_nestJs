@@ -17,6 +17,7 @@ export class CustomerRequestTrackingResponseDto {
   requestId!: string;
   currentStatus!: TransportRequestStatus;
   assignedDriverId!: string | null;
+  driverType?: 'PERSONAL' | 'COMPANY' | null;
   driverName!: string | null;
   driverVehiclePhoto!: string | null;
   pickupLocation!: {

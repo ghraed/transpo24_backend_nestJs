@@ -1,3 +1,4 @@
+import { assertDriverApproved } from '../auth/driver-approval';
 import { driverDetailsAvailable } from '../payments/booking-policy';
 import {
   BadRequestException,
@@ -1915,13 +1916,14 @@ export class TripsService {
   private async ensureDriverProfile(userId: string): Promise<{ id: string }> {
     const profile = await this.prisma.driverProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, status: true, isProfileCompleted: true },
     });
 
     if (!profile) {
       throw new NotFoundException('Driver profile not found.');
     }
 
+    assertDriverApproved(profile);
     return profile;
   }
 }
