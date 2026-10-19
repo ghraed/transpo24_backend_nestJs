@@ -85,6 +85,10 @@ describe('ChatService', () => {
   };
 
   const roomRecord = {
+    transportRequest: {
+      status: 'DRIVER_ASSIGNED',
+      paymentHold: { capturedAt: new Date('2026-07-09T11:00:00.000Z') },
+    },
     client: { nickname: 'Road Runner' },
     id: 'room-1',
     transportRequestId: 'request-1',
@@ -107,36 +111,148 @@ describe('ChatService', () => {
     messages: [],
   };
 
+  it('hides rooms and rejects direct access during the payment grace period', async () => {
+    const { prisma, service } = createService();
+    const hiddenRoom = {
+      ...roomRecord,
+      transportRequest: {
+        status: 'DRIVER_ASSIGNED',
+        paymentHold: { capturedAt: new Date() },
+      },
+    };
+    prisma.chatRoom.findMany.mockResolvedValue([hiddenRoom]);
+    prisma.chatRoom.findUnique.mockResolvedValue(hiddenRoom);
+    await expect(service.listRooms(customerUser)).resolves.toEqual([]);
+    await expect(
+      service.assertCanAccessRoom({
+        user: customerUser,
+        roomId: hiddenRoom.id,
+      }),
+    ).rejects.toThrow('first 10 minutes');
+  });
+
+  it.each([
+    [599999, 'DRIVER_ASSIGNED', false],
+    [600000, 'DRIVER_ASSIGNED', false],
+    [600001, 'DRIVER_ASSIGNED', true],
+    [86400001, 'CANCELLED', false],
+  ])(
+    'enforces chat disclosure after %i ms in %s',
+    async (elapsed, status, visible) => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-19T12:00:00Z'));
+      try {
+        const { prisma, service, notificationsService } = createService();
+        const room = {
+          ...roomRecord,
+          transportRequest: {
+            status,
+            paymentHold: { capturedAt: new Date(Date.now() - elapsed) },
+          },
+        };
+        prisma.chatRoom.findMany.mockResolvedValue([room]);
+        prisma.chatRoom.findUnique.mockResolvedValue(room);
+        expect(await service.listRooms(customerUser)).toHaveLength(
+          visible ? 1 : 0,
+        );
+        const access = service.assertCanAccessRoom({
+          user: customerUser,
+          roomId: room.id,
+        });
+        if (visible) {
+          await expect(access).resolves.toBeUndefined();
+          await expect(
+            service.getRoomByTransportRequest(
+              customerUser,
+              room.transportRequestId,
+            ),
+          ).resolves.toMatchObject({ driverNickname: 'Night Rider' });
+        } else {
+          await expect(access).rejects.toThrow('first 10 minutes');
+          await expect(
+            service.getRoomByTransportRequest(
+              customerUser,
+              room.transportRequestId,
+            ),
+          ).rejects.toThrow('first 10 minutes');
+          await expect(
+            service.sendTextMessage({
+              user: customerUser,
+              roomId: room.id,
+              body: 'Hello',
+            }),
+          ).rejects.toThrow('first 10 minutes');
+          expect(prisma.chatMessage.create).not.toHaveBeenCalled();
+          expect(notificationsService.notifyChatMessage).not.toHaveBeenCalled();
+        }
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+  );
+
   it('shows the customer nickname in driver chat summaries', async () => {
     const { prisma, service } = createService();
-    prisma.driverProfile.findUnique.mockResolvedValue({ id: 'driver-profile-1' });
+    prisma.driverProfile.findUnique.mockResolvedValue({
+      id: 'driver-profile-1',
+    });
     prisma.chatRoom.findMany.mockResolvedValue([roomRecord]);
     const rooms = await service.listRooms(driverUser);
     expect(rooms[0].clientNickname).toBe('Road Runner');
-    prisma.chatRoom.findMany.mockResolvedValue([{ ...roomRecord, client: { nickname: null, name: 'Private Name' } }]);
-    expect((await service.listRooms(driverUser))[0].clientNickname).toBe('Customer');
+    prisma.chatRoom.findMany.mockResolvedValue([
+      { ...roomRecord, client: { nickname: null, name: 'Private Name' } },
+    ]);
+    expect((await service.listRooms(driverUser))[0].clientNickname).toBe(
+      'Customer',
+    );
   });
 
   it('identifies the customer by nickname in driver message notifications', async () => {
     const { prisma, notificationsService, service } = createService();
     prisma.chatRoom.findUnique.mockResolvedValue(roomRecord);
     prisma.chatMessage.create.mockResolvedValue({
-      id: 'message-nickname', chatRoomId: roomRecord.id, senderId: customerUser.id,
-      senderRole: ChatMessageSenderRole.CLIENT, type: ChatMessageType.TEXT,
-      body: 'Hello', attachmentUrl: null, createdAt: new Date(), readAt: null,
+      id: 'message-nickname',
+      chatRoomId: roomRecord.id,
+      senderId: customerUser.id,
+      senderRole: ChatMessageSenderRole.CLIENT,
+      type: ChatMessageType.TEXT,
+      body: 'Hello',
+      attachmentUrl: null,
+      createdAt: new Date(),
+      readAt: null,
     });
-    await service.sendTextMessage({ user: customerUser, roomId: roomRecord.id, body: 'Hello' });
-    expect(notificationsService.notifyChatMessage).toHaveBeenCalledWith(expect.objectContaining({
-      recipientApp: PushApp.DRIVER, senderNickname: 'Road Runner',
-    }));
+    await service.sendTextMessage({
+      user: customerUser,
+      roomId: roomRecord.id,
+      body: 'Hello',
+    });
+    expect(notificationsService.notifyChatMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientApp: PushApp.DRIVER,
+        senderNickname: 'Road Runner',
+      }),
+    );
   });
 
   it('shows the driver nickname to the client without exposing a legal name', async () => {
     const { prisma, service } = createService();
     prisma.chatRoom.findMany.mockResolvedValue([roomRecord]);
-    expect((await service.listRooms(customerUser))[0].driverNickname).toBe('Night Rider');
-    prisma.chatRoom.findMany.mockResolvedValue([{ ...roomRecord, driver: { ...roomRecord.driver, nickname: null, firstName: 'Private', lastName: 'Name' } }]);
-    expect((await service.listRooms(customerUser))[0].driverNickname).toBe('Driver');
+    expect((await service.listRooms(customerUser))[0].driverNickname).toBe(
+      'Night Rider',
+    );
+    prisma.chatRoom.findMany.mockResolvedValue([
+      {
+        ...roomRecord,
+        driver: {
+          ...roomRecord.driver,
+          nickname: null,
+          firstName: 'Private',
+          lastName: 'Name',
+        },
+      },
+    ]);
+    expect((await service.listRooms(customerUser))[0].driverNickname).toBe(
+      'Driver',
+    );
   });
 
   it('creates or reuses the room for an accepted offer via upsert', async () => {

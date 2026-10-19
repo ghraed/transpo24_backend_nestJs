@@ -1,3 +1,4 @@
+import { driverDetailsAvailable } from '../payments/booking-policy';
 import { validateFile, IncomingFile } from '../request-files/file-validation';
 import {
   BadRequestException,
@@ -76,6 +77,9 @@ type ChatAccessContext = {
 };
 
 const ROOM_ACCESS_SELECT = {
+  transportRequest: {
+    select: { status: true, paymentHold: { select: { capturedAt: true } } },
+  },
   client: { select: { nickname: true } },
   id: true,
   transportRequestId: true,
@@ -182,9 +186,16 @@ export class ChatService {
     });
 
     return Promise.all(
-      rooms.map((room) =>
-        this.toChatRoomSummary(room, user.id, actor.driverProfileId),
-      ),
+      rooms
+        .filter((room) =>
+          driverDetailsAvailable(
+            room.transportRequest.paymentHold?.capturedAt,
+            room.transportRequest.status,
+          ),
+        )
+        .map((room) =>
+          this.toChatRoomSummary(room, user.id, actor.driverProfileId),
+        ),
     );
   }
 
@@ -288,9 +299,10 @@ export class ChatService {
       .notifyChatMessage({
         recipientUserId: access.recipientUserId,
         recipientApp: access.recipientApp,
-        senderNickname: access.recipientApp === PushApp.DRIVER
-          ? access.room.client?.nickname?.trim() || 'Customer'
-          : access.room.driver.nickname?.trim() || 'Driver',
+        senderNickname:
+          access.recipientApp === PushApp.DRIVER
+            ? access.room.client?.nickname?.trim() || 'Customer'
+            : access.room.driver.nickname?.trim() || 'Driver',
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: normalizedBody,
@@ -357,9 +369,10 @@ export class ChatService {
       .notifyChatMessage({
         recipientUserId: access.recipientUserId,
         recipientApp: access.recipientApp,
-        senderNickname: access.recipientApp === PushApp.DRIVER
-          ? access.room.client?.nickname?.trim() || 'Customer'
-          : access.room.driver.nickname?.trim() || 'Driver',
+        senderNickname:
+          access.recipientApp === PushApp.DRIVER
+            ? access.room.client?.nickname?.trim() || 'Customer'
+            : access.room.driver.nickname?.trim() || 'Driver',
         chatRoomId: access.room.id,
         transportRequestId: access.room.transportRequestId,
         body: validated.fileName,
@@ -567,6 +580,16 @@ export class ChatService {
     room: RoomAccessSelect,
   ): Promise<ChatAccessContext> {
     const actor = await this.resolveActor(user);
+    if (
+      !driverDetailsAvailable(
+        room.transportRequest.paymentHold?.capturedAt,
+        room.transportRequest.status,
+      )
+    ) {
+      throw new ForbiddenException(
+        'Driver chat becomes available after the first 10 minutes following payment.',
+      );
+    }
 
     if (room.clientId === user.id) {
       return {

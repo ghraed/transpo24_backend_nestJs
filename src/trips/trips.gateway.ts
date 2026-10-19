@@ -337,7 +337,15 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   emitOfferNew(customerId: string, payload: OfferNewPayload): void {
-    this.server.to(this.getCustomerRoom(customerId)).emit('offerNew', payload);
+    this.server.to(this.getCustomerRoom(customerId)).emit('offerNew', {
+      ...payload,
+      offer: {
+        ...payload.offer,
+        driverName: null,
+        driverVehiclePhoto: null,
+        message: null,
+      },
+    });
   }
 
   emitRequestDriverSelected(

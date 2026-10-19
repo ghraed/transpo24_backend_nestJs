@@ -1,3 +1,7 @@
+import {
+  cancellationFeeRate,
+  driverDetailsAvailable,
+} from '../payments/booking-policy';
 import { FurnitureReservationsService } from './furniture-reservations.service';
 import {
   reservationSummary,
@@ -452,6 +456,7 @@ type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
     recordedAt: Date;
   }>;
   paymentHold: {
+    capturedAt: Date | null;
     status: PaymentStatus;
     currency: string;
     amount: Prisma.Decimal;
@@ -749,6 +754,7 @@ const REQUEST_STATUS_SELECT = {
   },
   paymentHold: {
     select: {
+      capturedAt: true,
       status: true,
       currency: true,
       amount: true,
@@ -2420,6 +2426,8 @@ export class CustomerRequestsService {
       select: {
         id: true,
         customerId: true,
+        status: true,
+        paymentHold: { select: { capturedAt: true } },
       },
     });
 
@@ -2478,7 +2486,15 @@ export class CustomerRequestsService {
 
     return {
       requestId: request.id,
-      offers: offers.map((offer) => this.toCustomerRequestOfferSummary(offer)),
+      offers: offers.map((offer) =>
+        this.toCustomerRequestOfferSummary(
+          offer,
+          driverDetailsAvailable(
+            request.paymentHold?.capturedAt,
+            request.status,
+          ),
+        ),
+      ),
     };
   }
 
@@ -2495,6 +2511,7 @@ export class CustomerRequestsService {
         id: true,
         customerId: true,
         status: true,
+        paymentHold: { select: { capturedAt: true } },
         assignedDriverId: true,
         pickupLatitude: true,
         pickupLongitude: true,
@@ -2575,7 +2592,13 @@ export class CustomerRequestsService {
       );
     }
 
-    const latestDriverLocation = request.driverLocations[0] ?? null;
+    const detailsAvailable = driverDetailsAvailable(
+      request.paymentHold?.capturedAt,
+      request.status,
+    );
+    const latestDriverLocation = detailsAvailable
+      ? (request.driverLocations[0] ?? null)
+      : null;
     const pickupProofPhotos = this.toTrackingProofPhotoResponses(
       request.proofPhotos.filter(
         (photo) => photo.type === TransportProofPhotoType.PICKUP,
@@ -2594,12 +2617,14 @@ export class CustomerRequestsService {
     return {
       requestId: request.id,
       currentStatus: request.status,
-      assignedDriverId: request.assignedDriverId,
-      driverName: request.assignedDriver
-        ? request.assignedDriver.nickname?.trim() || 'Driver'
+      assignedDriverId: detailsAvailable ? request.assignedDriverId : null,
+      driverName:
+        detailsAvailable && request.assignedDriver
+          ? request.assignedDriver.nickname?.trim() || 'Driver'
+          : null,
+      driverVehiclePhoto: detailsAvailable
+        ? (request.assignedDriver?.vehicles[0]?.documents[0]?.url ?? null)
         : null,
-      driverVehiclePhoto:
-        request.assignedDriver?.vehicles[0]?.documents[0]?.url ?? null,
       pickupLocation: {
         latitude: request.pickupLatitude,
         longitude: request.pickupLongitude,
@@ -3800,14 +3825,23 @@ export class CustomerRequestsService {
     },
   ): CustomerRequestStatusResponseDto {
     const baseResponse = this.toResponseDto(request);
-    const driverName = request.assignedDriver
-      ? request.assignedDriver.nickname?.trim() || 'Driver'
+    const detailsAvailable = driverDetailsAvailable(
+      request.paymentHold?.capturedAt,
+      request.status,
+    );
+    const driverName =
+      detailsAvailable && request.assignedDriver
+        ? request.assignedDriver.nickname?.trim() || 'Driver'
+        : null;
+    const primaryVehicle = detailsAvailable
+      ? (request.assignedDriver?.vehicles[0] ?? null)
       : null;
-    const primaryVehicle = request.assignedDriver?.vehicles[0] ?? null;
     const vehicleInfo = primaryVehicle
       ? `${primaryVehicle.make} ${primaryVehicle.model} (${primaryVehicle.plateNumber})`
       : null;
-    const latestLocation = request.driverLocations[0] ?? null;
+    const latestLocation = detailsAvailable
+      ? (request.driverLocations[0] ?? null)
+      : null;
 
     return {
       ...baseResponse,
@@ -3842,9 +3876,15 @@ export class CustomerRequestsService {
         currency: offersSummary?.currency ?? null,
         hasOffers: (offersSummary?.count ?? 0) > 0,
       },
+      driverDetailsAvailable: detailsAvailable,
+      driverDetailsAvailableAt: request.paymentHold?.capturedAt
+        ? new Date(
+            request.paymentHold.capturedAt.getTime() + 10 * 60 * 1000,
+          ).toISOString()
+        : null,
       driverSummary: {
         assigned: Boolean(request.assignedDriverId),
-        driverId: request.assignedDriverId,
+        driverId: detailsAvailable ? request.assignedDriverId : null,
         driverName: driverName || null,
         vehicleInfo,
       },
@@ -3900,12 +3940,17 @@ export class CustomerRequestsService {
       request.paymentHold &&
       CANCELLABLE_COLLECTED_PAYMENT_STATUSES.has(request.paymentHold.status)
     ) {
-      const collectedAmount = Number(
-        request.paymentSettlement.collectedAmount.toString(),
-      );
-      const refundedAmount = Number((collectedAmount * 0.85).toFixed(2));
+      const collectedAmount = request.paymentSettlement.collectedAmount;
+      const refunded = collectedAmount
+        .mul(
+          new Prisma.Decimal(1).sub(
+            cancellationFeeRate(request.paymentHold.capturedAt),
+          ),
+        )
+        .toDecimalPlaces(2);
+      const refundedAmount = Number(refunded);
       const retainedAmount = Number(
-        (collectedAmount - refundedAmount).toFixed(2),
+        collectedAmount.sub(refunded).toDecimalPlaces(2),
       );
 
       return {
@@ -3974,7 +4019,7 @@ export class CustomerRequestsService {
         ? offer.estimatedDeliveryAt.toISOString()
         : null,
       estimatedDurationMinutes: offer.estimatedDurationMinutes,
-      message: offer.message,
+      message: null,
       status: offer.status,
       acceptedAt: offer.acceptedAt ? offer.acceptedAt.toISOString() : null,
       createdAt: offer.createdAt.toISOString(),
@@ -4030,6 +4075,7 @@ export class CustomerRequestsService {
 
   private toCustomerRequestOfferSummary(
     offer: CustomerRequestOfferSource,
+    detailsAvailable = false,
   ): CustomerRequestOfferSummaryDto {
     const driverName = offer.driver.nickname?.trim() || 'Driver';
     const driverVehiclePhoto =
@@ -4049,8 +4095,8 @@ export class CustomerRequestsService {
       offerId: offer.id,
       requestId: offer.requestId,
       driverId: offer.driverId,
-      driverName: driverName || null,
-      driverVehiclePhoto,
+      driverName: detailsAvailable ? driverName : null,
+      driverVehiclePhoto: detailsAvailable ? driverVehiclePhoto : null,
       driverRating,
       price: Number(offer.price),
       proposedPrice: Number(offer.price),
@@ -4061,7 +4107,7 @@ export class CustomerRequestsService {
         ? offer.estimatedDeliveryAt.toISOString()
         : null,
       estimatedDurationMinutes: offer.estimatedDurationMinutes,
-      message: offer.message,
+      message: detailsAvailable ? offer.message : null,
       status: offer.status,
       offerStatus: offer.status,
       createdAt: offer.createdAt.toISOString(),

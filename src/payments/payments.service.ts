@@ -1,3 +1,4 @@
+import { cancellationFeeRate } from './booking-policy';
 import {
   BadRequestException,
   ConflictException,
@@ -123,6 +124,7 @@ type WalletTransactionRecord = {
 };
 
 type PaymentHoldRecord = {
+  capturedAt?: Date | null;
   id: string;
   requestId: string;
   acceptedOfferId: string;
@@ -274,7 +276,6 @@ const SUCCESSFUL_COLLECTION_STATUSES = new Set<PaymentStatus>([
   PaymentStatus.PAYMENT_REFUNDED,
 ]);
 const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal(0);
-const TRIP_CANCELLATION_FEE_RATE = new Prisma.Decimal(0.15);
 const DRIVER_CANCELLATION_SHARE_RATE = new Prisma.Decimal(0.5);
 const STALE_PAYOUT_TRANSFER_MINUTES = 15;
 const DRIVER_PAYOUT_RETRY_DELAYS_MINUTES = [5, 30, 120, 360, 720, 1440];
@@ -535,9 +536,14 @@ export class PaymentsService {
     }
 
     return this.prisma
-      .$transaction((tx) =>
-        this.cancelCollectedTripTx(tx, input.requestId, input.customerId),
-      )
+      .$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${input.requestId} FOR UPDATE`;
+        return this.cancelCollectedTripTx(
+          tx,
+          input.requestId,
+          input.customerId,
+        );
+      })
       .then(async (result) => {
         await this.notificationsService.notifyCustomerTripUpdate(
           input.requestId,
@@ -670,6 +676,7 @@ export class PaymentsService {
       ? request.paymentSettlement.collectedAmount
       : this.calculateCustomerCancellationRefund(
           request.paymentSettlement.collectedAmount,
+          request.paymentHold.capturedAt,
         );
     const retainedAmount = request.paymentSettlement.collectedAmount
       .sub(refundableAmount)
@@ -757,7 +764,7 @@ export class PaymentsService {
         retainedAmount,
         driverShareAmount,
         platformShareAmount,
-        status: fullRefund
+        status: retainedAmount.isZero()
           ? TripPaymentSettlementStatus.REFUNDED
           : TripPaymentSettlementStatus.PARTIALLY_REFUNDED,
         driverPayoutState: driverShareAmount.gt(0)
@@ -776,7 +783,7 @@ export class PaymentsService {
     await tx.paymentHold.update({
       where: { id: request.paymentHold.id },
       data: {
-        status: fullRefund
+        status: retainedAmount.isZero()
           ? PaymentStatus.PAYMENT_REFUNDED
           : PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
       },
@@ -787,7 +794,7 @@ export class PaymentsService {
       where: { id: requestId },
       data: {
         status: TransportRequestStatus.CANCELLED,
-        paymentStatus: fullRefund
+        paymentStatus: retainedAmount.isZero()
           ? PaymentStatus.PAYMENT_REFUNDED
           : PaymentStatus.PAYMENT_PARTIALLY_REFUNDED,
         capturedAmount: retainedAmount,
@@ -2388,7 +2395,7 @@ export class PaymentsService {
               : undefined,
           capturedAt:
             nextStatus === PaymentStatus.PAYMENT_CAPTURED
-              ? new Date()
+              ? (hold.capturedAt ?? new Date())
               : undefined,
         },
       });
@@ -3032,6 +3039,8 @@ export class PaymentsService {
         paymentMethod: input.paymentMethod,
         provider: PaymentProvider.STRIPE,
         status,
+        capturedAt:
+          status === PaymentStatus.PAYMENT_CAPTURED ? new Date() : null,
         stripePaymentMethodId: input.stripePaymentMethodId?.trim() || null,
         stripePaymentIntentId: paymentIntent.id,
         stripeClientSecret: paymentIntent.client_secret,
@@ -3176,9 +3185,10 @@ export class PaymentsService {
 
   private calculateCustomerCancellationRefund(
     collectedAmount: Prisma.Decimal,
+    paidAt: Date | null,
   ): Prisma.Decimal {
     return collectedAmount
-      .mul(new Prisma.Decimal(1).sub(TRIP_CANCELLATION_FEE_RATE))
+      .mul(new Prisma.Decimal(1).sub(cancellationFeeRate(paidAt)))
       .toDecimalPlaces(2);
   }
 
@@ -3795,6 +3805,7 @@ export class PaymentsService {
 }
 
 const PAYMENT_HOLD_SELECT = {
+  capturedAt: true,
   id: true,
   requestId: true,
   acceptedOfferId: true,

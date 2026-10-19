@@ -1,3 +1,4 @@
+import { driverDetailsAvailable } from '../payments/booking-policy';
 import {
   BadRequestException,
   ConflictException,
@@ -98,7 +99,13 @@ export class TripsService {
   async joinTripRoom(input: JoinTripRoomInput): Promise<void> {
     const trip = await this.prisma.transportRequest.findUnique({
       where: { id: input.tripId },
-      select: { id: true, customerId: true, assignedDriverId: true },
+      select: {
+        id: true,
+        customerId: true,
+        assignedDriverId: true,
+        status: true,
+        paymentHold: { select: { capturedAt: true } },
+      },
     });
 
     if (!trip) {
@@ -106,6 +113,11 @@ export class TripsService {
     }
 
     if (trip.customerId === input.userId) {
+      if (!driverDetailsAvailable(trip.paymentHold?.capturedAt, trip.status)) {
+        throw new ForbiddenException(
+          'Driver tracking becomes available after the first 10 minutes following payment.',
+        );
+      }
       return;
     }
 

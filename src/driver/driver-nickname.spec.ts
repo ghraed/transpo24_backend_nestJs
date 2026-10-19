@@ -70,7 +70,10 @@ describe('driver nicknames', () => {
       {} as never,
     );
     const mapper = service as unknown as {
-      toCustomerRequestOfferSummary: (offer: unknown) => { driverName: string };
+      toCustomerRequestOfferSummary: (
+        offer: unknown,
+        detailsAvailable?: boolean,
+      ) => { driverName: string };
     };
     const offer = {
       createdAt: new Date(),
@@ -82,14 +85,17 @@ describe('driver nicknames', () => {
         averageRating: null,
       },
     };
-    const result = mapper.toCustomerRequestOfferSummary(offer);
+    const result = mapper.toCustomerRequestOfferSummary(offer, true);
     expect(result.driverName).toBe('Night Rider');
     expect(JSON.stringify(result)).not.toContain('Private');
     expect(
-      mapper.toCustomerRequestOfferSummary({
-        ...offer,
-        driver: { ...offer.driver, nickname: null },
-      }).driverName,
+      mapper.toCustomerRequestOfferSummary(
+        {
+          ...offer,
+          driver: { ...offer.driver, nickname: null },
+        },
+        true,
+      ).driverName,
     ).toBe('Driver');
   });
 });

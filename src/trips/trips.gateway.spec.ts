@@ -25,6 +25,35 @@ describe('driver location acknowledgement', () => {
     return { gateway, service, emit, socket, location };
   }
 
+  it('removes driver identity and contact text from new-offer socket events', () => {
+    const { gateway, emit } = setup();
+    const offer = {
+      id: 'offer',
+      price: 100,
+      driverName: 'Private Driver',
+      driverVehiclePhoto: 'private-photo',
+      message: 'Call +12345678',
+    };
+    gateway.emitOfferNew('customer', {
+      requestId: 'request',
+      requestStatus: 'QUOTED',
+      offer,
+    } as never);
+    expect(emit).toHaveBeenCalledWith(
+      'offerNew',
+      expect.objectContaining({
+        offer: expect.objectContaining({
+          id: 'offer',
+          price: 100,
+          driverName: null,
+          driverVehiclePhoto: null,
+          message: null,
+        }),
+      }),
+    );
+    expect(offer.driverName).toBe('Private Driver');
+  });
+
   it('acknowledges only after saving and emitting the existing customer update', async () => {
     const { gateway, service, emit, socket, location } = setup();
     await expect(

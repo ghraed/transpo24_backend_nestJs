@@ -135,6 +135,8 @@ export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto
     currency: string | null;
     hasOffers: boolean;
   };
+  driverDetailsAvailable?: boolean;
+  driverDetailsAvailableAt?: string | null;
   driverSummary!: {
     assigned: boolean;
     driverId: string | null;
