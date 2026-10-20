@@ -12,6 +12,9 @@ describe('customer booking disclosure', () => {
       status,
       service: { key: 'GOODS_TRANSPORT' },
       paymentHold: {
+        acceptedOfferId: 'offer',
+        amount: new Prisma.Decimal('100.10'),
+        customerPlatformFeeAmount: new Prisma.Decimal(0),
         status: 'PAYMENT_CAPTURED',
         capturedAt: new Date(now.getTime() - elapsed),
       },

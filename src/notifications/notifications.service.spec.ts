@@ -215,7 +215,7 @@ describe('NotificationsService', () => {
     },
   );
 
-  it('builds the correct generic payload for new driver offers', async () => {
+  it('keeps new-offer notifications anonymous even when a driver name is supplied', async () => {
     const prisma = {
       pushToken: {
         findMany: jest.fn(),
@@ -239,7 +239,7 @@ describe('NotificationsService', () => {
       userIds: ['customer-1'],
       app: PushApp.CUSTOMER,
       title: 'New driver offer',
-      body: 'John Driver sent you an offer.',
+      body: 'A driver sent you a new offer.',
       type: 'NEW_DRIVER_OFFER',
       data: {
         requestId: 'request-1',

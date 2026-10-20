@@ -1,4 +1,8 @@
 import {
+  customerOfferPrice,
+  type CustomerPaymentPrice,
+} from '../payments/customer-pricing';
+import {
   cancellationFeeRate,
   driverDetailsAvailable,
 } from '../payments/booking-policy';
@@ -461,6 +465,7 @@ type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
     status: PaymentStatus;
     currency: string;
     amount: Prisma.Decimal;
+    customerPlatformFeeAmount: Prisma.Decimal;
   } | null;
   paymentSettlement: {
     currency: string;
@@ -762,6 +767,7 @@ const REQUEST_STATUS_SELECT = {
       status: true,
       currency: true,
       amount: true,
+      customerPlatformFeeAmount: true,
     },
   },
   paymentSettlement: {
@@ -1886,6 +1892,10 @@ export class CustomerRequestsService {
 
     assertScheduleWindow({
       requireDates: true,
+      // Bicycle requests share the motorcycle service and use the OTHER item type.
+      bicycle:
+        service.key === ServiceKey.MOTORCYCLE_TRANSPORT &&
+        request.itemType === ItemType.OTHER,
       immediate: request.isImmediate,
       pickup: request.scheduledPickupAt ?? undefined,
       delivery: request.scheduledDeliveryAt ?? undefined,
@@ -2403,7 +2413,7 @@ export class CustomerRequestsService {
               in: [DriverOfferStatus.PENDING, DriverOfferStatus.ACCEPTED],
             },
           },
-          select: { currency: true },
+          select: { id: true, currency: true },
           orderBy: { createdAt: 'asc' },
         })
       : null;
@@ -2411,7 +2421,14 @@ export class CustomerRequestsService {
     return {
       ...this.toStatusResponseDto(request, {
         count: offerStats._count.id,
-        lowestPrice: lowestPriceDecimal ? Number(lowestPriceDecimal) : null,
+        lowestPrice: lowestPriceDecimal
+          ? customerOfferPrice(
+              lowestPriceDecimal,
+              lowestOffer?.id === request.acceptedOfferId
+                ? request.paymentHold
+                : null,
+            ).price
+          : null,
         currency: lowestOffer?.currency ?? null,
       }),
       canEdit: await this.canEditRequest(input.requestId),
@@ -2431,7 +2448,14 @@ export class CustomerRequestsService {
         id: true,
         customerId: true,
         status: true,
-        paymentHold: { select: { capturedAt: true } },
+        paymentHold: {
+          select: {
+            capturedAt: true,
+            acceptedOfferId: true,
+            amount: true,
+            customerPlatformFeeAmount: true,
+          },
+        },
       },
     });
 
@@ -2498,6 +2522,9 @@ export class CustomerRequestsService {
             request.paymentHold?.capturedAt,
             request.status,
           ),
+          request.paymentHold?.acceptedOfferId === offer.id
+            ? request.paymentHold
+            : null,
         ),
       ),
     };
@@ -2764,6 +2791,7 @@ export class CustomerRequestsService {
               customerId: true,
               driverId: true,
               amount: true,
+              customerPlatformFeeAmount: true,
               currency: true,
               paymentMethod: true,
               provider: true,
@@ -2961,7 +2989,10 @@ export class CustomerRequestsService {
           ? result.updatedRequest.acceptedAt.toISOString()
           : null,
       },
-      acceptedOffer: this.toAcceptedOfferResponse(result.acceptedOffer),
+      acceptedOffer: this.toAcceptedOfferResponse(
+        result.acceptedOffer,
+        result.payment,
+      ),
       payment: result.payment,
       rejectedOffersCount: result.rejectedOffersCount,
       nextStep: result.updatedRequest.assignedDriverId
@@ -3022,6 +3053,7 @@ export class CustomerRequestsService {
                 customerId: true,
                 driverId: true,
                 amount: true,
+                customerPlatformFeeAmount: true,
                 currency: true,
                 paymentMethod: true,
                 provider: true,
@@ -3284,7 +3316,10 @@ export class CustomerRequestsService {
         acceptedOfferId: result.updatedRequest.acceptedOfferId,
         acceptedAt: result.updatedRequest.acceptedAt.toISOString(),
       },
-      acceptedOffer: this.toAcceptedOfferResponse(result.acceptedOffer),
+      acceptedOffer: this.toAcceptedOfferResponse(
+        result.acceptedOffer,
+        result.payment,
+      ),
       payment: result.payment,
       rejectedOffersCount: result.rejectedOffersCount,
       nextStep: 'TRACK_REQUEST' as const,
@@ -4023,12 +4058,14 @@ export class CustomerRequestsService {
 
   private toAcceptedOfferResponse(
     offer: AcceptedOfferSource,
+    payment: PaymentSummaryDto,
   ): AcceptedOfferResponseDto {
     return {
       id: offer.id,
       requestId: offer.requestId,
       driverId: offer.driverId,
-      price: Number(offer.price),
+      price: payment.amount,
+      customerPlatformFeeAmount: payment.customerPlatformFeeAmount,
       currency: offer.currency,
       estimatedPickupAt: offer.estimatedPickupAt
         ? offer.estimatedPickupAt.toISOString()
@@ -4051,6 +4088,7 @@ export class CustomerRequestsService {
     customerId: string;
     driverId: string;
     amount: Prisma.Decimal;
+    customerPlatformFeeAmount: Prisma.Decimal;
     currency: string;
     paymentMethod: PaymentMethod;
     provider: Prisma.JsonValue | string;
@@ -4068,6 +4106,7 @@ export class CustomerRequestsService {
       customerId: hold.customerId,
       driverId: hold.driverId,
       amount: Number(hold.amount),
+      customerPlatformFeeAmount: Number(hold.customerPlatformFeeAmount),
       heldAmount: ACTIVE_PAYMENT_HOLD_STATUSES.has(hold.status)
         ? Number(hold.amount)
         : 0,
@@ -4094,6 +4133,7 @@ export class CustomerRequestsService {
   private toCustomerRequestOfferSummary(
     offer: CustomerRequestOfferSource,
     detailsAvailable = false,
+    payment?: CustomerPaymentPrice | null,
   ): CustomerRequestOfferSummaryDto {
     const driverName =
       `${offer.driver.firstName ?? ''} ${offer.driver.lastName ?? ''}`.trim() ||
@@ -4120,8 +4160,8 @@ export class CustomerRequestsService {
       driverName: detailsAvailable ? driverName : null,
       driverVehiclePhoto: detailsAvailable ? driverVehiclePhoto : null,
       driverRating,
-      price: Number(offer.price),
-      proposedPrice: Number(offer.price),
+      ...customerOfferPrice(offer.price, payment),
+      proposedPrice: customerOfferPrice(offer.price, payment).price,
       currency: offer.currency,
       estimatedPickupAt,
       estimatedArrivalTime: estimatedPickupAt,

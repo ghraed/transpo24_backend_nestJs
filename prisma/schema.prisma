@@ -1105,6 +1105,7 @@ model PaymentHold {
   acceptedOfferId       String                     @unique
   driverId              String
   amount                Decimal                    @db.Decimal(12, 2)
+  customerPlatformFeeAmount Decimal                @default(0) @db.Decimal(12, 2)
   currency              String
   paymentMethod         PaymentMethod
   provider              PaymentProvider

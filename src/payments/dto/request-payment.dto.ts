@@ -17,6 +17,7 @@ export interface SavedPaymentMethodSummaryDto {
 }
 
 export interface PaymentSummaryDto {
+  customerPlatformFeeAmount: number;
   id: string;
   requestId: string;
   acceptedOfferId: string;

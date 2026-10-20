@@ -48,6 +48,7 @@ describe('late reservation payment refunds', () => {
         update: jest.fn(async ({ data }: any) => Object.assign(hold, data)),
       },
       tripPaymentSettlement: {
+        updateMany: jest.fn(),
         upsert: jest.fn(),
         update: jest.fn(async ({ data }: any) =>
           Object.assign(settlement, data),
@@ -85,6 +86,129 @@ describe('late reservation payment refunds', () => {
     (service as any).ensureWallet = jest.fn(async () => wallet);
     return { service, stripe, tx, hold, row, settlement, wallet };
   }
+  it.each(['STRIPE', 'APP_WALLET'])(
+    '%s cancellation applies the existing refund policy to the total including client commission',
+    async (provider) => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-20T12:00:00Z'));
+      try {
+        const { service, row, hold, settlement, stripe, wallet, tx } =
+          setup(provider);
+        row.status = 'DRIVER_ASSIGNED';
+        hold.amount = new Prisma.Decimal(105);
+        hold.customerPlatformFeeAmount = new Prisma.Decimal(5);
+        hold.capturedAt = new Date(Date.now() - 5 * 60 * 1000);
+        settlement.collectedAmount = new Prisma.Decimal(105);
+        const result = await (service as any).cancelCollectedTripTx(
+          tx,
+          'request',
+          'customer',
+        );
+        expect(result.refundedAmount).toBe(105);
+        expect(result.retainedAmount).toBe(0);
+        if (provider === 'STRIPE') {
+          expect(stripe.createRefund).toHaveBeenCalledWith(
+            expect.objectContaining({ amount: 10500 }),
+          );
+        } else {
+          expect(wallet.balance.toString()).toBe('115');
+        }
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+  );
+
+  describe.each(['STRIPE', 'APP_WALLET'])(
+    '%s commission-inclusive refunds',
+    (provider) => {
+      beforeEach(() =>
+        jest.useFakeTimers().setSystemTime(new Date('2026-10-20T12:00:00Z')),
+      );
+      afterEach(() => jest.useRealTimers());
+      function commissionBooking(elapsed = 0) {
+        const model = setup(provider);
+        model.row.status = 'DRIVER_ASSIGNED';
+        model.row.assignedDriverId = 'driver';
+        model.hold.amount = new Prisma.Decimal(105);
+        model.hold.customerPlatformFeeAmount = new Prisma.Decimal(5);
+        model.hold.capturedAt = new Date(Date.now() - elapsed);
+        model.settlement.collectedAmount = new Prisma.Decimal(105);
+        return model;
+      }
+      it.each([
+        [600000, 105, 0],
+        [600001, 89.25, 15.75],
+        [86400000, 89.25, 15.75],
+        [86400001, 52.5, 52.5],
+      ])(
+        'conserves the $105 client payment at the %i ms refund boundary',
+        async (elapsed, refund, retained) => {
+          const model = commissionBooking(elapsed);
+          const result = await model.service.cancelCollectedTrip({
+            requestId: 'request',
+            customerId: 'customer',
+          });
+          expect(result).toMatchObject({
+            refundedAmount: refund,
+            retainedAmount: retained,
+          });
+          expect(
+            model.settlement.refundedAmount
+              .add(model.settlement.retainedAmount)
+              .toString(),
+          ).toBe('105');
+          if (retained > 0)
+            expect(
+              model.settlement.driverShareAmount
+                .add(model.settlement.platformShareAmount)
+                .toNumber(),
+            ).toBe(retained);
+          if (provider === 'STRIPE')
+            expect(model.stripe.createRefund).toHaveBeenCalledWith(
+              expect.objectContaining({ amount: refund * 100 }),
+            );
+          else expect(model.wallet.balance.toNumber()).toBe(10 + refund);
+        },
+      );
+      it('refunds the commission exactly once when two cancellation requests arrive together', async () => {
+        const model = commissionBooking();
+        const results = await Promise.all(
+          [0, 1].map(() =>
+            model.service.cancelCollectedTrip({
+              requestId: 'request',
+              customerId: 'customer',
+            }),
+          ),
+        );
+        expect(results[0]).toEqual(results[1]);
+        expect(results[0].refundedAmount).toBe(105);
+        expect(model.stripe.createRefund).toHaveBeenCalledTimes(
+          provider === 'STRIPE' ? 1 : 0,
+        );
+        expect(model.tx.customerWalletTransaction.create).toHaveBeenCalledTimes(
+          provider === 'APP_WALLET' ? 1 : 0,
+        );
+        expect(model.wallet.balance.toNumber()).toBe(
+          provider === 'APP_WALLET' ? 115 : 10,
+        );
+      });
+      it('does not refund the client commission after pickup', async () => {
+        const model = commissionBooking();
+        model.row.itemPickedUpAt = new Date();
+        model.row.status = 'ITEM_PICKED_UP';
+        await expect(
+          model.service.cancelCollectedTrip({
+            requestId: 'request',
+            customerId: 'customer',
+          }),
+        ).rejects.toThrow('manual review');
+        expect(model.stripe.createRefund).not.toHaveBeenCalled();
+        expect(model.tx.customerWallet.update).not.toHaveBeenCalled();
+        expect(model.tx.driverEarning.upsert).not.toHaveBeenCalled();
+      });
+    },
+  );
+
   it.each([
     [5 * 60 * 1000, 100, 0, 'PAYMENT_REFUNDED'],
     [11 * 60 * 1000, 85, 15, 'PAYMENT_PARTIALLY_REFUNDED'],

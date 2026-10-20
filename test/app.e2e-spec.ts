@@ -276,6 +276,7 @@ describe('API HTTP contract (e2e)', () => {
       .set('Authorization', 'Bearer driver-token')
       .send({
         token: 'ExponentPushToken[abc123]',
+        applicationId: 'com.transpo24.driver.dev',
         app: PushApp.DRIVER,
         platform: PushPlatform.android,
         deviceName: 'Pixel',
@@ -287,6 +288,7 @@ describe('API HTTP contract (e2e)', () => {
       role: driver.role,
       hasDriverProfile: true,
       token: 'ExponentPushToken[abc123]',
+      applicationId: 'com.transpo24.driver.dev',
       app: PushApp.DRIVER,
       platform: PushPlatform.android,
       deviceName: 'Pixel',

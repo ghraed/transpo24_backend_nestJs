@@ -1,10 +1,12 @@
 import { cancellationFeeRate } from './booking-policy';
+import { calculateCustomerPricing } from './customer-pricing';
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -55,6 +57,10 @@ type CreateHoldInput = {
   currency: string;
   paymentMethod: PaymentMethod;
   stripePaymentMethodId?: string;
+};
+
+type PricedHoldInput = CreateHoldInput & {
+  customerPlatformFeeAmount: Prisma.Decimal;
 };
 
 type CancelPaymentInput = {
@@ -124,6 +130,7 @@ type WalletTransactionRecord = {
 };
 
 type PaymentHoldRecord = {
+  customerPlatformFeeAmount: Prisma.Decimal;
   capturedAt?: Date | null;
   id: string;
   requestId: string;
@@ -290,6 +297,7 @@ const SUPPORTED_ADDITIONAL_CHARGE_CURRENCIES = new Set([
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
@@ -318,20 +326,22 @@ export class PaymentsService {
       );
     }
 
-    const normalizedAmount = this.toMoneyDecimal(input.amount);
+    const pricing = calculateCustomerPricing(this.toMoneyDecimal(input.amount));
     const currency = this.normalizeCurrency(input.currency);
 
     if (input.paymentMethod === PaymentMethod.APP_WALLET) {
       return this.createWalletHold(tx, {
         ...input,
-        amount: normalizedAmount,
+        amount: pricing.totalAmount,
+        customerPlatformFeeAmount: pricing.customerPlatformFeeAmount,
         currency,
       });
     }
 
     return this.createStripeHold(tx, {
       ...input,
-      amount: normalizedAmount,
+      amount: pricing.totalAmount,
+      customerPlatformFeeAmount: pricing.customerPlatformFeeAmount,
       currency,
     });
   }
@@ -1930,10 +1940,12 @@ export class PaymentsService {
 
     const now = new Date();
 
-    if (
-      context.settlementStatus !== TripPaymentSettlementStatus.COLLECTED ||
-      context.requiresManualReview
-    ) {
+    const hasPayableSettlement =
+      context.settlementStatus === TripPaymentSettlementStatus.COLLECTED ||
+      (context.tripStatus === TransportRequestStatus.CANCELLED &&
+        context.settlementStatus ===
+          TripPaymentSettlementStatus.PARTIALLY_REFUNDED);
+    if (!hasPayableSettlement || context.requiresManualReview) {
       await this.prisma.tripPaymentSettlement.update({
         where: { id: context.settlementId },
         data: {
@@ -2052,14 +2064,20 @@ export class PaymentsService {
         },
       });
 
-      await this.notificationsService.notifyTripFundsTransferred({
-        customerId: context.customerId,
-        driverUserId: context.driverUserId,
-        tripId: context.tripId,
-        amount: context.netAmount.toFixed(2),
-        currency: context.currency,
-        stripeTransferId: transfer.id,
-      });
+      try {
+        await this.notificationsService.notifyTripFundsTransferred({
+          customerId: context.customerId,
+          driverUserId: context.driverUserId,
+          tripId: context.tripId,
+          amount: context.netAmount.toFixed(2),
+          currency: context.currency,
+          stripeTransferId: transfer.id,
+        });
+      } catch {
+        this.logger.warn(
+          `Payout succeeded but notification failed for trip ${context.tripId}.`,
+        );
+      }
 
       return {
         transferred: true,
@@ -2888,7 +2906,7 @@ export class PaymentsService {
 
   private async createWalletHold(
     tx: Prisma.TransactionClient,
-    input: CreateHoldInput & { amount: Prisma.Decimal; currency: string },
+    input: PricedHoldInput,
   ): Promise<PaymentSummaryDto> {
     const wallet = await tx.customerWallet.findUnique({
       where: { customerId: input.customerId },
@@ -2925,6 +2943,7 @@ export class PaymentsService {
         acceptedOfferId: input.acceptedOfferId,
         driverId: input.driverId,
         amount: input.amount,
+        customerPlatformFeeAmount: input.customerPlatformFeeAmount,
         currency: input.currency,
         paymentMethod: input.paymentMethod,
         provider: PaymentProvider.APP_WALLET,
@@ -2978,7 +2997,7 @@ export class PaymentsService {
 
   private async createStripeHold(
     tx: Prisma.TransactionClient,
-    input: CreateHoldInput & { amount: Prisma.Decimal; currency: string },
+    input: PricedHoldInput,
   ): Promise<PaymentSummaryDto> {
     const customer = await tx.user.findUnique({
       where: { id: input.customerId },
@@ -3035,6 +3054,7 @@ export class PaymentsService {
         acceptedOfferId: input.acceptedOfferId,
         driverId: input.driverId,
         amount: input.amount,
+        customerPlatformFeeAmount: input.customerPlatformFeeAmount,
         currency: input.currency,
         paymentMethod: input.paymentMethod,
         provider: PaymentProvider.STRIPE,
@@ -3357,6 +3377,7 @@ export class PaymentsService {
       customerId: hold.customerId,
       driverId: hold.driverId,
       amount: Number(hold.amount),
+      customerPlatformFeeAmount: Number(hold.customerPlatformFeeAmount),
       heldAmount: ACTIVE_PAYMENT_STATUSES.has(hold.status)
         ? Number(hold.amount)
         : 0,
@@ -3812,6 +3833,7 @@ const PAYMENT_HOLD_SELECT = {
   customerId: true,
   driverId: true,
   amount: true,
+  customerPlatformFeeAmount: true,
   currency: true,
   paymentMethod: true,
   provider: true,

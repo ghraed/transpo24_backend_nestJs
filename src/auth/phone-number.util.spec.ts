@@ -9,6 +9,8 @@ describe('normalizePhoneNumber', () => {
 
   it('rejects invalid numbers', () => {
     expect(() => normalizePhoneNumber('123')).toThrow(BadRequestException);
-    expect(() => normalizePhoneNumber('+96112345678')).toThrow(BadRequestException);
+    expect(() => normalizePhoneNumber('+96112345678')).toThrow(
+      BadRequestException,
+    );
   });
 });

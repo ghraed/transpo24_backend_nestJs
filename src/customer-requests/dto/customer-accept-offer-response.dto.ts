@@ -7,6 +7,7 @@ export interface AcceptedOfferResponseDto {
   requestId: string;
   driverId: string;
   price: number;
+  customerPlatformFeeAmount: number;
   currency: string;
   estimatedPickupAt: string | null;
   estimatedDeliveryAt: string | null;

@@ -55,6 +55,9 @@ export interface AdminDriverEarningItemDto {
   stripe: AdminDriverStripeStatusDto;
   grossAmount: number;
   platformFeeAmount: number;
+  customerPlatformFeeAmount: number;
+  platformShareAmount: number;
+  collectedAmount: number;
   netAmount: number;
   currency: string;
   earningStatus: DriverEarningStatus;

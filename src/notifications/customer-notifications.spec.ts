@@ -33,6 +33,33 @@ const input = {
 };
 
 describe('Customer Alerts history', () => {
+  it('keeps the driver net payout in the driver notification and out of the client notification', async () => {
+    const { service } = setup();
+    const send = jest
+      .spyOn(service, 'sendToUsers')
+      .mockResolvedValue(undefined);
+    await service.notifyTripFundsTransferred({
+      customerId: 'client',
+      driverUserId: 'driver',
+      tripId: 'trip',
+      amount: '85.00',
+      currency: 'USD',
+      stripeTransferId: 'tr_trip',
+    });
+    const client = send.mock.calls.find(
+      ([input]) => input.app === PushApp.CUSTOMER,
+    )?.[0];
+    const driver = send.mock.calls.find(
+      ([input]) => input.app === PushApp.DRIVER,
+    )?.[0];
+    expect(client?.body).toBe(
+      'The driver payout for your completed trip was transferred.',
+    );
+    expect(client?.data).not.toHaveProperty('amount');
+    expect(driver?.body).toContain('85.00 USD');
+    expect(driver?.data).toHaveProperty('amount', '85.00');
+  });
+
   it('saves one unread update without a registered push device', async () => {
     const { service, customerNotification, pushToken } = setup();
     await service.sendToUsers(input);

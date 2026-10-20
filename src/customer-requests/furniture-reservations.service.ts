@@ -1,3 +1,4 @@
+import { customerOfferPrice } from '../payments/customer-pricing';
 import { ChatService } from '../chat/chat.service';
 import {
   BadRequestException,
@@ -90,6 +91,9 @@ export class FurnitureReservationsService
         pickupAddress: true,
         dropoffAddress: true,
         acceptedOffer: { select: { id: true, price: true, currency: true } },
+        paymentHold: {
+          select: { amount: true, customerPlatformFeeAmount: true },
+        },
       },
       orderBy: { paymentDeadlineAt: 'asc' },
     });
@@ -106,7 +110,7 @@ export class FurnitureReservationsService
         deadlineAt: row.paymentDeadlineAt!.toISOString(),
         pickupAddress: row.pickupAddress,
         dropoffAddress: row.dropoffAddress,
-        price: Number(row.acceptedOffer!.price),
+        ...customerOfferPrice(row.acceptedOffer!.price, row.paymentHold),
         currency: row.acceptedOffer!.currency,
       }));
   }
@@ -797,7 +801,7 @@ export class FurnitureReservationsService
       },
       acceptedOffer: {
         ...offer,
-        price: Number(offer.price),
+        ...customerOfferPrice(offer.price, row.paymentHold),
         estimatedPickupAt: offer.estimatedPickupAt?.toISOString() ?? null,
         estimatedDeliveryAt: offer.estimatedDeliveryAt?.toISOString() ?? null,
         acceptedAt: offer.acceptedAt?.toISOString() ?? null,

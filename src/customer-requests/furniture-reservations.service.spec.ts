@@ -101,6 +101,8 @@ describe.each(['FURNITURE_TRANSPORT'])(
           row.paymentHold = {
             id: 'hold',
             ...data,
+            amount: data.amount.mul('1.05'),
+            customerPlatformFeeAmount: data.amount.mul('0.05'),
             status:
               data.paymentMethod === 'APP_WALLET'
                 ? 'PAYMENT_CAPTURED'
@@ -173,7 +175,8 @@ describe.each(['FURNITURE_TRANSPORT'])(
       expect(due[0]).toMatchObject({
         requestId: 'request',
         offerId: 'offer',
-        price: 100,
+        price: 105,
+        customerPlatformFeeAmount: 5,
         currency: 'CHF',
       });
     });

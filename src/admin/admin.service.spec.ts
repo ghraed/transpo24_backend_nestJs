@@ -12,6 +12,55 @@ import {
 import { AdminService } from './admin.service';
 
 describe('AdminService', () => {
+  it('reports the client commission and combined platform revenue separately from the driver deduction', async () => {
+    const earning = {
+      id: 'earning',
+      tripId: 'trip',
+      grossAmount: new Prisma.Decimal(100),
+      platformFeeAmount: new Prisma.Decimal(15),
+      netAmount: new Prisma.Decimal(85),
+      currency: 'USD',
+      status: 'PENDING',
+      stripeTransferId: null,
+      driver: {
+        id: 'driver',
+        userId: 'driver-user',
+        user: { name: 'Driver', email: 'driver@example.com' },
+      },
+      trip: {
+        customer: { id: 'client', name: 'Client', email: 'client@example.com' },
+        additionalCharges: [],
+        paymentSettlement: {
+          id: 'settlement',
+          driverPayoutState: 'EARNING_CREATED',
+          collectedAmount: new Prisma.Decimal(105),
+          platformShareAmount: new Prisma.Decimal(20),
+          paymentHold: { customerPlatformFeeAmount: new Prisma.Decimal(5) },
+        },
+      },
+    };
+    const prisma = {
+      driverEarning: {
+        findMany: jest.fn(async () => [earning]),
+        count: jest.fn(async () => 1),
+      },
+    };
+    const service = new AdminService(prisma as never, {} as never, {} as never);
+    const result = await service.findDriverEarnings({
+      page: 1,
+      limit: 20,
+      view: 'all',
+    });
+    expect(result.items[0]).toMatchObject({
+      grossAmount: 100,
+      platformFeeAmount: 15,
+      customerPlatformFeeAmount: 5,
+      platformShareAmount: 20,
+      collectedAmount: 105,
+      netAmount: 85,
+    });
+  });
+
   it('merges trip and wallet dispute records into the admin disputes response', async () => {
     const prisma = {
       tripPaymentSettlement: {

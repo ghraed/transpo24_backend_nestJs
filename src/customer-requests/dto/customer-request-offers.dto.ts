@@ -9,7 +9,9 @@ export interface CustomerRequestOfferSummaryDto {
   driverName: string | null;
   driverVehiclePhoto: string | null;
   driverRating: number | null;
+  /** Total payable by the client, including their platform commission. */
   price: number;
+  customerPlatformFeeAmount: number;
   proposedPrice: number;
   currency: string;
   estimatedPickupAt: string | null;

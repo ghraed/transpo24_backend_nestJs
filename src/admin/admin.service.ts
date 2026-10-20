@@ -408,6 +408,9 @@ type DriverEarningAdminSource = {
     }>;
     paymentSettlement: {
       id: string;
+      collectedAmount: Prisma.Decimal;
+      platformShareAmount: Prisma.Decimal;
+      paymentHold: { customerPlatformFeeAmount: Prisma.Decimal };
       driverPayoutState: DriverPayoutState;
       payoutAttemptCount: number;
       lastPayoutAttemptAt: Date | null;
@@ -1453,6 +1456,9 @@ export class AdminService {
           paymentSettlement: {
             select: {
               id: true,
+              collectedAmount: true,
+              platformShareAmount: true,
+              paymentHold: { select: { customerPlatformFeeAmount: true } },
               driverPayoutState: true,
               payoutAttemptCount: true,
               lastPayoutAttemptAt: true,
@@ -1525,6 +1531,13 @@ export class AdminService {
       },
       grossAmount: Number(earning.grossAmount),
       platformFeeAmount: Number(earning.platformFeeAmount),
+      customerPlatformFeeAmount: Number(
+        earning.trip.paymentSettlement.paymentHold.customerPlatformFeeAmount,
+      ),
+      platformShareAmount: Number(
+        earning.trip.paymentSettlement.platformShareAmount,
+      ),
+      collectedAmount: Number(earning.trip.paymentSettlement.collectedAmount),
       netAmount: Number(earning.netAmount),
       currency: earning.currency,
       earningStatus: earning.status,

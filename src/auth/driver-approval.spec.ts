@@ -113,7 +113,6 @@ describe('browse-only driver access', () => {
         transportRequest: { findUnique: tripLookup },
       } as never,
       {} as never,
-      {},
     );
     await expect(
       service.validateDriverCanAccessTrip('user', 'trip'),

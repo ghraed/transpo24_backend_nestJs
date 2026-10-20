@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { normalizeDriverBusiness } from './driver-business';
 import { CustomerRequestsService } from '../customer-requests/customer-requests.service';
 
@@ -33,6 +34,7 @@ describe('driver business identity', () => {
       ) => { driverName: string | null; driverType: string };
     };
     const offer = {
+      price: new Prisma.Decimal(100),
       createdAt: new Date(),
       driver: {
         firstName: 'Alex',

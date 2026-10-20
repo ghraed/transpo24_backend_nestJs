@@ -1015,6 +1015,7 @@ export class TripsService {
         assignedDriverId: true,
         acceptedOfferId: true,
         finalPrice: true,
+        paymentHold: { select: { customerPlatformFeeAmount: true } },
         currency: true,
         deliveredAt: true,
         status: true,
@@ -1081,12 +1082,18 @@ export class TripsService {
       },
     });
 
+    const customerPlatformFeeAmount =
+      trip.paymentHold?.customerPlatformFeeAmount ?? new Prisma.Decimal(0);
     await tx.tripPaymentSettlement.updateMany({
       where: { requestId: trip.id },
       data: {
-        retainedAmount: amounts.grossAmount.sub(reimbursedExpenseAmount),
+        retainedAmount: amounts.grossAmount
+          .sub(reimbursedExpenseAmount)
+          .add(customerPlatformFeeAmount),
         driverShareAmount: amounts.netAmount.sub(reimbursedExpenseAmount),
-        platformShareAmount: amounts.platformFeeAmount,
+        platformShareAmount: amounts.platformFeeAmount.add(
+          customerPlatformFeeAmount,
+        ),
         driverPayoutState: DriverPayoutState.EARNING_CREATED,
         payoutFailureReason: null,
         payoutAttemptCount: 0,

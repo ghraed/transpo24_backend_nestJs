@@ -1,13 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 
 // Calendar limits use the customer's timezone, including daylight-saving changes.
-// Drafts can be incomplete; submission requires pickup and delivery.
+// Drafts can be incomplete; immediate bicycles can omit the delivery date.
 export function assertScheduleWindow({
   immediate,
   pickup,
   delivery,
   furniture = false,
   requireDates = false,
+  bicycle = false,
   now = new Date(),
   timeZone = 'UTC',
 }: {
@@ -16,6 +17,7 @@ export function assertScheduleWindow({
   delivery?: Date;
   furniture?: boolean;
   requireDates?: boolean;
+  bicycle?: boolean;
   now?: Date;
   timeZone?: string;
 }) {
@@ -41,7 +43,7 @@ export function assertScheduleWindow({
   const effectivePickup = immediate ? now : pickup;
   if (requireDates && !effectivePickup)
     throw new BadRequestException('Please select a pickup date.');
-  if (requireDates && !delivery)
+  if (requireDates && !delivery && !(bicycle && immediate))
     throw new BadRequestException('Please select a delivery date.');
   if (
     effectivePickup &&

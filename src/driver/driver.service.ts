@@ -1,3 +1,4 @@
+import { customerOfferPrice } from '../payments/customer-pricing';
 import { assertDriverApproved } from '../auth/driver-approval';
 import { normalizeDriverBusiness } from './driver-business';
 import { reservationSummary } from '../customer-requests/furniture-reservation-policy';
@@ -2330,8 +2331,8 @@ export class DriverService {
             customerOffer.driver.averageRating !== null
               ? Number(customerOffer.driver.averageRating)
               : null,
-          price: Number(customerOffer.price),
-          proposedPrice: Number(customerOffer.price),
+          ...customerOfferPrice(customerOffer.price),
+          proposedPrice: customerOfferPrice(customerOffer.price).price,
           currency: customerOffer.currency,
           estimatedPickupAt,
           estimatedArrivalTime: estimatedPickupAt,

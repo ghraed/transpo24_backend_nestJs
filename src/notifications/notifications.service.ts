@@ -363,16 +363,12 @@ export class NotificationsService {
     offerId: string;
     driverName?: string;
   }): Promise<void> {
-    const normalizedDriverName = input.driverName?.trim();
-
     await this.sendToUsers({
       userIds: [input.customerId],
       app: PushApp.CUSTOMER,
       title: 'New driver offer',
-      body:
-        normalizedDriverName && normalizedDriverName.length > 0
-          ? `${normalizedDriverName} sent you an offer.`
-          : 'A driver sent you a new offer.',
+      // Offers arrive before payment, while the driver's identity is still private.
+      body: 'A driver sent you a new offer.',
       type: 'NEW_DRIVER_OFFER',
       data: {
         requestId: input.requestId,
@@ -515,13 +511,12 @@ export class NotificationsService {
       userIds: [input.customerId],
       app: PushApp.CUSTOMER,
       title: 'Trip payout transferred',
-      body: `The driver payout for your completed trip was transferred (${amountLabel}).`,
+      body: 'The driver payout for your completed trip was transferred.',
       type: 'TRIP_FUNDS_TRANSFERRED',
       data: {
         requestId: input.tripId,
         tripId: input.tripId,
         stripeTransferId: input.stripeTransferId,
-        amount: input.amount,
         currency: normalizedCurrency,
       },
     });
