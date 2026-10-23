@@ -76,9 +76,10 @@ export class UpdateDriverAvailabilityDto {
   @Type(() => DriverCityCoverageDto)
   cityCoverage?: DriverCityCoverageDto[];
 
+  // Legacy clients may still send this; matching does not depend on it.
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  timezone!: string;
+  timezone?: string;
 
   @IsBoolean()
   isOnline!: boolean;

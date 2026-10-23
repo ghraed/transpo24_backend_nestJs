@@ -91,6 +91,19 @@ describe('coverage settings and latest matching location', () => {
       }),
     );
   });
+  it('accepts availability without a timezone and preserves legacy stored timezone', async () => {
+    const { service, payload, upsert } = setup();
+    const withoutTimezone = { ...payload, timezone: undefined };
+    const errors = await validate(
+      plainToInstance(UpdateDriverAvailabilityDto, withoutTimezone),
+    );
+    expect(errors).toEqual([]);
+    await expect(
+      service.updateAvailability(withoutTimezone),
+    ).resolves.toBeDefined();
+    expect(upsert.mock.calls[0][0].update.timezone).toBeUndefined();
+    expect(upsert.mock.calls[0][0].create.timezone).toBe('UTC');
+  });
   it('preserves existing pins when older clients omit the field', async () => {
     const { service, payload, upsert } = setup();
     await service.updateAvailability({ ...payload, cityCoverage: undefined });

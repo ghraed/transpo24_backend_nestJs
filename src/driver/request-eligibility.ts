@@ -1,3 +1,4 @@
+import { find as findTimezones } from 'geo-tz';
 import { shouldDeferTransportPayment } from '../customer-requests/furniture-reservation-policy';
 import {
   DocumentStatus,
@@ -138,9 +139,14 @@ export function coverageDistance(
 
 function localTime(
   date: Date,
-  timezone: string,
+  coordinate: Coordinate,
 ): { day: string; time: string } | null {
   try {
+    const timezone = findTimezones(
+      coordinate.latitude,
+      coordinate.longitude,
+    )[0];
+    if (!timezone) return null;
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       weekday: 'long',
@@ -195,26 +201,25 @@ export function parseWorkingSchedule(
 export function hasCompatibleVehicle(
   request: MatchingRequest,
   vehicles: MatchingVehicle[],
-  timezone: string,
-  now = new Date(),
+  local: { day: string; time: string },
 ): boolean {
-  if (!request.service || (!request.isImmediate && !request.scheduledPickupAt))
-    return false;
-  const local = localTime(
-    request.isImmediate ? now : request.scheduledPickupAt!,
-    timezone,
-  );
-  if (!local) return false;
+  if (!request.service) return false;
   return vehicles.some((vehicle) => {
-    if (!SERVICE_VEHICLES[request.service!.key]?.includes(vehicle.vehicleType))
+    // Explicit cargo selections take precedence over legacy vehicle categories.
+    // Older profiles without selections retain their original service defaults.
+    if (
+      vehicle.allowedCargoTypes.length === 0 &&
+      !SERVICE_VEHICLES[request.service!.key]?.includes(vehicle.vehicleType)
+    )
       return false;
     const schedule = parseWorkingSchedule(vehicle.workingSchedule);
     if (schedule.length) {
-      const day = schedule.find((d) => d.dayOfWeek === local.day);
+      const day = schedule.find((entry) => entry.dayOfWeek === local.day);
       if (
         !day?.isAvailable ||
         !day.timeRanges.some(
-          (r) => r.startTime <= local.time && local.time < r.endTime,
+          (range) =>
+            range.startTime <= local.time && local.time < range.endTime,
         )
       )
         return false;
@@ -271,13 +276,24 @@ export function isEligibleRequest(
     (!request.scheduledPickupAt || request.scheduledPickupAt < now)
   )
     return false;
+  const distance = coverageDistance(request, a, now);
+  if (
+    distance === null ||
+    a.serviceRadiusKm < 1 ||
+    a.serviceRadiusKm > 500 ||
+    distance > a.serviceRadiusKm
+  )
+    return false;
+
+  // Interpret working hours where the driver currently is, never in the
+  // customer's timezone or the driver's legacy saved timezone.
   const local = localTime(
     request.isImmediate ? now : request.scheduledPickupAt!,
-    a.timezone,
+    { latitude: a.liveLatitude!, longitude: a.liveLongitude! },
   );
-  const day = a.schedule.find((d) => d.dayOfWeek === local?.day);
+  if (!local) return false;
+  const day = a.schedule.find((entry) => entry.dayOfWeek === local.day);
   if (
-    !local ||
     !day?.isAvailable ||
     !day.startTime ||
     !day.endTime ||
@@ -285,14 +301,7 @@ export function isEligibleRequest(
     local.time >= day.endTime
   )
     return false;
-  const distance = coverageDistance(request, a, now);
-  return (
-    distance !== null &&
-    a.serviceRadiusKm >= 1 &&
-    a.serviceRadiusKm <= 500 &&
-    distance <= a.serviceRadiusKm &&
-    hasCompatibleVehicle(request, vehicles, a.timezone, now)
-  );
+  return hasCompatibleVehicle(request, vehicles, local);
 }
 
 const SERVICE_VEHICLES: Record<ServiceKey, VehicleType[]> = {

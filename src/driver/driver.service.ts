@@ -239,7 +239,7 @@ interface DriverAvailabilityDayInput {
 
 interface UpdateDriverAvailabilityInput {
   userId: string;
-  timezone: string;
+  timezone?: string;
   isOnline: boolean;
   serviceRadiusKm: number;
   baseLatitude?: number;
@@ -1326,10 +1326,6 @@ export class DriverService {
       );
     }
 
-    if (!this.isValidIanaTimezone(input.timezone)) {
-      throw new BadRequestException('timezone must be a valid IANA timezone.');
-    }
-
     if (input.serviceRadiusKm < 1 || input.serviceRadiusKm > 500) {
       throw new BadRequestException(
         'serviceRadiusKm must be between 1 and 500.',
@@ -1402,7 +1398,7 @@ export class DriverService {
       const upserted = await tx.driverAvailability.upsert({
         where: { driverId: profile.id },
         update: {
-          timezone: input.timezone,
+          timezone: input.timezone ?? undefined,
           isOnline: shouldSetOnline,
           serviceRadiusKm: Math.round(input.serviceRadiusKm),
           baseLatitude: input.baseLatitude ?? null,
@@ -1414,7 +1410,7 @@ export class DriverService {
         },
         create: {
           driverId: profile.id,
-          timezone: input.timezone,
+          timezone: input.timezone ?? 'UTC',
           isOnline: shouldSetOnline,
           serviceRadiusKm: Math.round(input.serviceRadiusKm),
           baseLatitude: input.baseLatitude ?? null,
@@ -4625,15 +4621,6 @@ export class DriverService {
     return endTotal > startTotal;
   }
 
-  private isValidIanaTimezone(timezone: string): boolean {
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: timezone });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   private async ensureDriverVehicleDocumentsReady(
     driverId: string,
   ): Promise<void> {
@@ -4708,10 +4695,6 @@ export class DriverService {
   }
 
   private isStoredAvailabilityValid(availability: AvailabilitySource): boolean {
-    if (!this.isValidIanaTimezone(availability.timezone)) {
-      return false;
-    }
-
     if (
       availability.serviceRadiusKm < 1 ||
       availability.serviceRadiusKm > 500

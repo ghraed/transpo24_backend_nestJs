@@ -1,4 +1,4 @@
-import { DayOfWeek } from '@prisma/client';
+import { DayOfWeek, ServiceKey, VehicleCargoType } from '@prisma/client';
 import {
   coverageDistance,
   distanceKm,
@@ -176,7 +176,6 @@ describe('shared request eligibility', () => {
     { isOnline: false },
     { acceptsImmediateRequests: false },
     { serviceRadiusKm: 0 },
-    { timezone: 'invalid' },
   ])('rejects unavailable driver settings %j', (changes) => {
     expect(
       isEligibleRequest(
@@ -230,67 +229,181 @@ describe('shared request eligibility', () => {
       ),
     ).toBe(false);
   });
-  it('uses the driver timezone for both driver and vehicle schedules, including DST', () => {
-    const a = availability();
-    a.schedule = [
-      {
-        dayOfWeek: 'THURSDAY',
-        isAvailable: true,
-        startTime: '12:00',
-        endTime: '13:00',
-      },
-    ];
-    const v = [
-      {
-        ...vehicles[0],
-        workingSchedule: [
+  it.each(['UTC', 'Europe/Zurich', 'Asia/Beirut', 'invalid'])(
+    'uses local working hours for a Lebanon pickup regardless of saved timezone %s',
+    (timezone) => {
+      const submittedAt = new Date('2026-10-23T07:24:51.607Z');
+      const pickup = {
+        pickupLatitude: 33.3981871,
+        pickupLongitude: 35.6872348,
+      };
+      const a = {
+        ...availability(),
+        timezone,
+        liveLatitude: pickup.pickupLatitude,
+        liveLongitude: pickup.pickupLongitude,
+        liveLocationAt: submittedAt,
+        // The saved Swiss base and city pins must not affect Lebanon matching.
+        schedule: availability().schedule,
+      };
+      const v: MatchingVehicle[] = [
+        {
+          ...vehicles[0],
+          vehicleType: 'FLATBED_OPEN',
+          allowedCargoTypes: Object.values(VehicleCargoType),
+          workingSchedule: [],
+        },
+      ];
+      for (const isImmediate of [true, false]) {
+        const r = {
+          ...request(),
+          ...pickup,
+          isImmediate,
+          scheduleTimeZone: 'Europe/Zurich',
+          scheduledPickupAt: isImmediate
+            ? null
+            : new Date('2026-10-24T07:24:51Z'),
+        };
+        expect(isEligibleRequest(r, a, v, submittedAt)).toBe(true);
+        expect(
+          isEligibleRequest(
+            r,
+            {
+              ...a,
+              liveLatitude: 47.3769,
+              liveLongitude: 8.5417,
+            },
+            v,
+            submittedAt,
+          ),
+        ).toBe(false);
+      }
+    },
+  );
+  it.each(['driver', 'vehicle'] as const)(
+    'enforces %s working hours at opening and closing in GPS local time',
+    (source) => {
+      const a = { ...availability(), timezone: 'UTC' };
+      const v: MatchingVehicle[] = [{ ...vehicles[0] }];
+      if (source === 'driver') {
+        a.schedule = [
+          {
+            dayOfWeek: 'THURSDAY',
+            isAvailable: true,
+            startTime: '12:00',
+            endTime: '13:00',
+          },
+        ];
+      } else {
+        v[0].workingSchedule = [
           {
             dayOfWeek: 'THURSDAY',
             isAvailable: true,
             timeRanges: [{ startTime: '12:00', endTime: '13:00' }],
           },
-        ],
-      },
-    ];
-    expect(isEligibleRequest(request(), a, v, now)).toBe(true); // 10 UTC = 12 Zurich
-    expect(
-      isEligibleRequest(request(), a, v, new Date('2026-09-10T11:00:00Z')),
-    ).toBe(false);
-    expect(
-      isEligibleRequest(
-        request(),
-        { ...a, liveLocationAt: new Date('2026-12-10T11:00:00Z') },
-        v,
-        new Date('2026-12-10T11:00:00Z'),
-      ),
-    ).toBe(true); // winter UTC+1
-    expect(isEligibleRequest(request(), { ...a, schedule: [] }, v, now)).toBe(
-      false,
-    );
+        ];
+      }
+      for (const [utc, expected] of [
+        ['2026-09-10T09:59:00Z', false],
+        ['2026-09-10T10:00:00Z', true],
+        ['2026-09-10T10:59:00Z', true],
+        ['2026-09-10T11:00:00Z', false],
+        // Zurich winter time is UTC+1, unlike its summer time UTC+2.
+        ['2026-12-10T10:59:00Z', false],
+        ['2026-12-10T11:00:00Z', true],
+        ['2026-12-10T12:00:00Z', false],
+      ] as const) {
+        const at = new Date(utc);
+        expect(
+          isEligibleRequest(request(), { ...a, liveLocationAt: at }, v, at),
+        ).toBe(expected);
+      }
+    },
+  );
+  it('rejects missing or unavailable driver working days', () => {
+    for (const schedule of [
+      [],
+      [
+        {
+          dayOfWeek: DayOfWeek.THURSDAY,
+          isAvailable: false,
+          startTime: '08:00',
+          endTime: '18:00',
+        },
+      ],
+    ]) {
+      expect(
+        isEligibleRequest(
+          request(),
+          { ...availability(), schedule },
+          vehicles,
+          now,
+        ),
+      ).toBe(false);
+    }
   });
-  it('checks vehicle type, cargo capacity and working hours', () => {
-    expect(isEligibleRequest(request(), availability(), [], now)).toBe(false);
+  it('checks a scheduled pickup against working hours on its local pickup day', () => {
+    const r = {
+      ...request(),
+      isImmediate: false,
+      scheduledPickupAt: new Date('2026-09-11T10:00:00Z'),
+    };
+    const a = {
+      ...availability(),
+      timezone: 'Asia/Beirut',
+      schedule: [
+        {
+          dayOfWeek: DayOfWeek.FRIDAY,
+          isAvailable: true,
+          startTime: '12:00',
+          endTime: '13:00',
+        },
+      ],
+    };
+    expect(isEligibleRequest(r, a, vehicles, now)).toBe(true);
     expect(
       isEligibleRequest(
-        request(),
-        availability(),
-        [{ ...vehicles[0], vehicleType: 'MOTORCYCLE' }],
+        { ...r, scheduledPickupAt: new Date('2026-09-11T11:00:00Z') },
+        a,
+        vehicles,
         now,
       ),
     ).toBe(false);
+  });
+  it.each(['FLATBED_OPEN', 'FURNITURE_TRUCK'] as const)(
+    'honors all selected cargo types for Raed’s %s across every service',
+    (vehicleType) => {
+      const v = [
+        {
+          ...vehicles[0],
+          vehicleType,
+          allowedCargoTypes: Object.values(VehicleCargoType),
+        },
+      ];
+      for (const key of Object.values(ServiceKey)) {
+        expect(
+          isEligibleRequest(
+            { ...request(), service: { key } },
+            availability(),
+            v,
+            now,
+          ),
+        ).toBe(true);
+      }
+    },
+  );
+  it('retains vehicle-category defaults only for legacy profiles without cargo selections', () => {
     expect(
       isEligibleRequest(
         request(),
         availability(),
-        [{ ...vehicles[0], capacityKg: 50 }],
-        now,
-      ),
-    ).toBe(false);
-    expect(
-      isEligibleRequest(
-        request(),
-        availability(),
-        [{ ...vehicles[0], allowedCargoTypes: ['VEHICLE'] }],
+        [
+          {
+            ...vehicles[0],
+            vehicleType: 'FLATBED_OPEN',
+            allowedCargoTypes: [],
+          },
+        ],
         now,
       ),
     ).toBe(false);
@@ -301,14 +414,56 @@ describe('shared request eligibility', () => {
         [
           {
             ...vehicles[0],
-            workingSchedule: [
-              { dayOfWeek: 'THURSDAY', isAvailable: false, timeRanges: [] },
-            ],
+            allowedCargoTypes: [],
+          },
+        ],
+        now,
+      ),
+    ).toBe(true);
+  });
+  it('requires a vehicle with matching cargo and sufficient load capacity', () => {
+    expect(isEligibleRequest(request(), availability(), [], now)).toBe(false);
+    expect(
+      isEligibleRequest(
+        request(),
+        availability(),
+        [
+          {
+            ...vehicles[0],
+            capacityKg: 50,
           },
         ],
         now,
       ),
     ).toBe(false);
+    expect(
+      isEligibleRequest(
+        request(),
+        availability(),
+        [
+          {
+            ...vehicles[0],
+            allowedCargoTypes: ['VEHICLE'],
+          },
+        ],
+        now,
+      ),
+    ).toBe(false);
+    for (const field of ['lengthCm', 'widthCm', 'heightCm'] as const) {
+      expect(
+        isEligibleRequest(
+          request(),
+          availability(),
+          [
+            {
+              ...vehicles[0],
+              [field]: 1,
+            },
+          ],
+          now,
+        ),
+      ).toBe(false);
+    }
   });
   it('does not restrict the dropoff to the pickup coverage', () => {
     const r = { ...request(), dropoffLatitude: -33.9, dropoffLongitude: 151.2 };
@@ -322,106 +477,126 @@ describe('dispatch, Jobs and map consistency', () => {
     jest.setSystemTime(now);
   });
   afterEach(() => jest.useRealTimers());
-  it.each(['nearby', 'distant', 'scheduled', 'disabled', 'missing', 'offline'])(
-    'uses the same matches for %s requests',
-    async (scenario) => {
-      const a = availability();
-      const r = {
-        ...request(),
-        id: 'request',
-        service: { key: 'GOODS_TRANSPORT', nameEn: 'Goods' },
-        driverAlerts: [],
-        createdAt: now,
-        submittedAt: now,
-      };
-      if (scenario === 'distant') r.pickupLatitude = 0;
-      if (scenario === 'scheduled') {
-        r.isImmediate = false;
-        r.scheduledPickupAt = new Date('2026-09-11T10:00:00Z');
-        r.pickupLatitude = 46.205;
-        r.pickupLongitude = 6.14;
-        a.liveLatitude = 46.2044;
-        a.liveLongitude = 6.1432;
+  it.each([
+    'nearby',
+    'distant',
+    'scheduled',
+    'disabled',
+    'missing',
+    'offline',
+    'lebanon',
+    'outside-hours',
+  ])('uses the same matches for %s requests', async (scenario) => {
+    const a = availability();
+    const r = {
+      ...request(),
+      id: 'request',
+      service: { key: 'GOODS_TRANSPORT', nameEn: 'Goods' },
+      driverAlerts: [],
+      createdAt: now,
+      submittedAt: now,
+    };
+    const matchingVehicles = vehicles.map((vehicle) => ({ ...vehicle }));
+    if (scenario === 'lebanon') {
+      r.pickupLatitude = 33.3981871;
+      r.pickupLongitude = 35.6872348;
+      a.liveLatitude = r.pickupLatitude;
+      a.liveLongitude = r.pickupLongitude;
+      a.timezone = 'UTC';
+      a.schedule = availability().schedule;
+      matchingVehicles[0].vehicleType = 'FLATBED_OPEN';
+      matchingVehicles[0].allowedCargoTypes = Object.values(VehicleCargoType);
+    }
+    if (scenario === 'distant') r.pickupLatitude = 0;
+    if (scenario === 'scheduled') {
+      r.isImmediate = false;
+      r.scheduledPickupAt = new Date('2026-09-11T10:00:00Z');
+      r.pickupLatitude = 46.205;
+      r.pickupLongitude = 6.14;
+      a.liveLatitude = 46.2044;
+      a.liveLongitude = 6.1432;
+    }
+    if (scenario === 'disabled') a.acceptsImmediateRequests = false;
+    if (scenario === 'missing') {
+      a.liveLatitude = null;
+      a.liveLongitude = null;
+    }
+    if (scenario === 'offline') a.isOnline = false;
+    if (scenario === 'outside-hours') a.schedule = [];
+    const create = jest.fn().mockResolvedValue({
+      id: 'alert',
+      driverId: 'driver',
+      status: 'NEW',
+      createdAt: now,
+    });
+    const prisma = {
+      driverProfile: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'driver',
+            userId: 'user',
+            availability: a,
+            vehicles: matchingVehicles,
+          },
+        ]),
+      },
+      driverAvailability: { findUnique: jest.fn().mockResolvedValue(a) },
+      transportRequest: { findMany: jest.fn().mockResolvedValue([r]) },
+      driverRequestAlert: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create,
+      },
+    };
+    const gateway = {
+      getDriverConnectionCount: jest.fn().mockReturnValue(1),
+      emitRequestNew: jest.fn(),
+    };
+    const dispatch = new CustomerRequestsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      gateway as never,
+      {} as never,
+    );
+    Object.assign(dispatch, {
+      toDriverRequestAlertSummaryPayload: () => ({ requestId: r.id }),
+    });
+    const result = await (
+      dispatch as unknown as {
+        dispatchSubmittedRequestToEligibleDrivers(
+          r: unknown,
+        ): Promise<{ driverNotifications: unknown[] }>;
       }
-      if (scenario === 'disabled') a.acceptsImmediateRequests = false;
-      if (scenario === 'missing') {
-        a.liveLatitude = null;
-        a.liveLongitude = null;
-      }
-      if (scenario === 'offline') a.isOnline = false;
-      const create = jest.fn().mockResolvedValue({
-        id: 'alert',
-        driverId: 'driver',
-        status: 'NEW',
-        createdAt: now,
-      });
-      const prisma = {
-        driverProfile: {
-          findMany: jest
-            .fn()
-            .mockResolvedValue([
-              { id: 'driver', userId: 'user', availability: a, vehicles },
-            ]),
-        },
-        driverAvailability: { findUnique: jest.fn().mockResolvedValue(a) },
-        transportRequest: { findMany: jest.fn().mockResolvedValue([r]) },
-        driverRequestAlert: {
-          findMany: jest.fn().mockResolvedValue([]),
-          create,
-        },
-      };
-      const gateway = {
-        getDriverConnectionCount: jest.fn().mockReturnValue(1),
-        emitRequestNew: jest.fn(),
-      };
-      const dispatch = new CustomerRequestsService(
-        prisma as never,
-        {} as never,
-        {} as never,
-        gateway as never,
-        {} as never,
-      );
-      Object.assign(dispatch, {
-        toDriverRequestAlertSummaryPayload: () => ({ requestId: r.id }),
-      });
-      const result = await (
-        dispatch as unknown as {
-          dispatchSubmittedRequestToEligibleDrivers(
-            r: unknown,
-          ): Promise<{ driverNotifications: unknown[] }>;
-        }
-      ).dispatchSubmittedRequestToEligibleDrivers(r);
-      const driver = new DriverService(
-        prisma as never,
-        {} as never,
-        gateway as never,
-      );
-      Object.assign(driver, {
-        ensureDriverProfile: async () => ({
-          id: 'driver',
-          status: 'APPROVED',
-          isProfileCompleted: true,
-        }),
-        getApprovedDriverVehicles: async () => vehicles,
-        ensureDriverRequestAlert: async () => ({ id: 'alert' }),
-        toRequestAlertSummary: () => ({ requestId: r.id }),
-      });
-      const list = await driver.getDriverRequestAlerts({ userId: 'user' });
-      const eligible = scenario === 'nearby' || scenario === 'scheduled';
-      expect(list.alerts).toHaveLength(eligible ? 1 : 0);
-      expect(
-        list.alerts.filter((alert) => alert.isCurrentlyEligible),
-      ).toHaveLength(result.driverNotifications.length);
-      expect(gateway.emitRequestNew).toHaveBeenCalledTimes(eligible ? 1 : 0);
-      expect(prisma.driverAvailability.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ select: MATCHING_AVAILABILITY_SELECT }),
-      );
-      expect(
-        prisma.driverProfile.findMany.mock.calls[0][0].select.availability
-          .select,
-      ).toEqual(MATCHING_AVAILABILITY_SELECT);
-    },
-  );
+    ).dispatchSubmittedRequestToEligibleDrivers(r);
+    const driver = new DriverService(
+      prisma as never,
+      {} as never,
+      gateway as never,
+    );
+    Object.assign(driver, {
+      ensureDriverProfile: async () => ({
+        id: 'driver',
+        status: 'APPROVED',
+        isProfileCompleted: true,
+      }),
+      getApprovedDriverVehicles: async () => matchingVehicles,
+      ensureDriverRequestAlert: async () => ({ id: 'alert' }),
+      toRequestAlertSummary: () => ({ requestId: r.id }),
+    });
+    const list = await driver.getDriverRequestAlerts({ userId: 'user' });
+    const eligible = ['nearby', 'scheduled', 'lebanon'].includes(scenario);
+    expect(list.alerts).toHaveLength(eligible ? 1 : 0);
+    expect(
+      list.alerts.filter((alert) => alert.isCurrentlyEligible),
+    ).toHaveLength(result.driverNotifications.length);
+    expect(gateway.emitRequestNew).toHaveBeenCalledTimes(eligible ? 1 : 0);
+    expect(prisma.driverAvailability.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ select: MATCHING_AVAILABILITY_SELECT }),
+    );
+    expect(
+      prisma.driverProfile.findMany.mock.calls[0][0].select.availability.select,
+    ).toEqual(MATCHING_AVAILABILITY_SELECT);
+  });
 });
 
 describe('current-location request delivery regressions', () => {
