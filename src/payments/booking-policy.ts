@@ -22,3 +22,25 @@ export function driverDetailsAvailable(
     Boolean(paidAt && now - paidAt.getTime() > FREE_CANCELLATION_MS)
   );
 }
+
+// Tracking is independent of the delay for revealing contact details and chat.
+export function driverTrackingAvailable(
+  paidAt: Date | null | undefined,
+  status: string,
+): boolean {
+  return (
+    Boolean(paidAt) &&
+    [
+      'ACCEPTED',
+      'DRIVER_ASSIGNED',
+      'DRIVER_GOING_TO_PICKUP',
+      'DRIVER_ARRIVED_PICKUP',
+      'PICKUP_IN_PROGRESS',
+      'ITEM_PICKED_UP',
+      'IN_TRANSIT',
+      'DRIVER_GOING_TO_DROPOFF',
+      'DELIVERED',
+      'COMPLETED',
+    ].includes(status)
+  );
+}

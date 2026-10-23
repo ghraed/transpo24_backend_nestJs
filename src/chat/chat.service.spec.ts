@@ -131,6 +131,20 @@ describe('ChatService', () => {
         roomId: hiddenRoom.id,
       }),
     ).rejects.toThrow('first 10 minutes');
+    await expect(
+      service.assertCanAccessRoom({
+        user: customerUser,
+        roomId: hiddenRoom.id,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'CHAT_PAYMENT_WINDOW',
+        availableAt: new Date(
+          hiddenRoom.transportRequest.paymentHold.capturedAt.getTime() + 600001,
+        ).toISOString(),
+        serverTime: expect.any(String),
+      },
+    });
   });
 
   it.each([

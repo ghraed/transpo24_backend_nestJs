@@ -1,4 +1,8 @@
-import { cancellationFeeRate, driverDetailsAvailable } from './booking-policy';
+import {
+  cancellationFeeRate,
+  driverDetailsAvailable,
+  driverTrackingAvailable,
+} from './booking-policy';
 
 describe('paid booking timing policy', () => {
   const paidAt = new Date('2026-10-19T12:00:00Z');
@@ -24,4 +28,28 @@ describe('paid booking timing policy', () => {
     expect(cancellationFeeRate(null)).toBe(0);
     expect(driverDetailsAvailable(null, 'RESERVED')).toBe(false);
   });
+});
+
+describe('driver tracking access', () => {
+  it.each([
+    'ACCEPTED',
+    'DRIVER_ASSIGNED',
+    'DRIVER_GOING_TO_PICKUP',
+    'DRIVER_ARRIVED_PICKUP',
+    'PICKUP_IN_PROGRESS',
+    'ITEM_PICKED_UP',
+    'IN_TRANSIT',
+    'DRIVER_GOING_TO_DROPOFF',
+    'DELIVERED',
+    'COMPLETED',
+  ])('keeps tracking available immediately after payment in %s', (status) => {
+    expect(driverTrackingAvailable(new Date(), status)).toBe(true);
+    expect(driverTrackingAvailable(null, status)).toBe(false);
+  });
+  it.each(['PENDING_QUOTES', 'QUOTED', 'RESERVED', 'CANCELLED'])(
+    'does not expose driver locations in %s',
+    (status) => {
+      expect(driverTrackingAvailable(new Date(), status)).toBe(false);
+    },
+  );
 });

@@ -11,6 +11,8 @@ type ErrorBody = {
   statusCode: number;
   message: string;
   code?: string;
+  availableAt?: string | null;
+  serverTime?: string;
   error?: string;
   timestamp: string;
   path: string;
@@ -58,6 +60,8 @@ export class JsonExceptionFilter implements ExceptionFilter {
         const candidate = payload as {
           message?: string | string[];
           code?: string;
+          availableAt?: string | null;
+          serverTime?: string;
           error?: string;
           statusCode?: number;
         };
@@ -74,6 +78,18 @@ export class JsonExceptionFilter implements ExceptionFilter {
           ),
           ...(typeof candidate.code === 'string'
             ? { code: candidate.code }
+            : {}),
+          ...(candidate.code === 'CHAT_PAYMENT_WINDOW'
+            ? {
+                availableAt:
+                  typeof candidate.availableAt === 'string'
+                    ? candidate.availableAt
+                    : null,
+                serverTime:
+                  typeof candidate.serverTime === 'string'
+                    ? candidate.serverTime
+                    : new Date().toISOString(),
+              }
             : {}),
           error: candidate.error ?? exception.name,
           timestamp: new Date().toISOString(),

@@ -5,6 +5,7 @@ import {
 import {
   cancellationFeeRate,
   driverDetailsAvailable,
+  driverTrackingAvailable,
 } from '../payments/booking-policy';
 import { FurnitureReservationsService } from './furniture-reservations.service';
 import {
@@ -2629,9 +2630,11 @@ export class CustomerRequestsService {
       request.paymentHold?.capturedAt,
       request.status,
     );
-    const latestDriverLocation = detailsAvailable
-      ? (request.driverLocations[0] ?? null)
-      : null;
+    const latestDriverLocation =
+      request.assignedDriverId &&
+      driverTrackingAvailable(request.paymentHold?.capturedAt, request.status)
+        ? (request.driverLocations[0] ?? null)
+        : null;
     const pickupProofPhotos = this.toTrackingProofPhotoResponses(
       request.proofPhotos.filter(
         (photo) => photo.type === TransportProofPhotoType.PICKUP,
@@ -3887,9 +3890,11 @@ export class CustomerRequestsService {
     const vehicleInfo = primaryVehicle
       ? `${primaryVehicle.make} ${primaryVehicle.model} (${primaryVehicle.plateNumber})`
       : null;
-    const latestLocation = detailsAvailable
-      ? (request.driverLocations[0] ?? null)
-      : null;
+    const latestLocation =
+      request.assignedDriverId &&
+      driverTrackingAvailable(request.paymentHold?.capturedAt, request.status)
+        ? (request.driverLocations[0] ?? null)
+        : null;
 
     return {
       ...baseResponse,

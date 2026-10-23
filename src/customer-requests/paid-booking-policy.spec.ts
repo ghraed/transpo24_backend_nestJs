@@ -76,27 +76,30 @@ describe('customer booking disclosure', () => {
   it.each([
     [600000, false],
     [600001, true],
-  ])('restricts status and tracking at %i ms', async (elapsed, visible) => {
-    const { row, service } = setup(elapsed);
-    const mapper = service as any;
-    jest.spyOn(mapper, 'toResponseDto').mockReturnValue({});
-    const status = mapper.toStatusResponseDto(row);
-    const tracking = await service.getCustomerRequestTracking({
-      requestId: 'request',
-      customerId: 'customer',
-    });
-    expect(status.driverDetailsAvailable).toBe(visible);
-    expect(status.driverSummary.driverType).toBe('COMPANY');
-    expect(tracking.driverType).toBe('COMPANY');
-    expect(status.driverSummary.driverName).toBe(visible ? 'Alex' : null);
-    expect(status.driverSummary.vehicleInfo).toBe(
-      visible ? 'Truck A (ABC)' : null,
-    );
-    expect(status.trackingSummary.available).toBe(visible);
-    expect(tracking.driverName).toBe(visible ? 'Alex' : null);
-    expect(tracking.driverVehiclePhoto).toBe(visible ? 'photo' : null);
-    expect(Boolean(tracking.latestDriverLocation)).toBe(visible);
-  });
+  ])(
+    'reveals tracking immediately and delays contact details at %i ms',
+    async (elapsed, visible) => {
+      const { row, service } = setup(elapsed);
+      const mapper = service as any;
+      jest.spyOn(mapper, 'toResponseDto').mockReturnValue({});
+      const status = mapper.toStatusResponseDto(row);
+      const tracking = await service.getCustomerRequestTracking({
+        requestId: 'request',
+        customerId: 'customer',
+      });
+      expect(status.driverDetailsAvailable).toBe(visible);
+      expect(status.driverSummary.driverType).toBe('COMPANY');
+      expect(tracking.driverType).toBe('COMPANY');
+      expect(status.driverSummary.driverName).toBe(visible ? 'Alex' : null);
+      expect(status.driverSummary.vehicleInfo).toBe(
+        visible ? 'Truck A (ABC)' : null,
+      );
+      expect(status.trackingSummary.available).toBe(true);
+      expect(tracking.driverName).toBe(visible ? 'Alex' : null);
+      expect(tracking.driverVehiclePhoto).toBe(visible ? 'photo' : null);
+      expect(Boolean(tracking.latestDriverLocation)).toBe(true);
+    },
+  );
   it.each([
     [600000, 100.1],
     [600001, 85.09],

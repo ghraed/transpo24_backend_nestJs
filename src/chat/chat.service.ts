@@ -1,5 +1,8 @@
 import { assertDriverApproved } from '../auth/driver-approval';
-import { driverDetailsAvailable } from '../payments/booking-policy';
+import {
+  driverDetailsAvailable,
+  FREE_CANCELLATION_MS,
+} from '../payments/booking-policy';
 import { validateFile, IncomingFile } from '../request-files/file-validation';
 import {
   BadRequestException,
@@ -592,9 +595,19 @@ export class ChatService {
         room.transportRequest.status,
       )
     ) {
-      throw new ForbiddenException(
-        'Driver chat becomes available after the first 10 minutes following payment.',
-      );
+      const paidAt = room.transportRequest.paymentHold?.capturedAt;
+      throw new ForbiddenException({
+        message:
+          'Driver chat becomes available after the first 10 minutes following payment.',
+        code: 'CHAT_PAYMENT_WINDOW',
+        availableAt:
+          paidAt && room.transportRequest.status !== 'CANCELLED'
+            ? new Date(
+                paidAt.getTime() + FREE_CANCELLATION_MS + 1,
+              ).toISOString()
+            : null,
+        serverTime: new Date().toISOString(),
+      });
     }
 
     if (room.clientId === user.id) {

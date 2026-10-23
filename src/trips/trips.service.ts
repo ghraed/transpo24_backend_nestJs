@@ -1,5 +1,5 @@
 import { assertDriverApproved } from '../auth/driver-approval';
-import { driverDetailsAvailable } from '../payments/booking-policy';
+import { driverTrackingAvailable } from '../payments/booking-policy';
 import {
   BadRequestException,
   ConflictException,
@@ -114,9 +114,12 @@ export class TripsService {
     }
 
     if (trip.customerId === input.userId) {
-      if (!driverDetailsAvailable(trip.paymentHold?.capturedAt, trip.status)) {
+      if (
+        !trip.assignedDriverId ||
+        !driverTrackingAvailable(trip.paymentHold?.capturedAt, trip.status)
+      ) {
         throw new ForbiddenException(
-          'Driver tracking becomes available after the first 10 minutes following payment.',
+          'Driver tracking becomes available after payment and driver assignment.',
         );
       }
       return;

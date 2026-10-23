@@ -21,9 +21,9 @@ describe('paid booking tracking socket access', () => {
       transportRequest: { findUnique: jest.fn().mockResolvedValue(row) },
       driverProfile: { findUnique: jest.fn().mockResolvedValue(null) },
     };
-    return { service: new TripsService(db as never, {} as never), db };
+    return { service: new TripsService(db as never, {} as never), db, row };
   }
-  it.each([null, 0, 599999, 600000])(
+  it.each([null])(
     'rejects customer subscriptions at %s ms',
     async (elapsed) => {
       const { service } = setup(elapsed);
@@ -33,19 +33,22 @@ describe('paid booking tracking socket access', () => {
           userId: 'customer',
           role: UserRole.CUSTOMER,
         }),
-      ).rejects.toThrow('first 10 minutes');
+      ).rejects.toThrow('after payment and driver assignment');
     },
   );
-  it('allows customer tracking only once the paid grace period has elapsed', async () => {
-    const { service } = setup(600001);
-    await expect(
-      service.joinTripRoom({
-        tripId: 'request',
-        userId: 'customer',
-        role: UserRole.CUSTOMER,
-      }),
-    ).resolves.toBeUndefined();
-  });
+  it.each([0, 599999, 600000, 600001])(
+    'allows customer tracking immediately after payment at %i ms',
+    async (elapsed) => {
+      const { service } = setup(elapsed);
+      await expect(
+        service.joinTripRoom({
+          tripId: 'request',
+          userId: 'customer',
+          role: UserRole.CUSTOMER,
+        }),
+      ).resolves.toBeUndefined();
+    },
+  );
   it('rejects subscriptions after cancellation even if the grace period has elapsed', async () => {
     const { service } = setup(86400001, 'CANCELLED');
     await expect(
@@ -54,7 +57,18 @@ describe('paid booking tracking socket access', () => {
         userId: 'customer',
         role: UserRole.CUSTOMER,
       }),
-    ).rejects.toThrow('first 10 minutes');
+    ).rejects.toThrow('after payment and driver assignment');
+  });
+  it('rejects customer tracking when no driver is assigned', async () => {
+    const { service, row } = setup(0);
+    row.assignedDriverId = '';
+    await expect(
+      service.joinTripRoom({
+        tripId: 'request',
+        userId: 'customer',
+        role: UserRole.CUSTOMER,
+      }),
+    ).rejects.toThrow('after payment and driver assignment');
   });
   it('keeps tracking available to the assigned driver during the customer grace period', async () => {
     const { service, db } = setup(0);
