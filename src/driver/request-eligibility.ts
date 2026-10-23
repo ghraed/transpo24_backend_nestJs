@@ -102,7 +102,7 @@ export function distanceKm(a: Coordinate, b: Coordinate): number {
 export function immediateReference(
   a: MatchingAvailability,
   now = new Date(),
-): { source: 'GPS' | 'BASE' | 'NONE'; coordinate: Coordinate | null } {
+): { source: 'GPS' | 'NONE'; coordinate: Coordinate | null } {
   const age = a.liveLocationAt
     ? now.getTime() - a.liveLocationAt.getTime()
     : Infinity;
@@ -114,12 +114,6 @@ export function immediateReference(
     return {
       source: 'GPS',
       coordinate: { latitude: a.liveLatitude!, longitude: a.liveLongitude! },
-    };
-  }
-  if (validCoordinate(a.baseLatitude, a.baseLongitude)) {
-    return {
-      source: 'BASE',
-      coordinate: { latitude: a.baseLatitude!, longitude: a.baseLongitude! },
     };
   }
   return { source: 'NONE', coordinate: null };
@@ -135,22 +129,11 @@ export function coverageDistance(
   if (!validCoordinate(request.pickupLatitude, request.pickupLongitude))
     return null;
   const origin = immediateReference(a, now).coordinate;
-  const pins = request.isImmediate
-    ? origin
-      ? [origin]
-      : []
-    : parseCoveragePins(a.cityCoverage).filter((pin) =>
-        a.driver.cities.includes(pin.city),
-      );
-  if (!pins.length) return null;
-  return Math.min(
-    ...pins.map((pin) =>
-      distanceKm(pin, {
-        latitude: request.pickupLatitude!,
-        longitude: request.pickupLongitude!,
-      }),
-    ),
-  );
+  if (!origin) return null;
+  return distanceKm(origin, {
+    latitude: request.pickupLatitude!,
+    longitude: request.pickupLongitude!,
+  });
 }
 
 function localTime(

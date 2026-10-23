@@ -36,6 +36,9 @@ function setup(isOnline = true) {
           cityCoverage: [],
           acceptsImmediateRequests: true,
           acceptsScheduledRequests: true,
+          liveLatitude: 0,
+          liveLongitude: 0,
+          liveLocationAt: new Date(),
           baseLatitude: 0,
           baseLongitude: 0,
           serviceRadiusKm: 10,
@@ -152,7 +155,7 @@ describe('unresolved driver job requests', () => {
       expect(
         (await service.getDriverRequestAlerts({ userId: 'user' })).alerts,
       ).toEqual([{ requestId: 'furniture', isCurrentlyEligible: false }]);
-      availability.driver.cities = [];
+      availability.liveLocationAt = null;
       expect(
         (await service.getDriverRequestAlerts({ userId: 'user' })).alerts,
       ).toEqual([]);
@@ -203,7 +206,7 @@ describe('unresolved driver job requests', () => {
       requestId: 'furniture',
       requestStatus: 'RESERVED',
     });
-    availability.driver.cities = [];
+    availability.liveLocationAt = null;
     await expect(
       service.getDriverRequestDetails({
         userId: 'user',
@@ -230,7 +233,7 @@ describe('unresolved driver job requests', () => {
         { requestId: 'ignored', isCurrentlyEligible: false },
         { requestId: 'expired', isCurrentlyEligible: false },
       ],
-      locationReference: 'BASE',
+      locationReference: 'GPS',
     });
   });
 

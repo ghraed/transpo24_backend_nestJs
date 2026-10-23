@@ -98,7 +98,7 @@ describe('coverage settings and latest matching location', () => {
       payload.cityCoverage,
     );
   });
-  it.each(['missing', 'duplicate', 'unselected', 'invalid'])(
+  it.each(['duplicate', 'unselected', 'invalid'])(
     'rejects %s city coverage',
     async (mode) => {
       const { service, payload, upsert } = setup();
@@ -115,26 +115,29 @@ describe('coverage settings and latest matching location', () => {
       expect(upsert).not.toHaveBeenCalled();
     },
   );
-  it('requires a base for immediate coverage, even when there are scheduled city pins', async () => {
-    const { service, payload } = setup();
+  it('allows availability and going online without base or scheduled coverage pins', async () => {
+    const { service, payload, stored, update } = setup();
+    Object.assign(service, {
+      hasVehicleReadyForAvailability: jest.fn().mockResolvedValue(true),
+    });
     await expect(
       service.updateAvailability({
         ...payload,
         baseLatitude: undefined,
         baseLongitude: undefined,
+        cityCoverage: [],
       }),
-    ).rejects.toThrow('Set a base');
-  });
-  it('requires an upgrade to incomplete saved coverage before going online but always permits going offline', async () => {
-    const { service, stored, update } = setup();
-    stored.cityCoverage = [];
+    ).resolves.toBeDefined();
+    Object.assign(stored, {
+      baseLatitude: null,
+      baseLongitude: null,
+      cityCoverage: [],
+    });
     await expect(
       service.updateOnlineStatus({ userId: 'user', isOnline: true }),
-    ).rejects.toThrow('Set a coverage pin');
-    await expect(
-      service.updateOnlineStatus({ userId: 'user', isOnline: false }),
     ).resolves.toBeDefined();
-    expect(update.mock.calls[0][0].data).toMatchObject({
+    await service.updateOnlineStatus({ userId: 'user', isOnline: false });
+    expect(update.mock.calls[1][0].data).toMatchObject({
       isOnline: false,
       liveLatitude: null,
       liveLongitude: null,

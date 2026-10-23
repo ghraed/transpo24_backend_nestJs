@@ -1367,14 +1367,6 @@ export class DriverService {
       );
     }
 
-    if (
-      input.acceptsImmediateRequests &&
-      !validCoordinate(input.baseLatitude, input.baseLongitude)
-    ) {
-      throw new BadRequestException(
-        'Set a base location for use when GPS is unavailable.',
-      );
-    }
     const storedCoverage =
       input.cityCoverage === undefined
         ? await this.prisma.driverAvailability.findUnique({
@@ -1396,16 +1388,6 @@ export class DriverService {
         'Coverage pins must be unique and belong to your selected cities.',
       );
     }
-    if (
-      input.acceptsScheduledRequests &&
-      (!profile.cities.length ||
-        profile.cities.some((city) => !pins.some((pin) => pin.city === city)))
-    ) {
-      throw new BadRequestException(
-        'Set a coverage pin for each selected city to receive scheduled requests.',
-      );
-    }
-
     const normalizedSchedule = this.validateAndNormalizeWeeklySchedule(
       input.weeklySchedule,
     );
@@ -1547,26 +1529,6 @@ export class DriverService {
       );
     }
 
-    if (
-      input.isOnline &&
-      availability.acceptsImmediateRequests &&
-      !validCoordinate(availability.baseLatitude, availability.baseLongitude)
-    ) {
-      throw new BadRequestException(
-        'Set a base location for use when GPS is unavailable.',
-      );
-    }
-    const pins = parseCoveragePins(availability.cityCoverage);
-    if (
-      input.isOnline &&
-      availability.acceptsScheduledRequests &&
-      (!profile.cities.length ||
-        profile.cities.some((city) => !pins.some((pin) => pin.city === city)))
-    ) {
-      throw new BadRequestException(
-        'Set a coverage pin for each selected city to receive scheduled requests.',
-      );
-    }
     const isAvailabilityValid = this.isStoredAvailabilityValid(availability);
     if (input.isOnline && !isAvailabilityValid) {
       throw new BadRequestException(
@@ -4753,13 +4715,6 @@ export class DriverService {
     if (
       availability.serviceRadiusKm < 1 ||
       availability.serviceRadiusKm > 500
-    ) {
-      return false;
-    }
-
-    if (
-      (availability.baseLatitude === null) !==
-      (availability.baseLongitude === null)
     ) {
       return false;
     }

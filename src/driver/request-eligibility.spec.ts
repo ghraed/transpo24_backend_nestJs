@@ -21,9 +21,9 @@ function availability(): MatchingAvailability {
     serviceRadiusKm: 30,
     baseLatitude: 47.3769,
     baseLongitude: 8.5417,
-    liveLatitude: null,
-    liveLongitude: null,
-    liveLocationAt: null,
+    liveLatitude: 47.3769,
+    liveLongitude: 8.5417,
+    liveLocationAt: now,
     cityCoverage: [
       { city: 'Zurich', latitude: 47.3769, longitude: 8.5417 },
       { city: 'Geneva', latitude: 46.2044, longitude: 6.1432 },
@@ -97,7 +97,7 @@ describe('shared request eligibility', () => {
     new Date(now.getTime() - LIVE_LOCATION_MAX_AGE_MS - 1),
     new Date(now.getTime() + 1),
   ])(
-    'falls back to base for missing, stale or future GPS (%s)',
+    'rejects missing, stale or future GPS despite saved coverage (%s)',
     (liveLocationAt) => {
       const a = {
         ...availability(),
@@ -105,12 +105,20 @@ describe('shared request eligibility', () => {
         liveLongitude: 0,
         liveLocationAt,
       };
-      expect(immediateReference(a, now).source).toBe('BASE');
-      expect(isEligibleRequest(request(), a, vehicles, now)).toBe(true);
+      expect(immediateReference(a, now).source).toBe('NONE');
+      expect(isEligibleRequest(request(), a, vehicles, now)).toBe(false);
+      expect(
+        isEligibleRequest(
+          { ...request(), isImmediate: false, scheduledPickupAt: now },
+          a,
+          vehicles,
+          now,
+        ),
+      ).toBe(false);
     },
   );
   it('never admits a request without a valid reference or pickup', () => {
-    const a = { ...availability(), baseLatitude: null, baseLongitude: null };
+    const a = { ...availability(), liveLatitude: null, liveLongitude: null };
     expect(immediateReference(a, now).source).toBe('NONE');
     expect(isEligibleRequest(request(), a, vehicles, now)).toBe(false);
     expect(
@@ -123,7 +131,7 @@ describe('shared request eligibility', () => {
     ).toBe(false);
   });
   it('includes the exact radius boundary and excludes a pickup just beyond it without rounding', () => {
-    const a = { ...availability(), baseLatitude: 0, baseLongitude: 0 };
+    const a = { ...availability(), liveLatitude: 0, liveLongitude: 0 };
     const r = {
       ...request(),
       pickupLatitude: ((30 / 6371) * 180) / Math.PI,
@@ -145,15 +153,8 @@ describe('shared request eligibility', () => {
       ),
     ).toBe(false);
   });
-  it('matches scheduled pickups against any selected city, independently of GPS and base', () => {
-    const a = {
-      ...availability(),
-      baseLatitude: 0,
-      baseLongitude: 0,
-      liveLatitude: 0,
-      liveLongitude: 0,
-      liveLocationAt: now,
-    };
+  it('matches scheduled pickups only around current GPS, ignoring saved base and city pins', () => {
+    const a = { ...availability(), liveLatitude: 0, liveLongitude: 0 };
     const r = {
       ...request(),
       isImmediate: false,
@@ -161,12 +162,15 @@ describe('shared request eligibility', () => {
       pickupLatitude: 46.205,
       pickupLongitude: 6.14,
     };
+    expect(isEligibleRequest(r, a, vehicles, now)).toBe(false);
+    a.liveLatitude = 46.2044;
+    a.liveLongitude = 6.1432;
+    a.cityCoverage = [];
+    a.driver.cities = [];
+    a.baseLatitude = null;
+    a.baseLongitude = null;
     expect(isEligibleRequest(r, a, vehicles, now)).toBe(true);
     expect(coverageDistance(r, a, now)).toBeLessThan(1);
-    a.driver.cities = ['Zurich'];
-    expect(isEligibleRequest(r, a, vehicles, now)).toBe(false);
-    a.cityCoverage = [];
-    expect(isEligibleRequest(r, a, vehicles, now)).toBe(false);
   });
   it.each([
     { isOnline: false },
@@ -253,7 +257,12 @@ describe('shared request eligibility', () => {
       isEligibleRequest(request(), a, v, new Date('2026-09-10T11:00:00Z')),
     ).toBe(false);
     expect(
-      isEligibleRequest(request(), a, v, new Date('2026-12-10T11:00:00Z')),
+      isEligibleRequest(
+        request(),
+        { ...a, liveLocationAt: new Date('2026-12-10T11:00:00Z') },
+        v,
+        new Date('2026-12-10T11:00:00Z'),
+      ),
     ).toBe(true); // winter UTC+1
     expect(isEligibleRequest(request(), { ...a, schedule: [] }, v, now)).toBe(
       false,
@@ -331,11 +340,13 @@ describe('dispatch, Jobs and map consistency', () => {
         r.scheduledPickupAt = new Date('2026-09-11T10:00:00Z');
         r.pickupLatitude = 46.205;
         r.pickupLongitude = 6.14;
+        a.liveLatitude = 46.2044;
+        a.liveLongitude = 6.1432;
       }
       if (scenario === 'disabled') a.acceptsImmediateRequests = false;
       if (scenario === 'missing') {
-        a.baseLatitude = null;
-        a.baseLongitude = null;
+        a.liveLatitude = null;
+        a.liveLongitude = null;
       }
       if (scenario === 'offline') a.isOnline = false;
       const create = jest.fn().mockResolvedValue({
@@ -409,6 +420,299 @@ describe('dispatch, Jobs and map consistency', () => {
         prisma.driverProfile.findMany.mock.calls[0][0].select.availability
           .select,
       ).toEqual(MATCHING_AVAILABILITY_SELECT);
+    },
+  );
+});
+
+describe('current-location request delivery regressions', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(now);
+  });
+  afterEach(() => jest.useRealTimers());
+
+  function setup(isImmediate: boolean) {
+    const zurich = { latitude: 47.3769, longitude: 8.5417 };
+    const geneva = { latitude: 46.2044, longitude: 6.1432 };
+    const a = availability();
+    const rows = [zurich, geneva].map((point, index) => ({
+      ...request(),
+      id: index === 0 ? 'zurich-pickup' : 'geneva-pickup',
+      service: { key: 'GOODS_TRANSPORT', nameEn: 'Goods' },
+      isImmediate,
+      scheduledPickupAt: isImmediate ? null : new Date('2026-09-11T10:00:00Z'),
+      pickupLatitude: point.latitude,
+      pickupLongitude: point.longitude,
+      driverAlerts: [] as { driverId: string; status: string }[],
+      createdAt: now,
+      submittedAt: now,
+    }));
+    const candidates = [
+      { id: 'driver', userId: 'user', availability: a, vehicles },
+    ];
+    const create = jest.fn().mockImplementation(async ({ data }) => ({
+      ...data,
+      id: 'alert',
+      status: 'NEW',
+      createdAt: new Date(),
+    }));
+    const prisma = {
+      driverProfile: { findMany: jest.fn(async () => candidates) },
+      driverAvailability: {
+        findUnique: jest.fn(async () => a),
+        // Model persisted GPS updates; matching and service methods run unchanged.
+        updateMany: jest.fn(async ({ data }) => {
+          Object.assign(a, data);
+          return { count: 1 };
+        }),
+      },
+      transportRequest: { findMany: jest.fn(async () => rows) },
+      driverRequestAlert: { findMany: jest.fn(async () => []), create },
+    };
+    const gateway = {
+      getDriverConnectionCount: jest.fn(() => 1),
+      emitRequestNew: jest.fn(),
+    };
+    const dispatchService = new CustomerRequestsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      gateway as never,
+      {} as never,
+    );
+    Object.assign(dispatchService, {
+      toDriverRequestAlertSummaryPayload: (r, _alert, distanceKm) => ({
+        requestId: r.id,
+        distanceKm,
+      }),
+    });
+    const driver = new DriverService(
+      prisma as never,
+      {} as never,
+      gateway as never,
+    );
+    Object.assign(driver, {
+      ensureDriverProfile: async () => ({
+        id: 'driver',
+        status: 'APPROVED',
+        isProfileCompleted: true,
+      }),
+      getApprovedDriverVehicles: async () => vehicles,
+      ensureDriverRequestAlert: async () => ({ id: 'alert' }),
+      toRequestAlertSummary: (r, _alert, distanceKm) => ({
+        requestId: r.id,
+        distanceKm,
+      }),
+    });
+    const dispatch = (r: (typeof rows)[number]) =>
+      (
+        dispatchService as unknown as {
+          dispatchSubmittedRequestToEligibleDrivers(r: unknown): Promise<{
+            driverNotifications: {
+              userId: string;
+              requestId: string;
+              distanceKm: number;
+            }[];
+          }>;
+        }
+      ).dispatchSubmittedRequestToEligibleDrivers(r);
+    return { a, rows, candidates, driver, dispatch, gateway, create, geneva };
+  }
+
+  it.each([true, false])(
+    'delivers requests near GPS only, even when another driver has a nearby base (immediate: %s)',
+    async (isImmediate) => {
+      const { a, rows, candidates, dispatch, gateway, create, geneva } =
+        setup(isImmediate);
+      // Driver 1 is in Zurich but has a Geneva base. Driver 2 is the reverse.
+      Object.assign(a, {
+        baseLatitude: geneva.latitude,
+        baseLongitude: geneva.longitude,
+      });
+      candidates.push({
+        id: 'driver-2',
+        userId: 'user-2',
+        vehicles,
+        availability: {
+          ...availability(),
+          liveLatitude: geneva.latitude,
+          liveLongitude: geneva.longitude,
+        },
+      });
+      for (const [index, row] of rows.entries()) {
+        const result = await dispatch(row);
+        const expectedDriver = index === 0 ? 'driver' : 'driver-2';
+        expect(result.driverNotifications).toEqual([
+          {
+            userId: index === 0 ? 'user' : 'user-2',
+            requestId: row.id,
+            serviceType: 'Goods',
+            distanceKm: 0,
+          },
+        ]);
+        expect(create).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            data: {
+              requestId: row.id,
+              driverId: expectedDriver,
+              status: 'NEW',
+            },
+          }),
+        );
+        expect(gateway.emitRequestNew).toHaveBeenLastCalledWith(
+          expectedDriver,
+          {
+            requestId: row.id,
+            distanceKm: 0,
+          },
+        );
+      }
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(gateway.emitRequestNew).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([true, false])(
+    'switches request delivery and current map matches when the driver moves (immediate: %s)',
+    async (isImmediate) => {
+      const { a, rows, driver, dispatch, gateway, geneva } = setup(isImmediate);
+      const assertMatches = async (expected: string) => {
+        const list = await driver.getDriverRequestAlerts({ userId: 'user' });
+        expect(list.locationReference).toBe('GPS');
+        expect(list.alerts).toEqual([
+          expect.objectContaining({
+            requestId: expected,
+            isCurrentlyEligible: true,
+            distanceKm: 0,
+          }),
+        ]);
+        gateway.emitRequestNew.mockClear();
+        for (const row of rows) {
+          const result = await dispatch(row);
+          expect(result.driverNotifications.map((n) => n.requestId)).toEqual(
+            row.id === expected ? [expected] : [],
+          );
+        }
+        expect(gateway.emitRequestNew).toHaveBeenCalledTimes(1);
+        expect(gateway.emitRequestNew).toHaveBeenCalledWith('driver', {
+          requestId: expected,
+          distanceKm: 0,
+        });
+      };
+      await assertMatches('zurich-pickup');
+      jest.setSystemTime(new Date(now.getTime() + 30_000));
+      await driver.updateMatchingLocation('user', {
+        ...geneva,
+        recordedAt: Date.now(),
+      });
+      // Saved coverage still includes both cities; only the latest GPS should win.
+      expect(a.baseLatitude).toBe(47.3769);
+      await assertMatches('geneva-pickup');
+    },
+  );
+
+  it.each([true, false])(
+    'stops delivery after GPS expiry and resumes after a new fix (immediate: %s)',
+    async (isImmediate) => {
+      const { rows, driver, dispatch, gateway } = setup(isImmediate);
+      jest.setSystemTime(new Date(now.getTime() + LIVE_LOCATION_MAX_AGE_MS));
+      expect((await dispatch(rows[0])).driverNotifications).toHaveLength(1);
+      jest.setSystemTime(new Date(Date.now() + 1));
+      gateway.emitRequestNew.mockClear();
+      expect((await dispatch(rows[0])).driverNotifications).toEqual([]);
+      expect(gateway.emitRequestNew).not.toHaveBeenCalled();
+      expect(await driver.getDriverRequestAlerts({ userId: 'user' })).toEqual({
+        alerts: [],
+        locationReference: 'NONE',
+      });
+      await driver.updateMatchingLocation('user', {
+        latitude: 47.3769,
+        longitude: 8.5417,
+        recordedAt: Date.now(),
+      });
+      expect((await dispatch(rows[0])).driverNotifications).toHaveLength(1);
+      expect(
+        (await driver.getDriverRequestAlerts({ userId: 'user' })).alerts,
+      ).toEqual([
+        expect.objectContaining({
+          requestId: 'zurich-pickup',
+          isCurrentlyEligible: true,
+        }),
+      ]);
+    },
+  );
+
+  it.each([true, false])(
+    'clearing GPS stops new delivery and removes previously received jobs from current map matches (immediate: %s)',
+    async (isImmediate) => {
+      const { rows, driver, dispatch, gateway, create } = setup(isImmediate);
+      await dispatch(rows[0]);
+      rows[0].driverAlerts.push({ driverId: 'driver', status: 'SEEN' });
+      await driver.updateMatchingLocation('user', null);
+      gateway.emitRequestNew.mockClear();
+      create.mockClear();
+      for (const row of rows)
+        expect((await dispatch(row)).driverNotifications).toEqual([]);
+      expect(gateway.emitRequestNew).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+      // Jobs retains the history, while the map excludes isCurrentlyEligible=false.
+      expect(await driver.getDriverRequestAlerts({ userId: 'user' })).toEqual({
+        locationReference: 'NONE',
+        alerts: [
+          expect.objectContaining({
+            requestId: 'zurich-pickup',
+            isCurrentlyEligible: false,
+            distanceKm: null,
+          }),
+        ],
+      });
+    },
+  );
+
+  it.each([true, false])(
+    'works without any saved base or city coverage (immediate: %s)',
+    async (isImmediate) => {
+      const { a, rows, driver, dispatch } = setup(isImmediate);
+      Object.assign(a, {
+        baseLatitude: null,
+        baseLongitude: null,
+        cityCoverage: [],
+      });
+      a.driver.cities = [];
+      expect((await dispatch(rows[0])).driverNotifications).toEqual([
+        expect.objectContaining({
+          userId: 'user',
+          requestId: 'zurich-pickup',
+          distanceKm: 0,
+        }),
+      ]);
+      expect(
+        (await driver.getDriverRequestAlerts({ userId: 'user' })).alerts,
+      ).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    [null, 8.5417],
+    [47.3769, null],
+    [NaN, 8.5417],
+    [47.3769, Infinity],
+    [91, 8.5417],
+    [47.3769, -181],
+  ])(
+    'never delivers requests for an invalid GPS coordinate (%s, %s), despite nearby saved coverage',
+    async (latitude, longitude) => {
+      for (const isImmediate of [true, false]) {
+        const { a, rows, dispatch, driver, gateway, create } =
+          setup(isImmediate);
+        Object.assign(a, { liveLatitude: latitude, liveLongitude: longitude });
+        expect((await dispatch(rows[0])).driverNotifications).toEqual([]);
+        expect(gateway.emitRequestNew).not.toHaveBeenCalled();
+        expect(create).not.toHaveBeenCalled();
+        expect(await driver.getDriverRequestAlerts({ userId: 'user' })).toEqual(
+          { alerts: [], locationReference: 'NONE' },
+        );
+      }
     },
   );
 });
