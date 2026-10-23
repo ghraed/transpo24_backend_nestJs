@@ -1682,6 +1682,47 @@ export class DriverService {
     };
   }
 
+  async getDriverMapRequests(input: {
+    userId: string;
+  }): Promise<DriverRequestAlertsResponseDto> {
+    const profile = await this.ensureDriverProfile(input.userId);
+    this.ensureDriverOnboardingForAlerts(profile);
+    const [requests, availability] = await Promise.all([
+      this.prisma.transportRequest.findMany({
+        where: {
+          status: { in: ['PENDING_QUOTES', 'QUOTED'] },
+          assignedDriverId: null,
+          acceptedOfferId: null,
+          pickupLatitude: { not: null },
+          pickupLongitude: { not: null },
+        },
+        select: DRIVER_REQUEST_DETAILS_SELECT,
+        orderBy: { submittedAt: 'desc' },
+      }),
+      this.prisma.driverAvailability.findUnique({
+        where: { driverId: profile.id },
+        select: MATCHING_AVAILABILITY_SELECT,
+      }),
+    ]);
+    // Browsing must not create notification alerts or affect their delivery.
+    return {
+      alerts: requests.map((request) =>
+        this.toRequestAlertSummary(
+          request,
+          {
+            id: request.id,
+            status: DriverRequestAlertStatus.NEW,
+            createdAt: request.createdAt,
+          },
+          availability ? coverageDistance(request, availability) : null,
+        ),
+      ),
+      locationReference: availability
+        ? immediateReference(availability).source
+        : 'NONE',
+    };
+  }
+
   async getDriverRequestAlerts(
     input: GetDriverRequestAlertsInput,
   ): Promise<DriverRequestAlertsResponseDto> {
@@ -1874,7 +1915,8 @@ export class DriverService {
       !hasAlertAccess &&
       !hasOfferAccess &&
       !isSelectedDriver &&
-      !canViewFurnitureBooking
+      !canViewFurnitureBooking &&
+      !isOpenForQuotes
     ) {
       throw new NotFoundException('Request not available for this driver.');
     }
@@ -1891,7 +1933,10 @@ export class DriverService {
     let alert = existingAlert;
     if (
       !alert &&
-      (hasOfferAccess || isSelectedDriver || canViewFurnitureBooking)
+      (hasOfferAccess ||
+        isSelectedDriver ||
+        canViewFurnitureBooking ||
+        isOpenForQuotes)
     ) {
       alert = await this.ensureDriverRequestAlert({
         requestId: request.id,
@@ -4452,7 +4497,7 @@ export class DriverService {
 
   private toRequestAlertSummary(
     request: RequestDetailsSource,
-    alert: RequestAlertSource,
+    alert: Pick<RequestAlertSource, 'id' | 'status' | 'createdAt'>,
     distanceKm: number | null,
   ): DriverRequestAlertSummaryDto {
     return {

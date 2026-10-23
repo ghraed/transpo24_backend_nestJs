@@ -433,3 +433,50 @@ describe('OMW route request search', () => {
     ).toEqual([]);
   });
 });
+
+describe('map request browsing', () => {
+  it('returns open requests without availability or compatible vehicles and creates no alerts', async () => {
+    const { service, findMany } = setup(false);
+    const prisma = (service as any).prisma;
+    prisma.driverAvailability.findUnique.mockResolvedValue(null);
+    findMany.mockResolvedValue([
+      { id: 'distant', createdAt: new Date(), driverAlerts: [] },
+    ]);
+    expect(
+      (await service.getDriverMapRequests({ userId: 'user' })).alerts,
+    ).toEqual([{ requestId: 'distant' }]);
+    expect((service as any).ensureDriverRequestAlert).not.toHaveBeenCalled();
+    expect((service as any).getApprovedDriverVehicles).not.toHaveBeenCalled();
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      status: { in: ['PENDING_QUOTES', 'QUOTED'] },
+      assignedDriverId: null,
+      acceptedOfferId: null,
+    });
+  });
+
+  it('lets a driver view an open request without having received a notification', async () => {
+    const { service } = setup(false);
+    const prisma = (service as any).prisma;
+    prisma.driverOffer = { findUnique: jest.fn().mockResolvedValue(null) };
+    prisma.transportRequest.findUnique.mockResolvedValue({
+      id: 'distant',
+      status: 'PENDING_QUOTES',
+      assignedDriverId: null,
+      acceptedOfferId: null,
+      driverAlerts: [],
+      pickupLatitude: 45,
+      pickupLongitude: 8,
+    });
+    Object.assign(service, {
+      toRequestDetailsResponse: jest
+        .fn()
+        .mockReturnValue({ requestId: 'distant' }),
+    });
+    expect(
+      await service.getDriverRequestDetails({
+        userId: 'user',
+        requestId: 'distant',
+      }),
+    ).toEqual({ requestId: 'distant' });
+  });
+});

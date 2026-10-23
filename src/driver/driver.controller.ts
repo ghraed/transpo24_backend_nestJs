@@ -400,6 +400,14 @@ export class DriverController {
     });
   }
 
+  @UseGuards(ApprovedDriverGuard)
+  @Get('requests/map')
+  async getMapRequests(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<DriverRequestAlertsResponseDto> {
+    return this.driverService.getDriverMapRequests({ userId: request.user.id });
+  }
+
   @Get('requests/alerts')
   async getRequestAlerts(
     @Req() request: AuthenticatedRequest,
