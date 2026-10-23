@@ -244,6 +244,7 @@ export function isEligibleRequest(
   vehicles: MatchingVehicle[],
   now = new Date(),
   requireOnline = true,
+  routeCoverage?: { distanceKm: number; radiusKm: number; origin: Coordinate },
 ): boolean {
   if (
     !a ||
@@ -276,20 +277,20 @@ export function isEligibleRequest(
     (!request.scheduledPickupAt || request.scheduledPickupAt < now)
   )
     return false;
-  const distance = coverageDistance(request, a, now);
-  if (
-    distance === null ||
-    a.serviceRadiusKm < 1 ||
-    a.serviceRadiusKm > 500 ||
-    distance > a.serviceRadiusKm
-  )
+  const distance =
+    routeCoverage?.distanceKm ?? coverageDistance(request, a, now);
+  const radius = routeCoverage?.radiusKm ?? a.serviceRadiusKm;
+  if (distance === null || radius < 1 || radius > 500 || distance > radius)
     return false;
 
   // Interpret working hours where the driver currently is, never in the
   // customer's timezone or the driver's legacy saved timezone.
   const local = localTime(
     request.isImmediate ? now : request.scheduledPickupAt!,
-    { latitude: a.liveLatitude!, longitude: a.liveLongitude! },
+    routeCoverage?.origin ?? {
+      latitude: a.liveLatitude!,
+      longitude: a.liveLongitude!,
+    },
   );
   if (!local) return false;
   const day = a.schedule.find((entry) => entry.dayOfWeek === local.day);

@@ -1,4 +1,5 @@
 import { ApprovedDriverGuard } from '../auth/guards/approved-driver.guard';
+import { RouteRequestsDto } from './dto/route-requests.dto';
 import { UpdateDriverMatchingLocationDto } from './dto/update-driver-availability.dto';
 import {
   BadRequestException,
@@ -405,6 +406,18 @@ export class DriverController {
   ): Promise<DriverRequestAlertsResponseDto> {
     return this.driverService.getDriverRequestAlerts({
       userId: request.user.id,
+    });
+  }
+
+  @UseGuards(ApprovedDriverGuard)
+  @Post('requests/on-route')
+  async getRouteRequests(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: RouteRequestsDto,
+  ): Promise<DriverRequestAlertsResponseDto> {
+    return this.driverService.getDriverRequestAlerts({
+      userId: request.user.id,
+      route: dto,
     });
   }
 

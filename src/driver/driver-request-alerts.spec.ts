@@ -375,3 +375,61 @@ describe('job navigation and assignment access', () => {
     });
   });
 });
+
+describe('OMW route request search', () => {
+  it('finds pickups farther along the selected route beyond GPS coverage and filters by route radius', async () => {
+    const { service, findMany } = setup();
+    Object.assign(service, {
+      getApprovedDriverVehicles: jest.fn().mockResolvedValue([
+        {
+          vehicleType: 'VAN',
+          capacityKg: 1000,
+          allowedCargoTypes: ['GOODS'],
+          workingSchedule: [],
+        },
+      ]),
+    });
+    const row = {
+      id: 'on-route',
+      status: 'PENDING_QUOTES',
+      assignedDriverId: null,
+      acceptedOfferId: null,
+      isImmediate: true,
+      pickupLatitude: 0.01,
+      pickupLongitude: 1,
+      itemType: 'GOODS',
+      itemWeightKg: 10,
+      service: { key: 'GOODS_TRANSPORT' },
+      driverAlerts: [],
+    };
+    findMany.mockResolvedValue([
+      row,
+      { ...row, id: 'outside', pickupLatitude: 0.2 },
+    ]);
+    const route = {
+      coordinates: [
+        { latitude: 0, longitude: 0 },
+        { latitude: 0, longitude: 2 },
+      ],
+      radiusKm: 5,
+    };
+    const matches = await service.getDriverRequestAlerts({
+      userId: 'user',
+      route,
+    });
+    expect(matches.alerts.map((value) => value.requestId)).toEqual([
+      'on-route',
+    ]);
+    expect(
+      (
+        await service.getDriverRequestAlerts({
+          userId: 'user',
+          route: { ...route, radiusKm: 1 },
+        })
+      ).alerts,
+    ).toEqual([]);
+    expect(
+      (await service.getDriverRequestAlerts({ userId: 'user' })).alerts,
+    ).toEqual([]);
+  });
+});

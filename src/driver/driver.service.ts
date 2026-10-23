@@ -1,4 +1,5 @@
 import { customerOfferPrice } from '../payments/customer-pricing';
+import { distanceToRouteKm, type RoutePoint } from './route-distance';
 import { assertDriverApproved } from '../auth/driver-approval';
 import { normalizeDriverBusiness } from './driver-business';
 import { reservationSummary } from '../customer-requests/furniture-reservation-policy';
@@ -267,6 +268,7 @@ interface SendCustomerTestNotificationInput {
 
 interface GetDriverRequestAlertsInput {
   userId: string;
+  route?: { coordinates: RoutePoint[]; radiusKm: number };
 }
 
 interface GetDriverRequestDetailsInput {
@@ -1737,6 +1739,18 @@ export class DriverService {
     const alerts: DriverRequestAlertSummaryDto[] = [];
 
     for (const request of requests as RequestDetailsSource[]) {
+      const routeDistance =
+        input.route &&
+        validCoordinate(request.pickupLatitude, request.pickupLongitude)
+          ? distanceToRouteKm(
+              {
+                latitude: request.pickupLatitude!,
+                longitude: request.pickupLongitude!,
+              },
+              input.route.coordinates,
+            )
+          : Infinity;
+      if (input.route && routeDistance > input.route.radiusKm) continue;
       const existingAlert = request.driverAlerts.find(
         (alert) => alert.driverId === profile.id,
       );
@@ -1756,10 +1770,20 @@ export class DriverService {
         vehicles,
         new Date(),
         !lockedFurniture,
+        input.route
+          ? {
+              distanceKm: routeDistance,
+              radiusKm: input.route.radiusKm,
+              origin: input.route.coordinates[0],
+            }
+          : undefined,
       );
+      if (input.route && !eligible) continue;
       if (lockedFurniture && !eligible) continue;
       if (!existingAlert && !eligible) continue;
-      const distanceKm = coverageDistance(request, availability);
+      const distanceKm = input.route
+        ? routeDistance
+        : coverageDistance(request, availability);
 
       const alert = await this.ensureDriverRequestAlert({
         requestId: request.id,
