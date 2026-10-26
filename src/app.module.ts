@@ -2,6 +2,7 @@ import { RequestFilesModule } from './request-files/request-files.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
+import { RoutesModule } from './routes/routes.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AdminModule } from './admin/admin.module';
@@ -25,6 +26,7 @@ import { validateEnvironment } from './config/environment';
       isGlobal: true,
       validate: validateEnvironment,
     }),
+    RoutesModule,
     AdminModule,
     AuthModule,
     ChatModule,
