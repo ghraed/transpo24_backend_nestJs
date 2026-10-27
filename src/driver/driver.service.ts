@@ -122,7 +122,6 @@ interface GetDriverMeInput {
 }
 
 interface UpdateDriverProfileInput {
-  nickname?: string;
   driverType?: 'PERSONAL' | 'COMPANY';
   trn?: string | null;
   userId: string;
@@ -151,7 +150,6 @@ interface GetDriverOnboardingStatusInput {
 }
 
 interface UpsertDriverPersonalInfoInput {
-  nickname?: string;
   driverType?: 'PERSONAL' | 'COMPANY';
   trn?: string | null;
   userId: string;
@@ -347,7 +345,6 @@ interface GetDriverAcceptedJobDetailsInput {
 }
 
 type DriverProfileSource = {
-  nickname?: string | null;
   driverType?: string;
   trn?: string | null;
   id: string;
@@ -518,7 +515,6 @@ type DriverRatingSource = {
   createdAt: Date;
   customer: {
     name?: string | null;
-    nickname?: string | null;
   } | null;
 };
 
@@ -576,7 +572,6 @@ type RequestDetailsSource = RequestVersionSource & {
   } | null;
   customer: {
     name?: string | null;
-    nickname?: string | null;
   } | null;
   photos: Array<{
     id: string;
@@ -643,7 +638,6 @@ type AcceptedJobRequestSource = {
   } | null;
   customer: {
     name?: string | null;
-    nickname?: string | null;
   } | null;
   photos: Array<{
     id: string;
@@ -664,7 +658,6 @@ const DRIVER_ME_SELECT = {
     select: {
       id: true,
       userId: true,
-      nickname: true,
       driverType: true,
       trn: true,
       firstName: true,
@@ -2305,7 +2298,6 @@ export class DriverService {
         acceptedAt: true,
         driver: {
           select: {
-            nickname: true,
             driverType: true,
             trn: true,
             firstName: true,
@@ -3786,7 +3778,6 @@ export class DriverService {
       where: { userId: input.userId },
       data: {
         ...business,
-        nickname: null,
         firstName: nextFirstName,
         lastName: nextLastName,
         phone: nextPhone,
@@ -4501,7 +4492,7 @@ export class DriverService {
     distanceKm: number | null,
   ): DriverRequestAlertSummaryDto {
     return {
-      customerNickname: request.customer?.name?.trim() || 'Customer',
+      customerName: request.customer?.name?.trim() || 'Customer',
       alertId: alert.id,
       requestId: request.id,
       alertStatus: alert.status,
@@ -5762,7 +5753,7 @@ export class DriverService {
 
     return {
       reservation: reservationSummary(request),
-      customerNickname: request.customer?.name?.trim() || 'Customer',
+      customerName: request.customer?.name?.trim() || 'Customer',
       requestId: request.id,
       requestStatus: request.status,
       acceptedAt: request.acceptedAt ? request.acceptedAt.toISOString() : null,
@@ -5865,7 +5856,6 @@ export class DriverService {
     return {
       id: profile.id,
       userId: profile.userId,
-      nickname: null,
       driverType: profile.driverType === 'COMPANY' ? 'COMPANY' : 'PERSONAL',
       trn: profile.trn ?? null,
       firstName: profile.firstName,

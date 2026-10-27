@@ -352,7 +352,7 @@ type RequestPhotoResponse = {
 
 type TransportRequestResponseSource = {
   createdAt: Date;
-  customer?: { name?: string | null; nickname?: string | null } | null;
+  customer?: { name?: string | null } | null;
   assignedDriverId: string | null;
   acceptedOfferId: string | null;
   id: string;
@@ -445,7 +445,6 @@ type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
     icon: string;
   };
   assignedDriver: {
-    nickname?: string | null;
     driverType?: string;
     firstName: string;
     lastName: string;
@@ -522,7 +521,6 @@ type CustomerRequestOfferSource = {
   createdAt: Date;
   acceptedAt: Date | null;
   driver: {
-    nickname?: string | null;
     driverType?: string;
     firstName: string;
     lastName: string;
@@ -551,7 +549,6 @@ type DispatchResult = {
 type EligibleDriverDispatchCandidate = {
   id: string;
   userId: string;
-  nickname?: string | null;
   driverType?: string;
   firstName: string;
   lastName: string;
@@ -571,7 +568,7 @@ type EligibleDriverDispatchCandidate = {
 };
 
 type DriverRequestAlertSummaryPayload = {
-  customerNickname: string;
+  customerName: string;
   alertId: string;
   requestId: string;
   alertStatus: DriverRequestAlertStatus;
@@ -733,7 +730,6 @@ const REQUEST_STATUS_SELECT = {
   },
   assignedDriver: {
     select: {
-      nickname: true,
       driverType: true,
       firstName: true,
       lastName: true,
@@ -2488,7 +2484,6 @@ export class CustomerRequestsService {
         acceptedAt: true,
         driver: {
           select: {
-            nickname: true,
             driverType: true,
             firstName: true,
             lastName: true,
@@ -2594,7 +2589,6 @@ export class CustomerRequestsService {
         },
         assignedDriver: {
           select: {
-            nickname: true,
             driverType: true,
             firstName: true,
             lastName: true,
@@ -4227,7 +4221,6 @@ export class CustomerRequestsService {
       select: {
         id: true,
         userId: true,
-        nickname: true,
         driverType: true,
         firstName: true,
         lastName: true,
@@ -4379,7 +4372,7 @@ export class CustomerRequestsService {
     distanceKm: number | null,
   ): DriverRequestAlertSummaryPayload {
     return {
-      customerNickname: request.customer?.name?.trim() || 'Customer',
+      customerName: request.customer?.name?.trim() || 'Customer',
       alertId: alert.id,
       requestId: request.id,
       alertStatus: alert.status,

@@ -34,7 +34,7 @@ import type {
 } from './chat.types';
 
 type RoomAccessRecord = {
-  client?: { nickname?: string | null; name?: string | null };
+  client?: { name?: string | null };
   id: string;
   transportRequestId: string;
   clientId: string;
@@ -49,7 +49,6 @@ type RoomAccessRecord = {
     driverId: string;
   } | null;
   driver: {
-    nickname?: string | null;
     firstName?: string;
     lastName?: string;
     id: string;
@@ -306,7 +305,7 @@ export class ChatService {
       .notifyChatMessage({
         recipientUserId: access.recipientUserId,
         recipientApp: access.recipientApp,
-        senderNickname:
+        senderName:
           access.recipientApp === PushApp.DRIVER
             ? access.room.client?.name?.trim() || 'Customer'
             : `${access.room.driver.firstName ?? ''} ${access.room.driver.lastName ?? ''}`.trim() ||
@@ -377,7 +376,7 @@ export class ChatService {
       .notifyChatMessage({
         recipientUserId: access.recipientUserId,
         recipientApp: access.recipientApp,
-        senderNickname:
+        senderName:
           access.recipientApp === PushApp.DRIVER
             ? access.room.client?.name?.trim() || 'Customer'
             : `${access.room.driver.firstName ?? ''} ${access.room.driver.lastName ?? ''}`.trim() ||
@@ -785,9 +784,9 @@ export class ChatService {
       id: room.id,
       transportRequestId: room.transportRequestId,
       clientId: room.clientId,
-      clientNickname: room.client?.name?.trim() || 'Customer',
+      clientName: room.client?.name?.trim() || 'Customer',
       driverId: room.driverId,
-      driverNickname:
+      driverName:
         `${room.driver.firstName ?? ''} ${room.driver.lastName ?? ''}`.trim() ||
         'Driver',
       acceptedOfferId: room.acceptedOfferId,

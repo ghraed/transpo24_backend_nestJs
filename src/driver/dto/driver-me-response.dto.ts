@@ -8,7 +8,6 @@ export type DriverNextStep =
   | 'HOME';
 
 export interface DriverProfileResponseDto {
-  nickname: string | null;
   driverType: 'PERSONAL' | 'COMPANY';
   trn: string | null;
   id: string;

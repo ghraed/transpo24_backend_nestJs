@@ -138,11 +138,11 @@ describe('driver-facing customer identity', () => {
   const service = new DriverService({} as never, {} as never, {} as never);
   const mapper = service as unknown as {
     toRequestDetailsResponse: (...args: unknown[]) => {
-      customerNickname: string;
+      customerName: string;
       customer: { firstName: string };
     };
     toAcceptedJobDetailsResponse: (...args: unknown[]) => {
-      customerNickname: string;
+      customerName: string;
       customer: { firstName: string };
     };
     mapDriverRatingItemResponse: (item: unknown) => { customerName: string };
@@ -151,7 +151,7 @@ describe('driver-facing customer identity', () => {
     id: 'request-1',
     createdAt: new Date(),
     photos: [],
-    customer: { name: 'Private Legal Name', nickname: 'Road Runner' },
+    customer: { name: 'Private Legal Name' },
     acceptedOffer: {
       id: 'offer-1',
       price: 20,
@@ -167,15 +167,13 @@ describe('driver-facing customer identity', () => {
       null,
       null,
     );
-    expect(result.customerNickname).toBe('Private Legal Name');
+    expect(result.customerName).toBe('Private Legal Name');
     expect(result.customer.firstName).toBe('Private Legal Name');
-    expect(JSON.stringify(result)).not.toContain('Road Runner');
   });
   it('uses the name in accepted jobs and ratings', () => {
     const result = mapper.toAcceptedJobDetailsResponse(request);
-    expect(result.customerNickname).toBe('Private Legal Name');
+    expect(result.customerName).toBe('Private Legal Name');
     expect(result.customer.firstName).toBe('Private Legal Name');
-    expect(JSON.stringify(result)).not.toContain('Road Runner');
     expect(
       mapper.mapDriverRatingItemResponse({
         createdAt: new Date(),
@@ -183,12 +181,12 @@ describe('driver-facing customer identity', () => {
       }).customerName,
     ).toBe('Private Legal Name');
   });
-  it('uses the name for legacy customer ratings without a nickname', () => {
+  it('uses the full name for customer ratings', () => {
     const result = mapper.mapDriverRatingItemResponse({
       id: 'rating-1',
       rating: 5,
       createdAt: new Date(),
-      customer: { name: 'Private Legal Name', nickname: null },
+      customer: { name: 'Private Legal Name' },
     });
     expect(result.customerName).toBe('Private Legal Name');
   });

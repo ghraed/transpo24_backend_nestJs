@@ -39,7 +39,6 @@ describe('driver business identity', () => {
       driver: {
         firstName: 'Alex',
         lastName: 'Smith',
-        nickname: 'Old nickname',
         driverType: 'COMPANY',
         trn: 'SECRET-TRN',
         vehicles: [],

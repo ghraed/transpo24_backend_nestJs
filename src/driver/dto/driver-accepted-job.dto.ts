@@ -5,7 +5,7 @@ import { DriverOfferResponseDto } from './driver-offer.dto';
 
 export interface DriverAcceptedJobSummaryDto {
   reservation?: ReservationSummary | null;
-  customerNickname: string;
+  customerName: string;
   requestId: string;
   requestStatus: TransportRequestStatus;
   acceptedAt: string | null;

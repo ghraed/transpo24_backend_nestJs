@@ -22,9 +22,9 @@ export interface ChatRoomSummaryDto {
   id: string;
   transportRequestId: string;
   clientId: string;
-  clientNickname: string;
+  clientName: string;
   driverId: string;
-  driverNickname: string;
+  driverName: string;
   acceptedOfferId: string;
   status: ChatRoomStatus;
   createdAt: string;

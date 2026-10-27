@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 import { RoutesModule } from './routes/routes.module';
+import { PlacesModule } from './places/places.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AdminModule } from './admin/admin.module';
@@ -27,6 +28,7 @@ import { validateEnvironment } from './config/environment';
       validate: validateEnvironment,
     }),
     RoutesModule,
+    PlacesModule,
     AdminModule,
     AuthModule,
     ChatModule,

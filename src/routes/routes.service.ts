@@ -19,7 +19,9 @@ export class RoutesService {
   constructor(private readonly config: ConfigService) {}
 
   async compute(dto: ComputeDriverRouteDto) {
-    const key = this.config.get<string>('GOOGLE_ROUTES_API_KEY')?.trim();
+    const key =
+      this.config.get<string>('GOOGLE_MAPS_SERVER_API_KEY')?.trim() ||
+      this.config.get<string>('GOOGLE_ROUTES_API_KEY')?.trim();
     if (!key)
       throw new ServiceUnavailableException('Route service is not configured.');
     const waypoint = (point: RoutePointDto) =>

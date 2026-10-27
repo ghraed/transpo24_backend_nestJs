@@ -243,7 +243,6 @@ describe('AuthService phone authentication', () => {
       where: { id: customer.id },
       data: {
         name: 'Deleted account',
-        nickname: null,
         email: `deleted-${customer.id}@deleted.transpo24.invalid`,
         phoneNumber: null,
         countryCode: null,
@@ -498,7 +497,7 @@ describe('AuthService phone authentication', () => {
   });
 });
 
-describe('customer profiles without nicknames', () => {
+describe('customer profiles using full names', () => {
   it('completes and updates profiles using the full name', async () => {
     const { service, prisma } = createHarness();
     prisma.user.updateMany.mockResolvedValue({ count: 1 });
@@ -507,7 +506,6 @@ describe('customer profiles without nicknames', () => {
     ).toEqual({
       success: true,
       name: 'Private Name',
-      nickname: 'Private Name',
       countryCode: 'LB',
     });
     expect(prisma.user.updateMany).toHaveBeenCalledWith(

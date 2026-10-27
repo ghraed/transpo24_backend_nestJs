@@ -8,8 +8,4 @@ export class DriverBusinessDto {
   @IsString()
   @MaxLength(100)
   trn?: string;
-
-  @IsOptional()
-  @IsString()
-  nickname?: string;
 }

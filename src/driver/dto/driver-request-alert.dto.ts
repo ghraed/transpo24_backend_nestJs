@@ -17,7 +17,7 @@ export interface DriverRequestAlertServiceDto {
 
 export interface DriverRequestAlertSummaryDto {
   requestCreatedAt: string;
-  customerNickname: string;
+  customerName: string;
   isCurrentlyEligible?: boolean;
   alertId: string;
   requestId: string;

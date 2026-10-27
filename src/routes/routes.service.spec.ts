@@ -23,6 +23,18 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+it('uses the shared backend key before the legacy Routes variable', async () => {
+  const shared = new RoutesService({
+    get: (name: string) =>
+      name === 'GOOGLE_MAPS_SERVER_API_KEY' ? 'shared-key' : 'old-key',
+  } as unknown as ConfigService);
+  const call = jest
+    .spyOn(transport, 'requestGoogleRoutes')
+    .mockResolvedValue({ routes: [] });
+  await shared.compute(input);
+  expect(call).toHaveBeenCalledWith('shared-key', expect.any(Object));
+});
+
 it('preserves alternatives and metrics without returning the private key', async () => {
   const call = jest.spyOn(transport, 'requestGoogleRoutes').mockResolvedValue({
     routes: [

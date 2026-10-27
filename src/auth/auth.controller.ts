@@ -155,7 +155,6 @@ export class AuthController {
   ): Promise<{
     success: true;
     name: string;
-    nickname: string;
     countryCode: string;
   }> {
     return this.authService.completeCustomerProfile(
@@ -173,7 +172,6 @@ export class AuthController {
   ): Promise<{
     success: true;
     name: string;
-    nickname: string;
     countryCode: string;
   }> {
     return this.authService.updateCustomerProfile(

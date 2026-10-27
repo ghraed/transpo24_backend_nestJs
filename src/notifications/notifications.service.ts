@@ -425,7 +425,7 @@ export class NotificationsService {
     chatRoomId: string;
     transportRequestId: string;
     body: string;
-    senderNickname?: string;
+    senderName?: string;
   }): Promise<void> {
     const preview = input.body.trim().slice(0, 120);
 
@@ -436,7 +436,7 @@ export class NotificationsService {
     await this.sendToUsers({
       userIds: [input.recipientUserId],
       app: input.recipientApp,
-      title: input.senderNickname || 'New message',
+      title: input.senderName || 'New message',
       body: preview,
       type: 'CHAT_MESSAGE',
       data: {

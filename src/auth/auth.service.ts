@@ -89,7 +89,6 @@ const ACTIVE_ACCOUNT_DELETION_REQUEST_STATUSES: TransportRequestStatus[] = [
 @Injectable()
 export class AuthService {
   private readonly customerSessionUserSelect = {
-    nickname: true,
     id: true,
     name: true,
     email: true,
@@ -109,7 +108,6 @@ export class AuthService {
     driverProfile: {
       select: {
         id: true,
-        nickname: true,
         driverType: true,
         trn: true,
         firstName: true,
@@ -187,7 +185,6 @@ export class AuthService {
         where: { id: existing.id },
         data: {
           name: 'Deleted account',
-          nickname: null,
           email: `deleted-${existing.id}@deleted.transpo24.invalid`,
           phoneNumber: null,
           countryCode: null,
@@ -473,7 +470,6 @@ export class AuthService {
           where: { id: account.driverProfile.id },
           data: {
             firstName: 'Deleted',
-            nickname: null,
             lastName: 'Driver',
             phone: `deleted-${account.driverProfile.id}`,
             countryCode: null,
@@ -514,7 +510,6 @@ export class AuthService {
         where: { id: account.id },
         data: {
           name: 'Deleted account',
-          nickname: null,
           email: `deleted-${account.id}@deleted.transpo24.invalid`,
           passwordHash: hashPassword(randomBytes(32).toString('base64url')),
           phoneNumber: null,
@@ -539,7 +534,6 @@ export class AuthService {
   ): Promise<{
     success: true;
     name: string;
-    nickname: string;
     countryCode: string;
   }> {
     const normalizedName = name.trim();
@@ -553,7 +547,6 @@ export class AuthService {
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
       data: {
         name: normalizedName,
-        nickname: null,
         countryCode: normalizedCountryCode,
         isProfileCompleted: true,
       },
@@ -563,7 +556,6 @@ export class AuthService {
     }
     return {
       success: true,
-      nickname: normalizedName,
       name: normalizedName,
       countryCode: normalizedCountryCode,
     };
@@ -576,7 +568,6 @@ export class AuthService {
   ): Promise<{
     success: true;
     name: string;
-    nickname: string;
     countryCode: string;
   }> {
     const normalizedName = name.trim();
@@ -590,7 +581,6 @@ export class AuthService {
       where: { id: userId, role: UserRole.CUSTOMER, deletedAt: null },
       data: {
         name: normalizedName,
-        nickname: null,
         countryCode: normalizedCountryCode,
       },
     });
@@ -599,7 +589,6 @@ export class AuthService {
     }
     return {
       success: true,
-      nickname: normalizedName,
       name: normalizedName,
       countryCode: normalizedCountryCode,
     };
@@ -652,7 +641,6 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
-        nickname: null,
         email: normalizedEmail,
         passwordHash: hashPassword(dto.password),
         role: UserRole.CUSTOMER,
@@ -733,7 +721,6 @@ export class AuthService {
       role: UserRole;
       driverProfile: {
         id: string;
-        nickname?: string | null;
         driverType?: string;
         trn?: string | null;
         firstName: string;
@@ -768,7 +755,6 @@ export class AuthService {
             `${input.firstName} ${input.lastName}`.trim() || existingUser.name,
           driverProfile: {
             create: {
-              nickname: null,
               driverType: input.driverType,
               trn: input.trn,
               firstName: input.firstName,
@@ -790,7 +776,6 @@ export class AuthService {
           driverProfile: {
             select: {
               id: true,
-              nickname: true,
               driverType: true,
               trn: true,
               firstName: true,
@@ -815,7 +800,6 @@ export class AuthService {
           role: UserRole.DRIVER,
           driverProfile: {
             create: {
-              nickname: null,
               driverType: input.driverType,
               trn: input.trn,
               firstName: input.firstName,
@@ -837,7 +821,6 @@ export class AuthService {
           driverProfile: {
             select: {
               id: true,
-              nickname: true,
               driverType: true,
               trn: true,
               firstName: true,
@@ -876,7 +859,6 @@ export class AuthService {
       },
       driver: {
         id: created.driverProfile.id,
-        nickname: null,
         driverType:
           created.driverProfile.driverType === 'COMPANY'
             ? 'COMPANY'
@@ -910,7 +892,6 @@ export class AuthService {
         driverProfile: {
           select: {
             id: true,
-            nickname: true,
             driverType: true,
             trn: true,
             firstName: true,
@@ -970,7 +951,6 @@ export class AuthService {
       driver: driverProfile
         ? {
             id: driverProfile.id,
-            nickname: null,
             driverType:
               driverProfile.driverType === 'COMPANY' ? 'COMPANY' : 'PERSONAL',
             trn: driverProfile.trn ?? null,
@@ -1065,7 +1045,6 @@ export class AuthService {
     user: {
       id: string;
       name: string;
-      nickname?: string | null;
       email: string;
       phoneNumber: string | null;
       countryCode: string | null;
@@ -1090,7 +1069,6 @@ export class AuthService {
     user: {
       id: string;
       name: string;
-      nickname?: string | null;
       email: string;
       phoneNumber: string | null;
       countryCode: string | null;
@@ -1119,7 +1097,6 @@ export class AuthService {
       ),
       refreshToken,
       user: {
-        nickname: user.nickname ?? null,
         id: user.id,
         name: user.name,
         email: user.email,
@@ -1175,7 +1152,6 @@ export class AuthService {
     deletedAt: Date | null;
     driverProfile: {
       id: string;
-      nickname?: string | null;
       driverType?: string;
       trn?: string | null;
       firstName: string;
@@ -1218,7 +1194,6 @@ export class AuthService {
       },
       driver: {
         id: user.driverProfile.id,
-        nickname: null,
         driverType:
           user.driverProfile.driverType === 'COMPANY' ? 'COMPANY' : 'PERSONAL',
         trn: user.driverProfile.trn ?? null,
