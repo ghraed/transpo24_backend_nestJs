@@ -74,9 +74,50 @@ function setup() {
     acceptsScheduledRequests: true,
     weeklySchedule: stored.schedule,
   };
-  return { service, prisma, payload, stored, upsert, updateMany, update };
+  return { service, prisma, payload, stored, upsert, updateMany, update, tx };
 }
 describe('coverage settings and latest matching location', () => {
+  it('saves all days as unavailable and completes availability setup', async () => {
+    const { service, payload, stored, tx } = setup();
+    const weeklySchedule = payload.weeklySchedule.map((day) => ({
+      dayOfWeek: day.dayOfWeek,
+      isAvailable: false,
+    }));
+    Object.assign(stored, {
+      isOnline: false,
+      schedule: weeklySchedule.map((day) => ({
+        ...day,
+        startTime: null,
+        endTime: null,
+      })),
+    });
+    const input = { ...payload, isOnline: false, weeklySchedule };
+    expect(
+      await validate(plainToInstance(UpdateDriverAvailabilityDto, input)),
+    ).toEqual([]);
+
+    const response = await service.updateAvailability(input);
+
+    expect(tx.driverAvailabilitySchedule.createMany).toHaveBeenCalledWith({
+      data: stored.schedule.map((day) => ({
+        ...day,
+        availabilityId: stored.id,
+      })),
+    });
+    expect(response.weeklySchedule).toEqual(stored.schedule);
+    expect(response.isOnline).toBe(false);
+    expect(response.nextStep).toBe('HOME');
+  });
+
+  it('still requires valid hours for a day marked available', async () => {
+    const { service, payload, upsert } = setup();
+    payload.weeklySchedule[0].endTime = '07:00';
+    await expect(service.updateAvailability(payload)).rejects.toThrow(
+      'endTime must be after startTime',
+    );
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it('persists and returns city pins alongside the shared radius', async () => {
     const { service, payload, upsert } = setup();
     const response = await service.updateAvailability(payload);

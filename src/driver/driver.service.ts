@@ -4664,12 +4664,6 @@ export class DriverService {
       };
     });
 
-    if (!normalized.some((entry) => entry.isAvailable)) {
-      throw new BadRequestException(
-        'At least one weekly schedule day must be available.',
-      );
-    }
-
     return normalized;
   }
 
@@ -4800,7 +4794,7 @@ export class DriverService {
       }
     }
 
-    return availability.schedule.some((day) => day.isAvailable);
+    return true;
   }
 
   private ensureDriverCanGoOnline(
