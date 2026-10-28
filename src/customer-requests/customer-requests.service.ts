@@ -1,4 +1,10 @@
 import {
+  confirmationSummary,
+  paymentPolicy,
+  heldCancellationRate,
+  type ConfirmationFields,
+} from '../payments/payment-policy';
+import {
   customerOfferPrice,
   type CustomerPaymentPrice,
 } from '../payments/customer-pricing';
@@ -262,6 +268,7 @@ interface AcceptDriverOfferInput {
   supportsDeferredFurniture?: boolean;
   supportsDeferredVehicle?: boolean;
   stripePaymentMethodId?: string;
+  policyVersion?: string;
 }
 
 interface FinalizeAcceptedOfferPaymentInput {
@@ -276,6 +283,7 @@ const RETRYABLE_PAYMENT_HOLD_STATUSES = new Set<PaymentStatus>([
 ]);
 
 const SUCCESSFUL_PAYMENT_HOLD_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.PAYMENT_HELD,
   PaymentStatus.PAYMENT_CAPTURED,
 ]);
 
@@ -460,13 +468,15 @@ type TransportRequestStatusResponseSource = TransportRequestResponseSource & {
     longitude: number;
     recordedAt: Date;
   }>;
-  paymentHold: {
-    capturedAt: Date | null;
-    status: PaymentStatus;
-    currency: string;
-    amount: Prisma.Decimal;
-    customerPlatformFeeAmount: Prisma.Decimal;
-  } | null;
+  paymentHold:
+    | (ConfirmationFields & {
+        capturedAt: Date | null;
+        status: PaymentStatus;
+        currency: string;
+        amount: Prisma.Decimal;
+        customerPlatformFeeAmount: Prisma.Decimal;
+      })
+    | null;
   paymentSettlement: {
     currency: string;
     collectedAmount: Prisma.Decimal;
@@ -761,6 +771,14 @@ const REQUEST_STATUS_SELECT = {
   paymentHold: {
     select: {
       capturedAt: true,
+      authorizedAt: true,
+      confirmationStartedAt: true,
+      confirmationState: true,
+      authorizationDueAt: true,
+      approvalDeadlineAt: true,
+      authorizationExpiresAt: true,
+      policyVersion: true,
+      failureReason: true,
       status: true,
       currency: true,
       amount: true,
@@ -2429,6 +2447,9 @@ export class CustomerRequestsService {
         currency: lowestOffer?.currency ?? null,
       }),
       canEdit: await this.canEditRequest(input.requestId),
+      payment: request.paymentHold
+        ? await this.paymentsService.getRequestPayment(input)
+        : null,
     };
   }
 
@@ -2448,6 +2469,14 @@ export class CustomerRequestsService {
         paymentHold: {
           select: {
             capturedAt: true,
+            authorizedAt: true,
+            confirmationStartedAt: true,
+            confirmationState: true,
+            authorizationDueAt: true,
+            approvalDeadlineAt: true,
+            authorizationExpiresAt: true,
+            policyVersion: true,
+            failureReason: true,
             acceptedOfferId: true,
             amount: true,
             customerPlatformFeeAmount: true,
@@ -2517,6 +2546,8 @@ export class CustomerRequestsService {
           driverDetailsAvailable(
             request.paymentHold?.capturedAt,
             request.status,
+            Date.now(),
+            request.paymentHold?.authorizedAt,
           ),
           request.paymentHold?.acceptedOfferId === offer.id
             ? request.paymentHold
@@ -2539,7 +2570,13 @@ export class CustomerRequestsService {
         id: true,
         customerId: true,
         status: true,
-        paymentHold: { select: { capturedAt: true } },
+        paymentHold: {
+          select: {
+            capturedAt: true,
+            authorizedAt: true,
+            confirmationStartedAt: true,
+          },
+        },
         assignedDriverId: true,
         pickupLatitude: true,
         pickupLongitude: true,
@@ -2623,10 +2660,15 @@ export class CustomerRequestsService {
     const detailsAvailable = driverDetailsAvailable(
       request.paymentHold?.capturedAt,
       request.status,
+      Date.now(),
+      request.paymentHold?.authorizedAt,
     );
     const latestDriverLocation =
       request.assignedDriverId &&
-      driverTrackingAvailable(request.paymentHold?.capturedAt, request.status)
+      driverTrackingAvailable(
+        request.paymentHold?.authorizedAt ?? request.paymentHold?.capturedAt,
+        request.status,
+      )
         ? (request.driverLocations[0] ?? null)
         : null;
     const pickupProofPhotos = this.toTrackingProofPhotoResponses(
@@ -2790,6 +2832,12 @@ export class CustomerRequestsService {
               amount: true,
               customerPlatformFeeAmount: true,
               currency: true,
+              confirmationStartedAt: true,
+              confirmationState: true,
+              authorizedAt: true,
+              authorizationDueAt: true,
+              approvalDeadlineAt: true,
+              authorizationExpiresAt: true,
               paymentMethod: true,
               provider: true,
               status: true,
@@ -2846,6 +2894,33 @@ export class CustomerRequestsService {
         );
       }
 
+      const pendingConfirmation = await tx.paymentHold.findUnique({
+        where: { requestId: request.id },
+      });
+      if (pendingConfirmation?.confirmationStartedAt) {
+        if (pendingConfirmation.acceptedOfferId !== input.offerId)
+          throw new ConflictException(
+            'A different offer is already being confirmed.',
+          );
+        const offer = await tx.driverOffer.findUniqueOrThrow({
+          where: { id: input.offerId },
+        });
+        const payment =
+          this.paymentsService.getPaymentSummary(pendingConfirmation);
+        return {
+          acceptedOffer: offer,
+          payment,
+          updatedRequest: {
+            id: request.id,
+            status: request.status,
+            assignedDriverId: null,
+            acceptedOfferId: null,
+            acceptedAt: null,
+          },
+          rejectedOffersCount: 0,
+          rejectedOffers: [],
+        };
+      }
       if (
         request.paymentHold &&
         !RETRYABLE_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)
@@ -2959,6 +3034,7 @@ export class CustomerRequestsService {
           currency: offer.currency,
           paymentMethod: input.paymentMethod!,
           stripePaymentMethodId: input.stripePaymentMethodId,
+          policyVersion: input.policyVersion,
         },
       );
       return {
@@ -2992,9 +3068,13 @@ export class CustomerRequestsService {
       ),
       payment: result.payment,
       rejectedOffersCount: result.rejectedOffersCount,
-      nextStep: result.updatedRequest.assignedDriverId
-        ? ('TRACK_REQUEST' as const)
-        : ('CONFIRM_PAYMENT' as const),
+      nextStep:
+        result.payment.confirmation &&
+        result.payment.confirmation.state !== 'CAPTURED'
+          ? ('WAIT_CONFIRMATION' as const)
+          : result.updatedRequest.assignedDriverId
+            ? ('TRACK_REQUEST' as const)
+            : ('CONFIRM_PAYMENT' as const),
     };
     try {
       this.tripsGateway.emitPaymentHeld(input.customerId, result.payment);
@@ -3016,6 +3096,7 @@ export class CustomerRequestsService {
       input.requestId,
     );
     if (reserved) return reserved;
+    let alreadyAssigned = false;
     let result: {
       acceptedOffer: AcceptedOfferSource;
       payment: PaymentSummaryDto;
@@ -3032,6 +3113,8 @@ export class CustomerRequestsService {
 
     try {
       result = await this.prisma.$transaction(async (tx) => {
+        if (tx.$queryRaw)
+          await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${input.requestId} FOR UPDATE`;
         const request = await tx.transportRequest.findUnique({
           where: { id: input.requestId },
           select: {
@@ -3046,6 +3129,12 @@ export class CustomerRequestsService {
                 id: true,
                 requestId: true,
                 acceptedOfferId: true,
+                confirmationState: true,
+                confirmationStartedAt: true,
+                authorizedAt: true,
+                authorizationDueAt: true,
+                approvalDeadlineAt: true,
+                authorizationExpiresAt: true,
                 status: true,
                 customerId: true,
                 driverId: true,
@@ -3078,6 +3167,14 @@ export class CustomerRequestsService {
           throw new BadRequestException('Payment hold not found.');
         }
 
+        if (request.status === 'CANCELLED')
+          throw new ConflictException('Cancelled bookings cannot be assigned.');
+        if (
+          request.paymentHold.confirmationStartedAt &&
+          request.paymentHold.confirmationState !== 'CONFIRMED' &&
+          request.paymentHold.confirmationState !== 'CAPTURED'
+        )
+          throw new ConflictException('Booking funds are not secured yet.');
         if (!SUCCESSFUL_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)) {
           throw new BadRequestException(
             'Payment has not been collected successfully.',
@@ -3085,6 +3182,7 @@ export class CustomerRequestsService {
         }
 
         if (request.acceptedOfferId && request.assignedDriverId) {
+          alreadyAssigned = true;
           const acceptedOffer = await tx.driverOffer.findUniqueOrThrow({
             where: { id: request.acceptedOfferId },
             select: {
@@ -3244,6 +3342,7 @@ export class CustomerRequestsService {
             paymentHold: {
               select: {
                 id: true,
+                confirmationStartedAt: true,
                 status: true,
               },
             },
@@ -3256,6 +3355,10 @@ export class CustomerRequestsService {
           !request.assignedDriverId &&
           !request.acceptedOfferId &&
           request.paymentHold &&
+          !(
+            'confirmationStartedAt' in request.paymentHold &&
+            request.paymentHold.confirmationStartedAt
+          ) &&
           ACTIVE_PAYMENT_HOLD_STATUSES.has(request.paymentHold.status)
         ) {
           await this.paymentsService.cancelRequestPayment({
@@ -3322,6 +3425,7 @@ export class CustomerRequestsService {
       nextStep: 'TRACK_REQUEST' as const,
     };
 
+    if (alreadyAssigned) return response;
     try {
       this.tripsGateway.emitOfferAccepted(
         {
@@ -3378,7 +3482,7 @@ export class CustomerRequestsService {
       this.logger.error(
         `Cannot notify selected driver for request ${result.updatedRequest.id}: assigned driver user was not found.`,
       );
-    } else {
+    } else if (!result.payment.confirmation) {
       void this.notificationsService
         .notifyDriverSelected({
           driverUserId: selectedDriverUserId,
@@ -3594,6 +3698,16 @@ export class CustomerRequestsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      if (tx.$queryRaw)
+        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${request.id} FOR UPDATE`;
+      const active = await tx.paymentHold.findUnique({
+        where: { requestId: request.id },
+      });
+      if (
+        active?.confirmationStartedAt &&
+        active.confirmationState !== 'CANCELLED'
+      )
+        throw new ConflictException('Cancel the booking before deleting it.');
       if (request.paymentHold?.id) {
         if (!HOLD_DELETABLE_REQUEST_STATUSES.includes(request.status)) {
           throw new ConflictException(
@@ -3872,6 +3986,8 @@ export class CustomerRequestsService {
     const detailsAvailable = driverDetailsAvailable(
       request.paymentHold?.capturedAt,
       request.status,
+      Date.now(),
+      request.paymentHold?.authorizedAt,
     );
     const driverName =
       detailsAvailable && request.assignedDriver
@@ -3886,7 +4002,10 @@ export class CustomerRequestsService {
       : null;
     const latestLocation =
       request.assignedDriverId &&
-      driverTrackingAvailable(request.paymentHold?.capturedAt, request.status)
+      driverTrackingAvailable(
+        request.paymentHold?.authorizedAt ?? request.paymentHold?.capturedAt,
+        request.status,
+      )
         ? (request.driverLocations[0] ?? null)
         : null;
 
@@ -3906,6 +4025,14 @@ export class CustomerRequestsService {
         request.scheduleTimeZone ?? null,
       ),
       canEdit: false,
+      paymentPolicy: paymentPolicy(
+        Boolean(request.paymentHold?.confirmationStartedAt) ||
+          (!request.paymentHold &&
+            process.env.DELAYED_BOOKING_AUTHORIZATION_ENABLED === 'true'),
+      ),
+      confirmation: request.paymentHold
+        ? confirmationSummary(request.paymentHold)
+        : null,
       cancellation: this.toCancellationStatus(request),
       service: {
         id: request.service.id,
@@ -3924,11 +4051,13 @@ export class CustomerRequestsService {
         hasOffers: (offersSummary?.count ?? 0) > 0,
       },
       driverDetailsAvailable: detailsAvailable,
-      driverDetailsAvailableAt: request.paymentHold?.capturedAt
-        ? new Date(
-            request.paymentHold.capturedAt.getTime() + 10 * 60 * 1000,
-          ).toISOString()
-        : null,
+      driverDetailsAvailableAt:
+        request.paymentHold?.authorizedAt?.toISOString() ??
+        (request.paymentHold?.capturedAt
+          ? new Date(
+              request.paymentHold.capturedAt.getTime() + 10 * 60 * 1000,
+            ).toISOString()
+          : null),
       driverSummary: {
         driverType: request.assignedDriver
           ? request.assignedDriver.driverType === 'COMPANY'
@@ -3974,6 +4103,30 @@ export class CustomerRequestsService {
           'Automatic cancellation after pickup is unavailable. This trip requires manual review.',
         refundPreview: null,
         action: 'NONE',
+      };
+    }
+
+    if (request.paymentHold?.confirmationStartedAt) {
+      const hold = request.paymentHold;
+      const fee = hold.amount
+        .mul(
+          heldCancellationRate(
+            hold,
+            Boolean(request.assignedDriverId) && request.status !== 'RESERVED',
+          ),
+        )
+        .toDecimalPlaces(2);
+      return {
+        canCancelCollectedTrip: true,
+        reason: null,
+        refundPreview: {
+          currency: hold.currency,
+          refundedAmount: 0,
+          retainedAmount: Number(fee),
+          releasedAmount: hold.authorizedAt ? Number(hold.amount.sub(fee)) : 0,
+          nothingCharged: fee.isZero(),
+        },
+        action: 'CANCEL_COLLECTED_TRIP' as const,
       };
     }
 
@@ -4080,24 +4233,26 @@ export class CustomerRequestsService {
     };
   }
 
-  private toPaymentSummaryResponse(hold: {
-    id: string;
-    requestId: string;
-    acceptedOfferId: string;
-    customerId: string;
-    driverId: string;
-    amount: Prisma.Decimal;
-    customerPlatformFeeAmount: Prisma.Decimal;
-    currency: string;
-    paymentMethod: PaymentMethod;
-    provider: Prisma.JsonValue | string;
-    status: PaymentStatus;
-    stripePaymentIntentId: string | null;
-    stripeClientSecret: string | null;
-    stripeChargeId: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }): PaymentSummaryDto {
+  private toPaymentSummaryResponse(
+    hold: ConfirmationFields & {
+      id: string;
+      requestId: string;
+      acceptedOfferId: string;
+      customerId: string;
+      driverId: string;
+      amount: Prisma.Decimal;
+      customerPlatformFeeAmount: Prisma.Decimal;
+      currency: string;
+      paymentMethod: PaymentMethod;
+      provider: Prisma.JsonValue | string;
+      status: PaymentStatus;
+      stripePaymentIntentId: string | null;
+      stripeClientSecret: string | null;
+      stripeChargeId: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  ): PaymentSummaryDto {
     return {
       id: hold.id,
       requestId: hold.requestId,
@@ -4106,9 +4261,15 @@ export class CustomerRequestsService {
       driverId: hold.driverId,
       amount: Number(hold.amount),
       customerPlatformFeeAmount: Number(hold.customerPlatformFeeAmount),
-      heldAmount: ACTIVE_PAYMENT_HOLD_STATUSES.has(hold.status)
-        ? Number(hold.amount)
-        : 0,
+      confirmation: confirmationSummary(hold),
+      policy: paymentPolicy(Boolean(hold.confirmationStartedAt)),
+      heldAmount: hold.confirmationStartedAt
+        ? hold.status === 'PAYMENT_HELD'
+          ? Number(hold.amount)
+          : 0
+        : ACTIVE_PAYMENT_HOLD_STATUSES.has(hold.status)
+          ? Number(hold.amount)
+          : 0,
       capturedAmount:
         hold.status === PaymentStatus.PAYMENT_CAPTURED
           ? Number(hold.amount)

@@ -92,6 +92,33 @@ describe('Customer Alerts history', () => {
     await service.sendToUsers(input);
     expect(pushToken.findMany).not.toHaveBeenCalled();
   });
+  it('records the secured-payment notification once and retries dispatch after a provider failure', async () => {
+    const { service, customerNotification, pushToken } = setup();
+    pushToken.findMany.mockRejectedValueOnce(new Error('Push unavailable'));
+    await expect(
+      service.notifyCustomerTripUpdate('trip1', 'BOOKING_FUNDS_RESERVED', true),
+    ).rejects.toThrow('Push unavailable');
+    customerNotification.createMany.mockResolvedValueOnce({ count: 0 });
+    await service.notifyCustomerTripUpdate(
+      'trip1',
+      'BOOKING_FUNDS_RESERVED',
+      true,
+    );
+    expect(pushToken.findMany).toHaveBeenCalledTimes(2);
+    expect(customerNotification.createMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            type: 'BOOKING_FUNDS_RESERVED',
+            eventKey: 'BOOKING_FUNDS_RESERVED:trip1',
+            title: 'Booking confirmed',
+            body: expect.stringContaining('reserved'),
+          }),
+        ],
+        skipDuplicates: true,
+      }),
+    );
+  });
   it('does not merge distinct chat messages for the same trip', async () => {
     const { service, customerNotification } = setup();
     await service.sendToUsers({ ...input, type: 'CHAT_MESSAGE' });
@@ -182,6 +209,7 @@ describe('Customer Alerts history', () => {
     });
   });
   it.each([
+    'BOOKING_FUNDS_RESERVED',
     'DRIVER_GOING_TO_PICKUP',
     'DRIVER_ARRIVED_PICKUP',
     'DRIVER_GOING_TO_DROPOFF',

@@ -1,3 +1,4 @@
+import { ConfirmCustomerDeliveryDto } from './dto/confirm-customer-delivery.dto';
 import {
   Body,
   Controller,
@@ -99,8 +100,18 @@ export class CustomerTripsController {
   async confirmDelivery(
     @Req() request: AuthenticatedRequest,
     @Param() params: TripIdParamDto,
+    @Body() dto: ConfirmCustomerDeliveryDto = {},
   ) {
+    await this.paymentsService.validateDeliveryPolicy(
+      request.user.id,
+      params.tripId,
+      dto.policyVersion,
+    );
     const result = await this.tripsService.confirmCustomerDelivery(
+      request.user.id,
+      params.tripId,
+    );
+    await this.paymentsService.captureConfirmedDelivery(
       request.user.id,
       params.tripId,
     );

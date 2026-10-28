@@ -2227,6 +2227,8 @@ export class AdminService {
       },
       orderBy: [{ updatedAt: 'desc' }],
       select: {
+        confirmationStartedAt: true,
+        operationAmount: true,
         id: true,
         requestId: true,
         customerId: true,
@@ -2264,57 +2266,73 @@ export class AdminService {
       },
     });
 
-    return holds.map((hold) => {
-      const settlementAmount = hold.settlement?.collectedAmount ?? null;
-      let status: PaymentReconciliationStatus =
-        PaymentReconciliationStatus.MATCHED;
-      let reason: string | null = null;
+    return holds
+      .filter(
+        (hold) =>
+          !hold.confirmationStartedAt ||
+          hold.status === PaymentStatus.PAYMENT_CAPTURED,
+      )
+      .map((hold) => {
+        const expectedCapturedAmount = hold.confirmationStartedAt
+          ? (hold.operationAmount ?? hold.amount)
+          : hold.amount;
+        const settlementAmount = hold.settlement?.collectedAmount ?? null;
+        let status: PaymentReconciliationStatus =
+          PaymentReconciliationStatus.MATCHED;
+        let reason: string | null = null;
 
-      if (hold.status !== PaymentStatus.PAYMENT_CAPTURED) {
-        status = PaymentReconciliationStatus.MISMATCH;
-        reason = 'Payment hold is not marked as captured.';
-      } else if (!hold.capturedAt) {
-        status = PaymentReconciliationStatus.MISMATCH;
-        reason = 'Payment hold is captured without a captured timestamp.';
-      } else if (!hold.settlement) {
-        status = PaymentReconciliationStatus.MISSING;
-        reason = 'Captured payment is missing a settlement record.';
-      } else if (
-        hold.request.paymentStatus !== PaymentStatus.PAYMENT_CAPTURED
-      ) {
-        status = PaymentReconciliationStatus.MISMATCH;
-        reason = 'Transport request payment status is not marked as captured.';
-      } else if (hold.request.capturedAmount === null) {
-        status = PaymentReconciliationStatus.MISSING;
-        reason = 'Transport request is missing the captured amount.';
-      } else if (
-        hold.settlement.currency !== hold.currency ||
-        !this.decimalsEqual(hold.settlement.collectedAmount, hold.amount) ||
-        !this.decimalsEqual(hold.request.capturedAmount, hold.amount)
-      ) {
-        status = PaymentReconciliationStatus.MISMATCH;
-        reason =
-          'Captured payment totals do not match across hold, request, and settlement.';
-      }
+        if (hold.status !== PaymentStatus.PAYMENT_CAPTURED) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason = 'Payment hold is not marked as captured.';
+        } else if (!hold.capturedAt) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason = 'Payment hold is captured without a captured timestamp.';
+        } else if (!hold.settlement) {
+          status = PaymentReconciliationStatus.MISSING;
+          reason = 'Captured payment is missing a settlement record.';
+        } else if (
+          hold.request.paymentStatus !== PaymentStatus.PAYMENT_CAPTURED
+        ) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason =
+            'Transport request payment status is not marked as captured.';
+        } else if (hold.request.capturedAmount === null) {
+          status = PaymentReconciliationStatus.MISSING;
+          reason = 'Transport request is missing the captured amount.';
+        } else if (
+          hold.settlement.currency !== hold.currency ||
+          !this.decimalsEqual(
+            hold.settlement.collectedAmount,
+            expectedCapturedAmount,
+          ) ||
+          !this.decimalsEqual(
+            hold.request.capturedAmount,
+            expectedCapturedAmount,
+          )
+        ) {
+          status = PaymentReconciliationStatus.MISMATCH;
+          reason =
+            'Captured payment totals do not match across hold, request, and settlement.';
+        }
 
-      return this.buildPaymentReconciliationDraft({
-        stream: PaymentReconciliationStream.CAPTURE,
-        status,
-        currency: hold.currency,
-        expectedAmount: hold.amount,
-        actualAmount: settlementAmount,
-        reference: hold.requestId,
-        externalReference: hold.stripeChargeId ?? hold.stripePaymentIntentId,
-        tripId: hold.requestId,
-        captureId: hold.id,
-        customerId: hold.customer.id,
-        customerName: hold.customer.name,
-        customerEmail: hold.customer.email,
-        reason,
-        createdAt: hold.createdAt,
-        updatedAt: hold.updatedAt,
+        return this.buildPaymentReconciliationDraft({
+          stream: PaymentReconciliationStream.CAPTURE,
+          status,
+          currency: hold.currency,
+          expectedAmount: expectedCapturedAmount,
+          actualAmount: settlementAmount,
+          reference: hold.requestId,
+          externalReference: hold.stripeChargeId ?? hold.stripePaymentIntentId,
+          tripId: hold.requestId,
+          captureId: hold.id,
+          customerId: hold.customer.id,
+          customerName: hold.customer.name,
+          customerEmail: hold.customer.email,
+          reason,
+          createdAt: hold.createdAt,
+          updatedAt: hold.updatedAt,
+        });
       });
-    });
   }
 
   private async buildRefundPaymentReconciliationRecords(): Promise<

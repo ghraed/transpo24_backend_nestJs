@@ -1,3 +1,11 @@
+import { DelayedBookingPaymentsService } from './delayed-booking-payments.service';
+import {
+  confirmationSummary,
+  delayedBookingsEnabled,
+  paymentPolicy,
+  requirePaymentPolicy,
+  type ConfirmationFields,
+} from './payment-policy';
 import { cancellationFeeRate } from './booking-policy';
 import { calculateCustomerPricing } from './customer-pricing';
 import {
@@ -57,6 +65,7 @@ type CreateHoldInput = {
   currency: string;
   paymentMethod: PaymentMethod;
   stripePaymentMethodId?: string;
+  policyVersion?: string;
 };
 
 type PricedHoldInput = CreateHoldInput & {
@@ -69,6 +78,8 @@ type CancelPaymentInput = {
 };
 
 type CancelTripInput = {
+  expectedRetainedAmount?: number;
+  policyVersion?: string;
   customerId: string;
   requestId: string;
 };
@@ -90,6 +101,7 @@ type ApproveAdditionalChargeInput = {
   confirmationLocale: string;
   confirmationText: string;
   paymentOption: 'SAVED_CARD' | 'CASH_ON_DELIVERY';
+  policyVersion?: string;
 };
 
 type SaveDefaultPaymentMethodInput = {
@@ -98,6 +110,7 @@ type SaveDefaultPaymentMethodInput = {
 };
 
 type CreateWalletTopUpInput = {
+  policyVersion?: string;
   customerId: string;
   amount: number;
   currency: string;
@@ -129,7 +142,8 @@ type WalletTransactionRecord = {
   createdAt: Date;
 };
 
-type PaymentHoldRecord = {
+type PaymentHoldRecord = ConfirmationFields & {
+  operationAmount?: Prisma.Decimal | null;
   customerPlatformFeeAmount: Prisma.Decimal;
   capturedAt?: Date | null;
   id: string;
@@ -305,7 +319,33 @@ export class PaymentsService {
     @Optional()
     @Inject(forwardRef(() => DriverPayoutQueueService))
     private readonly driverPayoutQueueService?: DriverPayoutQueueService,
+    @Optional()
+    private readonly delayedBookings?: DelayedBookingPaymentsService,
   ) {}
+
+  async failBookingApproval(customerId: string, requestId: string) {
+    await this.delayedBookings?.failApproval(customerId, requestId);
+  }
+
+  async validateDeliveryPolicy(
+    customerId: string,
+    requestId: string,
+    version?: string,
+  ) {
+    const hold = await this.prisma.paymentHold.findUnique({
+      where: { requestId },
+    });
+    if (hold && hold.customerId !== customerId)
+      throw new ForbiddenException('This payment does not belong to you.');
+    if (hold?.confirmationStartedAt && hold.policyVersion !== version)
+      throw new ConflictException(
+        'Review the payment rules for this booking before confirming delivery.',
+      );
+  }
+
+  async captureConfirmedDelivery(customerId: string, requestId: string) {
+    await this.delayedBookings?.captureDelivery(customerId, requestId);
+  }
 
   getStripeMode(): 'test' | 'live' | null {
     return this.stripeService.mode;
@@ -315,6 +355,7 @@ export class PaymentsService {
     tx: Prisma.TransactionClient,
     input: CreateHoldInput,
   ): Promise<PaymentSummaryDto> {
+    if (input.policyVersion) requirePaymentPolicy(input.policyVersion);
     const existingHold = await tx.paymentHold.findUnique({
       where: { requestId: input.requestId },
       select: { id: true },
@@ -328,6 +369,20 @@ export class PaymentsService {
 
     const pricing = calculateCustomerPricing(this.toMoneyDecimal(input.amount));
     const currency = this.normalizeCurrency(input.currency);
+
+    if (delayedBookingsEnabled()) {
+      if (!this.delayedBookings)
+        throw new ServiceUnavailableException(
+          'Booking confirmation is unavailable.',
+        );
+      const hold = await this.delayedBookings.stage(tx, {
+        ...input,
+        amount: pricing.totalAmount,
+        customerPlatformFeeAmount: pricing.customerPlatformFeeAmount,
+        currency,
+      });
+      return this.toPaymentSummaryDto(hold);
+    }
 
     if (input.paymentMethod === PaymentMethod.APP_WALLET) {
       return this.createWalletHold(tx, {
@@ -372,6 +427,9 @@ export class PaymentsService {
     if (!request.paymentHold) {
       throw new NotFoundException('Payment hold not found.');
     }
+
+    if (request.paymentHold.confirmationStartedAt)
+      return this.toPaymentSummaryDto(request.paymentHold);
 
     if (
       request.paymentHold.provider === PaymentProvider.STRIPE &&
@@ -429,6 +487,7 @@ export class PaymentsService {
         id: true,
         customerId: true,
         status: true,
+        deferredPaymentState: true,
       },
     });
 
@@ -451,6 +510,24 @@ export class PaymentsService {
       );
     }
 
+    const pending = await this.prisma.paymentHold.findUnique({
+      where: { requestId: input.requestId },
+    });
+    if (pending?.confirmationStartedAt) {
+      if (!this.delayedBookings)
+        throw new ServiceUnavailableException(
+          'Booking confirmation is unavailable.',
+        );
+      await this.delayedBookings.cancel(
+        input.customerId,
+        input.requestId,
+        Boolean(
+          request.deferredPaymentState &&
+          request.deferredPaymentState !== 'PAID',
+        ),
+      );
+      return this.getRequestPayment(input);
+    }
     return this.prisma.$transaction((tx) =>
       this.cancelRequestPaymentTx(tx, input.requestId),
     );
@@ -545,6 +622,33 @@ export class PaymentsService {
       );
     }
 
+    const hold = await this.prisma.paymentHold.findUnique({
+      where: { requestId: input.requestId },
+    });
+    if (hold?.confirmationStartedAt) {
+      if (!this.delayedBookings)
+        throw new ServiceUnavailableException(
+          'Booking confirmation is unavailable.',
+        );
+      const result = await this.delayedBookings.cancel(
+        input.customerId,
+        input.requestId,
+        false,
+        input.expectedRetainedAmount === undefined
+          ? undefined
+          : {
+              expectedRetainedAmount: input.expectedRetainedAmount,
+              policyVersion: input.policyVersion,
+            },
+      );
+      await this.notificationsService.notifyCustomerTripUpdate(
+        input.requestId,
+        'TRIP_CANCELLED',
+      );
+      if (result.retainedAmount > 0)
+        await this.queueDriverPayoutForTrip(input.requestId);
+      return result;
+    }
     return this.prisma
       .$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${input.requestId} FOR UPDATE`;
@@ -552,6 +656,8 @@ export class PaymentsService {
           tx,
           input.requestId,
           input.customerId,
+          false,
+          input.expectedRetainedAmount,
         );
       })
       .then(async (result) => {
@@ -603,6 +709,7 @@ export class PaymentsService {
     requestId: string,
     customerId: string,
     fullRefund = false,
+    expectedRetainedAmount?: number,
   ): Promise<
     CancelTripPaymentResponseDto & {
       driverShareAmount: number;
@@ -691,6 +798,13 @@ export class PaymentsService {
     const retainedAmount = request.paymentSettlement.collectedAmount
       .sub(refundableAmount)
       .toDecimalPlaces(2);
+    if (
+      expectedRetainedAmount !== undefined &&
+      !retainedAmount.eq(this.toMoneyDecimal(expectedRetainedAmount))
+    )
+      throw new ConflictException(
+        'The cancellation fee changed. Refresh and review the current fee before confirming.',
+      );
     const driverShareAmount =
       request.acceptedOfferId && request.assignedDriverId
         ? retainedAmount.mul(DRIVER_CANCELLATION_SHARE_RATE).toDecimalPlaces(2)
@@ -709,7 +823,7 @@ export class PaymentsService {
       await tx.customerWallet.update({
         where: { id: wallet.id },
         data: {
-          balance: wallet.balance.add(refundableAmount),
+          balance: { increment: refundableAmount },
         },
       });
       await tx.customerWalletTransaction.create({
@@ -1073,6 +1187,7 @@ export class PaymentsService {
   async createCustomerWalletTopUp(
     input: CreateWalletTopUpInput,
   ): Promise<CustomerWalletTopUpResponseDto> {
+    if (input.policyVersion) requirePaymentPolicy(input.policyVersion);
     const amount = this.toMoneyDecimal(input.amount);
     if (amount.lte(0)) {
       throw new BadRequestException('Top-up amount must be greater than zero.');
@@ -1126,11 +1241,13 @@ export class PaymentsService {
         customerId: input.customerId,
         walletId: wallet?.id ?? '',
         kind: 'wallet_top_up',
+        ...(input.policyVersion ? { policyVersion: input.policyVersion } : {}),
       },
     });
 
     const topUp = await this.prisma.customerWalletTopUp.create({
       data: {
+        acceptedPolicyVersion: input.policyVersion,
         walletId: wallet?.id ?? null,
         customerId: input.customerId,
         amount,
@@ -1222,6 +1339,7 @@ export class PaymentsService {
   async approveAdditionalCharge(
     input: ApproveAdditionalChargeInput,
   ): Promise<AdditionalChargeResponseDto> {
+    if (input.policyVersion) requirePaymentPolicy(input.policyVersion);
     if (!input.requestId.trim()) {
       throw new BadRequestException('requestId is required.');
     }
@@ -1339,7 +1457,10 @@ export class PaymentsService {
         status: {
           in: [AdditionalChargeStatus.PENDING, AdditionalChargeStatus.FAILED],
         },
-        approvalInFlightAt: null,
+        OR: [
+          { approvalInFlightAt: null },
+          { approvalInFlightAt: { lt: new Date(Date.now() - 5 * 60000) } },
+        ],
       },
       data: {
         approvalInFlightAt: new Date(),
@@ -1352,6 +1473,25 @@ export class PaymentsService {
       );
     }
 
+    if (paymentOption === 'CASH_ON_DELIVERY' && charge.stripePaymentIntentId) {
+      try {
+        const previous = await this.stripeService.retrievePaymentIntent(
+          charge.stripePaymentIntentId,
+        );
+        await this.syncStripeAdditionalExpense(previous);
+        if (previous.status === 'succeeded' || previous.status === 'processing')
+          throw new ConflictException(
+            'The card payment has succeeded or is pending. Refresh before choosing cash.',
+          );
+        await this.stripeService.cancelPaymentIntentIfExists(previous.id);
+      } catch (error) {
+        await this.prisma.additionalCharge.updateMany({
+          where: { id: charge.id },
+          data: { approvalInFlightAt: null },
+        });
+        throw error;
+      }
+    }
     if (paymentOption === 'CASH_ON_DELIVERY') {
       const updatedCharge = await this.prisma.additionalCharge.update({
         where: { id: charge.id },
@@ -1362,6 +1502,7 @@ export class PaymentsService {
           approvedByCustomerId: input.customerId,
           approvalLocale: confirmationLocale,
           approvalConfirmationText: confirmationText,
+          acceptedPolicyVersion: input.policyVersion,
           stripePaymentIntentId: null,
           stripeChargeId: null,
           savedPaymentMethodId: null,
@@ -1374,168 +1515,243 @@ export class PaymentsService {
         select: ADDITIONAL_CHARGE_SELECT,
       });
 
-      const driverProfile = await this.prisma.driverProfile.findUnique({
-        where: { id: updatedCharge.driverId },
-        select: { userId: true },
-      });
-
       const response = this.toAdditionalChargeResponseDto(updatedCharge);
-
-      if (driverProfile?.userId) {
-        await this.notificationsService.notifyDriverAdditionalChargeApproved({
-          driverUserId: driverProfile.userId,
-          requestId: response.requestId,
-          amount: response.totalChargeAmount.toFixed(2),
-          currency: response.currency,
-          paymentOption: response.payment.paymentOption,
-          savedPaymentMethod: response.payment.savedPaymentMethod,
-        });
-      }
+      await this.notifyAdditionalExpenseApproved(updatedCharge);
 
       return response;
     }
 
-    const stripeCustomerId = await this.stripeService.ensureCustomer({
-      customerId: customer.id,
-      email: customer.email,
-      name: customer.name,
-      stripeCustomerId: customer.stripeCustomerId,
-    });
-
-    if (stripeCustomerId !== customer.stripeCustomerId) {
-      await this.prisma.user.update({
-        where: { id: customer.id },
-        data: {
-          stripeCustomerId,
-        },
+    let intentId = charge.stripePaymentIntentId;
+    try {
+      const stripeCustomerId = await this.stripeService.ensureCustomer({
+        customerId: customer.id,
+        email: customer.email,
+        name: customer.name,
+        stripeCustomerId: customer.stripeCustomerId,
       });
-    }
-
-    const savedPaymentMethod =
-      await this.stripeService.getCustomerDefaultPaymentMethod(
-        stripeCustomerId,
-      );
-
-    if (!savedPaymentMethod) {
+      if (stripeCustomerId !== customer.stripeCustomerId)
+        await this.prisma.user.update({
+          where: { id: customer.id },
+          data: { stripeCustomerId },
+        });
+      const method =
+        await this.stripeService.getCustomerDefaultPaymentMethod(
+          stripeCustomerId,
+        );
+      if (!method)
+        throw new BadRequestException(
+          'No saved default payment method is available for this customer.',
+        );
+      if (!intentId) {
+        // Creation cannot charge. Its stable key recovers a lost creation response safely.
+        const prepared = await this.stripeService.prepareAdditionalExpense({
+          customerId: stripeCustomerId,
+          amount: this.toStripeMinorUnit(
+            this.calculateAdditionalChargeTotal(charge.amount),
+          ),
+          currency: charge.currency.toLowerCase(),
+          additionalChargeId: charge.id,
+        });
+        intentId = prepared.id;
+      }
       await this.prisma.additionalCharge.update({
         where: { id: charge.id },
         data: {
-          approvalInFlightAt: null,
-          status: AdditionalChargeStatus.FAILED,
+          stripePaymentIntentId: intentId,
           approvedAt: new Date(),
           approvedByCustomerId: input.customerId,
           approvalLocale: confirmationLocale,
           approvalConfirmationText: confirmationText,
-          paymentFailureReason:
-            'No saved default payment method is available for this customer.',
+          acceptedPolicyVersion: input.policyVersion,
+          savedPaymentMethodId: method.id,
+          savedPaymentMethodBrand: method.brand,
+          savedPaymentMethodLast4: method.last4,
+          savedPaymentMethodExpMonth: method.expMonth,
+          savedPaymentMethodExpYear: method.expYear,
         },
       });
-
-      throw new BadRequestException(
-        'No saved default payment method is available for this customer.',
-      );
-    }
-
-    const totalChargeAmount = this.calculateAdditionalChargeTotal(
-      charge.amount,
-    );
-
-    try {
-      const paymentIntent = await this.stripeService.createOffSessionCharge({
-        customerId: stripeCustomerId,
-        paymentMethodId: savedPaymentMethod.id,
-        amount: this.toStripeMinorUnit(totalChargeAmount),
-        currency: charge.currency.toLowerCase(),
-        metadata: {
-          requestId: charge.requestId,
-          additionalChargeId: charge.id,
-          customerId: charge.customerId,
-          driverId: charge.driverId,
-        },
-        idempotencyKey: `additional_charge_${charge.id}_${charge.updatedAt.getTime()}`,
-      });
-
-      const updatedCharge = await this.prisma.additionalCharge.update({
-        where: { id: charge.id },
-        data: {
-          approvalInFlightAt: null,
-          status: AdditionalChargeStatus.CAPTURED,
-          approvedAt: new Date(),
-          approvedByCustomerId: input.customerId,
-          approvalLocale: confirmationLocale,
-          approvalConfirmationText: confirmationText,
-          stripePaymentIntentId: paymentIntent.id,
-          stripeChargeId: this.getStripeChargeId(paymentIntent),
-          savedPaymentMethodId: savedPaymentMethod.id,
-          savedPaymentMethodBrand: savedPaymentMethod.brand,
-          savedPaymentMethodLast4: savedPaymentMethod.last4,
-          savedPaymentMethodExpMonth: savedPaymentMethod.expMonth,
-          savedPaymentMethodExpYear: savedPaymentMethod.expYear,
-          paymentFailureReason: null,
-        },
-        select: ADDITIONAL_CHARGE_SELECT,
-      });
-
-      if (existingEarning) {
-        await this.prisma.driverEarning.update({
-          where: { id: existingEarning.id },
+      let intent = await this.stripeService.retrievePaymentIntent(intentId);
+      if (
+        ['requires_confirmation', 'requires_payment_method'].includes(
+          intent.status,
+        )
+      )
+        intent = await this.stripeService.confirmAdditionalExpense(
+          intentId,
+          method.id,
+        );
+      await this.syncStripeAdditionalExpense(intent);
+      if (intent.status !== 'succeeded')
+        throw new BadRequestException(
+          intent.status === 'processing'
+            ? 'The additional payment is pending. Refresh to check its outcome.'
+            : 'The additional payment was not completed. Try another saved card or cash.',
+        );
+    } catch (error) {
+      // Never downgrade a successful webhook or a charge because its notification failed.
+      // An uncertain result stays pending and retains the same intent for every retry.
+      let outcome: StripePaymentIntentRecord | null = null;
+      if (intentId) {
+        try {
+          outcome = await this.stripeService.retrievePaymentIntent(intentId);
+        } catch {
+          /* Reconcile the persisted intent on a webhook, retry, or recovery sweep. */
+        }
+      }
+      if (outcome) await this.syncStripeAdditionalExpense(outcome);
+      if (outcome?.status !== 'succeeded') {
+        await this.prisma.additionalCharge.updateMany({
+          where: { id: charge.id, status: { not: 'CAPTURED' } },
           data: {
-            grossAmount: {
-              increment: charge.amount,
-            },
-            netAmount: {
-              increment: charge.amount,
-            },
+            approvalInFlightAt: null,
+            status:
+              intentId && !outcome
+                ? 'PENDING'
+                : outcome?.status === 'processing'
+                  ? 'PENDING'
+                  : 'FAILED',
+            paymentFailureReason:
+              error instanceof Error
+                ? error.message
+                : 'Additional payment failed.',
           },
         });
+        throw error;
       }
+    }
+    const updated = await this.prisma.additionalCharge.findUniqueOrThrow({
+      where: { id: charge.id },
+      select: ADDITIONAL_CHARGE_SELECT,
+    });
+    await this.notifyAdditionalExpenseApproved(updated);
+    return this.toAdditionalChargeResponseDto(updated);
+  }
 
-      const driverProfile = await this.prisma.driverProfile.findUnique({
-        where: { id: updatedCharge.driverId },
-        select: { userId: true },
+  private async notifyAdditionalExpenseApproved(
+    charge: Prisma.AdditionalChargeGetPayload<{
+      select: typeof ADDITIONAL_CHARGE_SELECT;
+    }>,
+  ) {
+    const driver = await this.prisma.driverProfile.findUnique({
+      where: { id: charge.driverId },
+      select: { userId: true },
+    });
+    if (!driver?.userId) return;
+    const response = this.toAdditionalChargeResponseDto(charge);
+    try {
+      await this.notificationsService.notifyDriverAdditionalChargeApproved({
+        driverUserId: driver.userId,
+        requestId: response.requestId,
+        amount: response.totalChargeAmount.toFixed(2),
+        currency: response.currency,
+        paymentOption: response.payment.paymentOption,
+        savedPaymentMethod: response.payment.savedPaymentMethod,
       });
+    } catch (error) {
+      this.logger.error(
+        `Additional expense notification failed: ${String(error)}`,
+      );
+    }
+  }
 
-      const response = this.toAdditionalChargeResponseDto(updatedCharge);
-
-      if (driverProfile?.userId) {
-        await this.notificationsService.notifyDriverAdditionalChargeApproved({
-          driverUserId: driverProfile.userId,
-          requestId: response.requestId,
-          amount: response.totalChargeAmount.toFixed(2),
-          currency: response.currency,
-          paymentOption: response.payment.paymentOption,
-          savedPaymentMethod: response.payment.savedPaymentMethod,
+  private async syncStripeAdditionalExpense(intent: StripePaymentIntentRecord) {
+    // Old and repeated events cannot turn a collected expense into a failed payment.
+    return this.prisma.$transaction(async (tx) => {
+      const charge = await tx.additionalCharge.findUnique({
+        where: { stripePaymentIntentId: intent.id },
+      });
+      if (!charge) return;
+      await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${charge.requestId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM additional_charges WHERE id = ${charge.id} FOR UPDATE`;
+      const current = await tx.additionalCharge.findUniqueOrThrow({
+        where: { id: charge.id },
+      });
+      if (current.status === 'CAPTURED') return;
+      if (
+        intent.amount !==
+          this.toStripeMinorUnit(
+            this.calculateAdditionalChargeTotal(current.amount),
+          ) ||
+        intent.currency?.toUpperCase() !== current.currency.toUpperCase()
+      )
+        throw new ConflictException(
+          'Additional payment amount or currency does not match.',
+        );
+      if (intent.status === 'succeeded') {
+        await tx.additionalCharge.update({
+          where: { id: current.id },
+          data: {
+            status: 'CAPTURED',
+            approvalInFlightAt: null,
+            stripeChargeId: this.getStripeChargeId(intent),
+            paymentFailureReason: null,
+          },
+        });
+        // Reconciliation and the delivery earning calculation share the request lock.
+        const earning = await tx.driverEarning.findUnique({
+          where: { tripId: current.requestId },
+        });
+        if (
+          earning &&
+          earning.status !== 'PAID_OUT' &&
+          !earning.stripeTransferId
+        )
+          await tx.driverEarning.update({
+            where: { id: earning.id },
+            data: {
+              grossAmount: { increment: current.amount },
+              netAmount: { increment: current.amount },
+            },
+          });
+      } else if (
+        ['requires_payment_method', 'canceled', 'requires_action'].includes(
+          intent.status,
+        )
+      ) {
+        await tx.additionalCharge.update({
+          where: { id: current.id },
+          data: {
+            status: 'FAILED',
+            approvalInFlightAt: null,
+            paymentFailureReason:
+              intent.last_payment_error?.message ??
+              'Additional payment was not completed.',
+          },
+        });
+      } else if (intent.status === 'processing') {
+        await tx.additionalCharge.update({
+          where: { id: current.id },
+          data: { status: 'PENDING', approvalInFlightAt: null },
         });
       }
+    });
+  }
 
-      return response;
-    } catch (error) {
-      const failureReason =
-        error instanceof Error
-          ? error.message
-          : 'Failed to capture additional charge payment.';
-
-      const updatedCharge = await this.prisma.additionalCharge.update({
-        where: { id: charge.id },
-        data: {
-          approvalInFlightAt: null,
-          status: AdditionalChargeStatus.FAILED,
-          approvedAt: new Date(),
-          approvedByCustomerId: input.customerId,
-          approvalLocale: confirmationLocale,
-          approvalConfirmationText: confirmationText,
-          savedPaymentMethodId: savedPaymentMethod.id,
-          savedPaymentMethodBrand: savedPaymentMethod.brand,
-          savedPaymentMethodLast4: savedPaymentMethod.last4,
-          savedPaymentMethodExpMonth: savedPaymentMethod.expMonth,
-          savedPaymentMethodExpYear: savedPaymentMethod.expYear,
-          paymentFailureReason: failureReason,
-        },
-        select: ADDITIONAL_CHARGE_SELECT,
-      });
-
-      this.toAdditionalChargeResponseDto(updatedCharge);
-      throw new BadRequestException(failureReason);
+  async recoverAdditionalExpensePayments() {
+    const rows = await this.prisma.additionalCharge.findMany({
+      where: {
+        stripePaymentIntentId: { not: null },
+        status: 'PENDING',
+        OR: [
+          { approvalInFlightAt: null },
+          { approvalInFlightAt: { lt: new Date(Date.now() - 5 * 60000) } },
+        ],
+      },
+      select: { stripePaymentIntentId: true },
+      take: 100,
+    });
+    for (const row of rows) {
+      try {
+        await this.syncStripeAdditionalExpense(
+          await this.stripeService.retrievePaymentIntent(
+            row.stripePaymentIntentId!,
+          ),
+        );
+      } catch (error) {
+        this.logger.error(
+          `Additional expense recovery failed: ${String(error)}`,
+        );
+      }
     }
   }
 
@@ -1943,8 +2159,10 @@ export class PaymentsService {
     const hasPayableSettlement =
       context.settlementStatus === TripPaymentSettlementStatus.COLLECTED ||
       (context.tripStatus === TransportRequestStatus.CANCELLED &&
-        context.settlementStatus ===
-          TripPaymentSettlementStatus.PARTIALLY_REFUNDED);
+        (context.settlementStatus ===
+          TripPaymentSettlementStatus.PARTIALLY_REFUNDED ||
+          context.settlementStatus ===
+            TripPaymentSettlementStatus.CANCELLED_WITH_FEE));
     if (!hasPayableSettlement || context.requiresManualReview) {
       await this.prisma.tripPaymentSettlement.update({
         where: { id: context.settlementId },
@@ -2279,6 +2497,7 @@ export class PaymentsService {
         const paymentIntent = event.data.object as StripePaymentIntentRecord;
         await this.syncStripePaymentIntent(paymentIntent, event.type);
         await this.syncStripeWalletTopUp(paymentIntent, event.type);
+        await this.syncStripeAdditionalExpense(paymentIntent);
         break;
       }
       case 'charge.refunded': {
@@ -2370,6 +2589,7 @@ export class PaymentsService {
           select: PAYMENT_HOLD_SELECT,
         });
       }
+      if (hold?.confirmationStartedAt) return;
       if (
         hold &&
         ((paymentIntent.amount !== undefined &&
@@ -2511,6 +2731,8 @@ export class PaymentsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      if (tx.$queryRaw)
+        await tx.$queryRaw`SELECT id FROM customer_wallet_top_ups WHERE "stripePaymentIntentId" = ${paymentIntent.id} FOR UPDATE`;
       const topUp = await tx.customerWalletTopUp.findUnique({
         where: { stripePaymentIntentId: paymentIntent.id },
         select: WALLET_TOP_UP_SELECT,
@@ -2520,9 +2742,21 @@ export class PaymentsService {
         return;
       }
 
-      if (topUp.status !== CustomerWalletTopUpStatus.PENDING) {
+      if (
+        topUp.status === CustomerWalletTopUpStatus.SUCCEEDED ||
+        (topUp.status !== CustomerWalletTopUpStatus.PENDING &&
+          nextStatus !== CustomerWalletTopUpStatus.SUCCEEDED)
+      )
         return;
-      }
+      if (
+        (paymentIntent.amount !== undefined &&
+          paymentIntent.amount !== this.toStripeMinorUnit(topUp.amount)) ||
+        (paymentIntent.currency &&
+          paymentIntent.currency.toUpperCase() !== topUp.currency.toUpperCase())
+      )
+        throw new ConflictException(
+          'Stripe top-up amount or currency does not match.',
+        );
 
       if (nextStatus === CustomerWalletTopUpStatus.SUCCEEDED) {
         const wallet = await this.findOrCreateWalletForTopUpSuccess(tx, topUp);
@@ -2542,7 +2776,7 @@ export class PaymentsService {
         await tx.customerWallet.update({
           where: { id: wallet.id },
           data: {
-            balance: wallet.balance.add(topUp.amount),
+            balance: { increment: topUp.amount },
           },
         });
 
@@ -2908,6 +3142,8 @@ export class PaymentsService {
     tx: Prisma.TransactionClient,
     input: PricedHoldInput,
   ): Promise<PaymentSummaryDto> {
+    if (tx.$queryRaw)
+      await tx.$queryRaw`SELECT id FROM customer_wallets WHERE "customerId" = ${input.customerId} FOR UPDATE`;
     const wallet = await tx.customerWallet.findUnique({
       where: { customerId: input.customerId },
       select: WALLET_SELECT,
@@ -2946,6 +3182,7 @@ export class PaymentsService {
         customerPlatformFeeAmount: input.customerPlatformFeeAmount,
         currency: input.currency,
         paymentMethod: input.paymentMethod,
+        policyVersion: input.policyVersion,
         provider: PaymentProvider.APP_WALLET,
         status: PaymentStatus.PAYMENT_CAPTURED,
         capturedAt: new Date(),
@@ -3057,6 +3294,7 @@ export class PaymentsService {
         customerPlatformFeeAmount: input.customerPlatformFeeAmount,
         currency: input.currency,
         paymentMethod: input.paymentMethod,
+        policyVersion: input.policyVersion,
         provider: PaymentProvider.STRIPE,
         status,
         capturedAt:
@@ -3361,13 +3599,21 @@ export class PaymentsService {
     return null;
   }
 
+  getPaymentSummary(hold: PaymentHoldRecord) {
+    return this.toPaymentSummaryDto(hold);
+  }
+
   private toPaymentSummaryDto(hold: PaymentHoldRecord): PaymentSummaryDto {
     const capturedAmount =
       hold.status === PaymentStatus.PAYMENT_CAPTURED ||
       hold.status === PaymentStatus.PAYMENT_PARTIALLY_REFUNDED ||
       hold.status === PaymentStatus.PAYMENT_REFUNDED ||
       hold.status === PaymentStatus.PAYMENT_DISPUTED
-        ? Number(hold.amount)
+        ? Number(
+            hold.confirmationStartedAt
+              ? (hold.operationAmount ?? hold.amount)
+              : hold.amount,
+          )
         : 0;
 
     return {
@@ -3378,9 +3624,15 @@ export class PaymentsService {
       driverId: hold.driverId,
       amount: Number(hold.amount),
       customerPlatformFeeAmount: Number(hold.customerPlatformFeeAmount),
-      heldAmount: ACTIVE_PAYMENT_STATUSES.has(hold.status)
-        ? Number(hold.amount)
-        : 0,
+      heldAmount: hold.confirmationStartedAt
+        ? hold.status === PaymentStatus.PAYMENT_HELD
+          ? Number(hold.amount)
+          : 0
+        : ACTIVE_PAYMENT_STATUSES.has(hold.status)
+          ? Number(hold.amount)
+          : 0,
+      confirmation: confirmationSummary(hold),
+      policy: paymentPolicy(Boolean(hold.confirmationStartedAt)),
       capturedAmount,
       currency: hold.currency,
       paymentMethod: hold.paymentMethod,
@@ -3826,6 +4078,15 @@ export class PaymentsService {
 }
 
 const PAYMENT_HOLD_SELECT = {
+  operationAmount: true,
+  policyVersion: true,
+  confirmationState: true,
+  confirmationStartedAt: true,
+  authorizationDueAt: true,
+  approvalDeadlineAt: true,
+  authorizedAt: true,
+  authorizationExpiresAt: true,
+  failureReason: true,
   capturedAt: true,
   id: true,
   requestId: true,

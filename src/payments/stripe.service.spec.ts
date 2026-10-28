@@ -6,6 +6,39 @@ import {
 import { StripeService } from './stripe.service';
 
 describe('StripeService', () => {
+  it('converts off-session authentication failure into SDK approval on the same intent', async () => {
+    const confirm = jest
+      .fn()
+      .mockRejectedValueOnce({ payment_intent: { id: 'pi_auth' } })
+      .mockResolvedValueOnce({ id: 'pi_auth', status: 'requires_action' });
+    const retrieve = jest.fn().mockResolvedValue({
+      id: 'pi_auth',
+      status: 'requires_payment_method',
+      payment_method: null,
+      last_payment_error: {
+        code: 'authentication_required',
+        payment_method: { id: 'pm_saved' },
+      },
+    });
+    const service = new StripeService();
+    (service as any).getClient = () => ({
+      paymentIntents: { confirm, retrieve },
+    });
+    await expect(
+      service.confirmManualAuthorization('pi_auth', 'confirm-key'),
+    ).resolves.toMatchObject({ status: 'requires_action' });
+    expect(confirm).toHaveBeenLastCalledWith(
+      'pi_auth',
+      expect.objectContaining({
+        payment_method: 'pm_saved',
+        off_session: false,
+        use_stripe_sdk: true,
+      }),
+      { idempotencyKey: 'confirm-key_authentication' },
+    );
+    expect(retrieve).toHaveBeenCalledTimes(1);
+  });
+
   it('creates an immediate-capture card intent when a Stripe payment method id is supplied', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'pi_test' });
     const service = new StripeService();

@@ -30,5 +30,9 @@ export interface CustomerAcceptOfferResponseDto {
   payment: PaymentSummaryDto | null;
   reservation?: ReservationSummary | null;
   rejectedOffersCount: number;
-  nextStep: 'CONFIRM_PAYMENT' | 'TRACK_REQUEST' | 'RESERVATION_CONFIRMED';
+  nextStep:
+    | 'WAIT_CONFIRMATION'
+    | 'CONFIRM_PAYMENT'
+    | 'TRACK_REQUEST'
+    | 'RESERVATION_CONFIRMED';
 }

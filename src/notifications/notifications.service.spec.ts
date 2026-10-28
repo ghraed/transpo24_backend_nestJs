@@ -248,6 +248,120 @@ describe('NotificationsService', () => {
     });
   });
 
+  it('dispatches secured-payment and offer-accepted pushes to the separate client and driver devices', async () => {
+    const findMany = jest.fn(async ({ where }: { where: { app: PushApp } }) => [
+      {
+        id: where.app,
+        token: `ExponentPushToken[${where.app}]`,
+        platform: 'android',
+      },
+    ]);
+    const service = createService({
+      transportRequest: {
+        findUnique: jest.fn(async () => ({ customerId: 'customer-user' })),
+      },
+      pushToken: { findMany },
+    });
+    const send = jest
+      .fn()
+      .mockResolvedValue([{ status: 'ok', id: 'receipt-id' }]);
+    Object.assign(service, {
+      expo: {
+        chunkPushNotifications: (messages: unknown[]) => [messages],
+        sendPushNotificationsAsync: send,
+        chunkPushNotificationReceiptIds: () => [],
+      },
+    });
+    await service.notifyCustomerTripUpdate(
+      'request-1',
+      'BOOKING_FUNDS_RESERVED',
+      true,
+    );
+    await service.notifyDriverSelected({
+      driverUserId: 'driver-user',
+      requestId: 'request-1',
+      serviceType: 'Transport',
+      retryPersistedEvent: true,
+    });
+    expect(findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: { in: ['customer-user'] },
+          app: PushApp.CUSTOMER,
+        }),
+      }),
+    );
+    expect(findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: { in: ['driver-user'] },
+          app: PushApp.DRIVER,
+        }),
+      }),
+    );
+    expect(send).toHaveBeenNthCalledWith(1, [
+      expect.objectContaining({
+        to: 'ExponentPushToken[CUSTOMER]',
+        title: 'Booking confirmed',
+        body: expect.stringContaining('reserved'),
+        data: expect.objectContaining({
+          type: 'BOOKING_FUNDS_RESERVED',
+          requestId: 'request-1',
+        }),
+      }),
+    ]);
+    expect(send).toHaveBeenNthCalledWith(2, [
+      expect.objectContaining({
+        to: 'ExponentPushToken[DRIVER]',
+        title: 'Offer accepted',
+        body: 'Your offer for Transport has been accepted.',
+        data: expect.objectContaining({
+          type: 'DRIVER_SELECTED',
+          requestId: 'request-1',
+        }),
+      }),
+    ]);
+  });
+
+  it('propagates retryable provider ticket failures for persisted booking alerts', async () => {
+    const service = createService({
+      transportRequest: {
+        findUnique: jest.fn(async () => ({ customerId: 'customer-user' })),
+      },
+      pushToken: {
+        findMany: jest.fn(async () => [
+          {
+            id: 'device',
+            token: 'ExponentPushToken[customer]',
+            platform: 'android',
+          },
+        ]),
+      },
+    });
+    const send = jest.fn().mockResolvedValue([
+      {
+        status: 'error',
+        message: 'Rate exceeded',
+        details: { error: 'MessageRateExceeded' },
+      },
+    ]);
+    Object.assign(service, {
+      expo: {
+        chunkPushNotifications: (messages: unknown[]) => [messages],
+        sendPushNotificationsAsync: send,
+      },
+    });
+    await expect(
+      service.notifyCustomerTripUpdate(
+        'request',
+        'BOOKING_FUNDS_RESERVED',
+        true,
+      ),
+    ).rejects.toThrow('did not accept');
+  });
+
   it('sends selected-driver notifications to the driver user account', async () => {
     const prisma = {
       pushToken: {
@@ -270,8 +384,8 @@ describe('NotificationsService', () => {
     expect(sendToUsersSpy).toHaveBeenCalledWith({
       userIds: ['driver-user-1'],
       app: PushApp.DRIVER,
-      title: 'Customer selected you',
-      body: 'You were selected for Vehicle transport.',
+      title: 'Offer accepted',
+      body: 'Your offer for Vehicle transport has been accepted.',
       type: 'DRIVER_SELECTED',
       data: {
         requestId: 'request-1',

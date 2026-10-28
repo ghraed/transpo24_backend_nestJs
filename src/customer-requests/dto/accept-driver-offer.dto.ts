@@ -3,6 +3,9 @@ import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class AcceptDriverOfferDto {
   @IsOptional()
+  @IsString()
+  policyVersion?: string;
+  @IsOptional()
   @IsBoolean()
   confirm?: boolean;
 

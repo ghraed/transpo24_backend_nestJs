@@ -12,6 +12,57 @@ import {
 import { AdminService } from './admin.service';
 
 describe('AdminService', () => {
+  it('excludes authorized funds from capture totals and reconciles only the captured cancellation fee', async () => {
+    const row = {
+      id: 'hold',
+      requestId: 'trip',
+      customerId: 'customer',
+      amount: new Prisma.Decimal(105),
+      currency: 'CHF',
+      confirmationStartedAt: new Date(),
+      capturedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      customer: {
+        id: 'customer',
+        name: 'Customer',
+        email: 'customer@example.invalid',
+      },
+    };
+    const prisma = {
+      paymentHold: {
+        findMany: jest.fn(async () => [
+          {
+            ...row,
+            status: 'PAYMENT_HELD',
+            operationAmount: null,
+            settlement: { collectedAmount: new Prisma.Decimal(0) },
+          },
+          {
+            ...row,
+            status: 'PAYMENT_CAPTURED',
+            operationAmount: new Prisma.Decimal(15.75),
+            request: {
+              paymentStatus: 'PAYMENT_CAPTURED',
+              capturedAmount: new Prisma.Decimal(15.75),
+            },
+            settlement: {
+              currency: 'CHF',
+              collectedAmount: new Prisma.Decimal(15.75),
+            },
+          },
+        ]),
+      },
+    };
+    const service = new AdminService(prisma as never, {} as never, {} as never);
+    const result = await (
+      service as any
+    ).buildCapturePaymentReconciliationRecords();
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe('MATCHED');
+    expect(Number(result[0].expectedAmount)).toBe(15.75);
+  });
+
   it('reports the client commission and combined platform revenue separately from the driver deduction', async () => {
     const earning = {
       id: 'earning',

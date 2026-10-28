@@ -1,3 +1,4 @@
+import { IsOptional } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { IsIn, IsNumber, IsString, Min } from 'class-validator';
 import { PaymentMethod } from '@prisma/client';
@@ -10,6 +11,9 @@ const SUPPORTED_TOP_UP_PAYMENT_METHODS = [
 ] as const;
 
 export class CreateWalletTopUpDto {
+  @IsOptional()
+  @IsString()
+  policyVersion?: string;
   @Transform(({ value }) => Number(value))
   @IsNumber()
   @Min(0.01)

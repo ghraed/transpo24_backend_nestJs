@@ -280,6 +280,9 @@ enum CustomerWalletTopUpStatus {
 }
 
 enum TripPaymentSettlementStatus {
+  RELEASED
+  CANCELLED_WITH_FEE
+  AUTHORIZED
   COLLECTED
   REFUND_PENDING
   PARTIALLY_REFUNDED
@@ -1097,6 +1100,20 @@ model CustomerWallet {
 }
 
 model PaymentHold {
+  policyVersion         String?
+  confirmationNotifiedState String?
+  clientFundsReservedNotifiedAt DateTime?
+  driverAcceptanceNotifiedAt DateTime?
+  confirmationState     String?
+  confirmationStartedAt DateTime?
+  authorizationDueAt    DateTime?
+  approvalDeadlineAt    DateTime?
+  authorizedAt          DateTime?
+  authorizationExpiresAt DateTime?
+  authorizationAttempt  Int                        @default(0)
+  previousStripePaymentIntentId String?
+  operationKind         String?
+  operationAmount       Decimal?                   @db.Decimal(12, 2)
   id                    String                     @id @default(cuid())
   customerId            String
   requestId             String                     @unique
@@ -1129,6 +1146,8 @@ model PaymentHold {
   walletTransactions    CustomerWalletTransaction[]
 
   @@index([customerId, status])
+  @@index([confirmationState, authorizationDueAt])
+  @@index([authorizationExpiresAt])
   @@index([driverId, status])
   @@index([stripePaymentIntentId])
   @@map("payment_holds")
@@ -1209,6 +1228,7 @@ model CustomerWalletTransaction {
 }
 
 model CustomerWalletTopUp {
+  acceptedPolicyVersion String?
   id                    String                   @id @default(cuid())
   walletId              String?
   customerId            String
@@ -1247,6 +1267,7 @@ model CustomerWalletTopUp {
 }
 
 model AdditionalCharge {
+  acceptedPolicyVersion String?
   id                String                 @id @default(cuid())
   requestId         String
   driverId          String

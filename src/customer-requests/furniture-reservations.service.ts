@@ -82,6 +82,10 @@ export class FurnitureReservationsService
         reservationPaidAt: null,
         confirmationOpensAt: { lte: now },
         paymentDeadlineAt: { gt: now },
+        OR: [
+          { paymentHold: { is: null } },
+          { paymentHold: { is: { confirmationStartedAt: null } } },
+        ],
       },
       select: {
         id: true,
@@ -348,6 +352,7 @@ export class FurnitureReservationsService
     confirm: boolean;
     paymentMethod?: PaymentMethod;
     stripePaymentMethodId?: string;
+    policyVersion?: string;
   }): Promise<CustomerAcceptOfferResponseDto> {
     if (!input.confirm || !input.paymentMethod)
       throw new BadRequestException(
@@ -373,6 +378,11 @@ export class FurnitureReservationsService
         });
         this.requireOwner(request, input.customerId);
         if (request.deferredPaymentState === 'PAID') return;
+        if (
+          request.status === 'RESERVED' &&
+          request.paymentHold?.confirmationStartedAt
+        )
+          return;
         if (!reservationSummary(request)?.canConfirmAndPay)
           throw new ConflictException(
             'Confirmation is available from 48 until 24 hours before pickup.',
@@ -415,7 +425,8 @@ export class FurnitureReservationsService
             amount: request.acceptedOffer.price,
             currency: request.acceptedOffer.currency,
             paymentMethod: input.paymentMethod!,
-            stripePaymentMethodId: undefined,
+            stripePaymentMethodId: input.stripePaymentMethodId,
+            policyVersion: input.policyVersion,
           });
         }
         await tx.transportRequest.update({
@@ -474,16 +485,19 @@ export class FurnitureReservationsService
         });
         if (row.deferredPaymentState === 'PAID') return;
         const captured =
-          row.paymentHold?.status === PaymentStatus.PAYMENT_CAPTURED;
+          row.paymentHold?.status === PaymentStatus.PAYMENT_CAPTURED ||
+          (row.paymentHold?.status === 'PAYMENT_HELD' &&
+            row.paymentHold.confirmationState === 'CONFIRMED');
         const expired =
           !row.paymentDeadlineAt || new Date() >= row.paymentDeadlineAt;
         if (
           row.status === 'RESERVED' &&
           captured &&
           (!expired ||
-            (row.paymentHold?.capturedAt &&
+            ((row.paymentHold?.authorizedAt ?? row.paymentHold?.capturedAt) &&
               row.paymentDeadlineAt &&
-              row.paymentHold.capturedAt < row.paymentDeadlineAt)) &&
+              (row.paymentHold.authorizedAt ?? row.paymentHold.capturedAt)! <
+                row.paymentDeadlineAt)) &&
           row.pickupConfirmedAt
         ) {
           if (
@@ -500,7 +514,10 @@ export class FurnitureReservationsService
             data: {
               deferredPaymentState: 'PAID',
               status: 'DRIVER_ASSIGNED',
-              reservationPaidAt: row.paymentHold?.capturedAt ?? new Date(),
+              reservationPaidAt:
+                row.paymentHold?.authorizedAt ??
+                row.paymentHold?.capturedAt ??
+                new Date(),
             },
           });
         } else if (row.status === 'RESERVED' && expired) {
@@ -704,6 +721,7 @@ export class FurnitureReservationsService
       where: { id },
       include: {
         service: { select: { key: true } },
+        paymentHold: true,
         acceptedOffer: { include: { driver: { select: { userId: true } } } },
       },
     });
@@ -712,8 +730,11 @@ export class FurnitureReservationsService
     const eventType = vehicle ? type.replace('FURNITURE_', 'VEHICLE_') : type;
     const cancelled = type === 'FURNITURE_RESERVATION_CANCELLED';
     const paid = type === 'FURNITURE_PAYMENT_CONFIRMED';
+    const held = Boolean(request.paymentHold?.confirmationStartedAt);
     const title = paid
-      ? `${serviceName} pickup confirmed and paid`
+      ? held
+        ? `${serviceName} pickup confirmed — payment secured`
+        : `${serviceName} pickup confirmed and paid`
       : cancelled
         ? `${serviceName} reservation cancelled`
         : type === 'FURNITURE_RESERVED'
@@ -731,7 +752,9 @@ export class FurnitureReservationsService
         }).format(request.paymentDeadlineAt)
       : '';
     const body = paid
-      ? 'The customer confirmed and paid. The scheduled pickup is ready. Driver payout follows successful delivery confirmation.'
+      ? held
+        ? 'The booking funds are reserved. The scheduled pickup is ready. Payment is charged after the customer confirms successful delivery.'
+        : 'The customer confirmed and paid. The scheduled pickup is ready. Driver payout follows successful delivery confirmation.'
       : cancelled
         ? 'The unpaid reservation has been cancelled. No cancellation fee applies.'
         : type === 'FURNITURE_RESERVED'
@@ -814,7 +837,9 @@ export class FurnitureReservationsService
         row.deferredPaymentState === 'PAID'
           ? 'TRACK_REQUEST'
           : row.status === 'RESERVED' && row.paymentHold
-            ? 'CONFIRM_PAYMENT'
+            ? payment?.confirmation && payment.confirmation.state !== 'CAPTURED'
+              ? 'WAIT_CONFIRMATION'
+              : 'CONFIRM_PAYMENT'
             : 'RESERVATION_CONFIRMED',
     };
   }

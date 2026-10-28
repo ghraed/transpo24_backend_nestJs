@@ -539,6 +539,7 @@ export class CustomerRequestsController {
       supportsDeferredVehicle: dto.supportsDeferredVehicle,
       paymentMethod: dto.paymentMethod,
       stripePaymentMethodId: dto.stripePaymentMethodId,
+      policyVersion: dto.policyVersion,
     });
   }
 
@@ -554,6 +555,7 @@ export class CustomerRequestsController {
       confirm: dto.confirm === true,
       paymentMethod: dto.paymentMethod,
       stripePaymentMethodId: dto.stripePaymentMethodId,
+      policyVersion: dto.policyVersion,
     });
   }
 

@@ -1,3 +1,4 @@
+import { BookingConfirmationQueueService } from './booking-confirmation-queue.service';
 import { FurnitureReservationsService } from './furniture-reservations.service';
 import { ConfigModule } from '@nestjs/config';
 import { Module, forwardRef } from '@nestjs/common';
@@ -31,6 +32,7 @@ import { CustomerPlacesService } from './customer-places.service';
   ],
   providers: [
     FurnitureReservationsService,
+    BookingConfirmationQueueService,
     CustomerPlacesService,
     CustomerRequestsService,
     PrismaService,

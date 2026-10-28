@@ -1,3 +1,5 @@
+import { CancelTripDto } from './dto/cancel-trip.dto';
+import { paymentPolicy } from './payment-policy';
 import {
   BadRequestException,
   Body,
@@ -53,6 +55,12 @@ export class PaymentsController {
     private readonly customerRequestsService: CustomerRequestsService,
   ) {}
 
+  @Get('customer/payment-policy')
+  @UseGuards(CustomerAuthGuard)
+  getPaymentPolicy() {
+    return paymentPolicy();
+  }
+
   @Get('customer/requests/:requestId/payment')
   @UseGuards(CustomerAuthGuard)
   async getRequestPayment(
@@ -81,6 +89,19 @@ export class PaymentsController {
     return payment;
   }
 
+  @Post('customer/requests/:requestId/payment/approval-failed')
+  @UseGuards(CustomerAuthGuard)
+  async failBookingApproval(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ) {
+    await this.paymentsService.failBookingApproval(request.user.id, requestId);
+    return this.paymentsService.getRequestPayment({
+      customerId: request.user.id,
+      requestId,
+    });
+  }
+
   @Post('customer/requests/:requestId/payment/cancel')
   @UseGuards(CustomerAuthGuard)
   async cancelRequestPayment(
@@ -101,10 +122,13 @@ export class PaymentsController {
   async cancelCollectedTrip(
     @Req() request: AuthenticatedRequest,
     @Param('requestId') requestId: string,
+    @Body() dto: CancelTripDto = {},
   ): Promise<CancelTripPaymentResponseDto> {
     const result = await this.paymentsService.cancelCollectedTrip({
       customerId: request.user.id,
       requestId,
+      expectedRetainedAmount: dto.expectedRetainedAmount,
+      policyVersion: dto.policyVersion,
     });
 
     return result;
@@ -184,6 +208,7 @@ export class PaymentsController {
       amount: dto.amount,
       currency: dto.currency,
       paymentMethod: dto.paymentMethod,
+      policyVersion: dto.policyVersion,
     });
   }
 
@@ -226,6 +251,7 @@ export class PaymentsController {
       confirmationLocale: dto.confirmationLocale,
       confirmationText: dto.confirmationText,
       paymentOption: dto.paymentOption,
+      policyVersion: dto.policyVersion,
     });
 
     this.tripsGateway.emitAdditionalChargeAdded(charge.customerId, charge);

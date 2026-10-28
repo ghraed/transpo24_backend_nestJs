@@ -24,7 +24,9 @@
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "prisma:seed": "node prisma/seed.js",
     "prisma:validate": "prisma validate",
-    "test:documents:integration": "npm run build && node scripts/test-request-documents.cjs"
+    "test:documents:integration": "npm run build && node scripts/test-request-documents.cjs",
+    "test:payments:database": "npm run build && node scripts/test-delayed-booking-database.cjs",
+    "test:payments:stripe": "npm run build && node scripts/test-delayed-booking-stripe.cjs"
   },
   "dependencies": {
     "@google-cloud/translate": "^9.4.2",

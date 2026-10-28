@@ -1,3 +1,8 @@
+import type { PaymentSummaryDto } from '../../payments/dto/request-payment.dto';
+import {
+  confirmationSummary,
+  type PaymentPolicy,
+} from '../../payments/payment-policy';
 import type { ReservationSummary } from '../furniture-reservation-policy';
 import {
   GoodsHeavyShipmentType,
@@ -105,6 +110,9 @@ export class CustomerRequestResponseDto {
 }
 
 export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto {
+  confirmation?: ReturnType<typeof confirmationSummary>;
+  paymentPolicy?: PaymentPolicy;
+  payment?: PaymentSummaryDto | null;
   reservation?: ReservationSummary | null;
   deferredFurnitureEligible?: boolean;
   deferredReservationEligible?: boolean;
@@ -115,6 +123,8 @@ export class CustomerRequestStatusResponseDto extends CustomerRequestResponseDto
     refundPreview: {
       currency: string;
       refundedAmount: number;
+      releasedAmount?: number;
+      nothingCharged?: boolean;
       retainedAmount: number;
     } | null;
     action: 'CANCEL_COLLECTED_TRIP' | 'CANCEL_PAYMENT_HOLD' | 'NONE';

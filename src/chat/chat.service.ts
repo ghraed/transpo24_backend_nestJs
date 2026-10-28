@@ -83,7 +83,10 @@ type ChatAccessContext = {
 
 const ROOM_ACCESS_SELECT = {
   transportRequest: {
-    select: { status: true, paymentHold: { select: { capturedAt: true } } },
+    select: {
+      status: true,
+      paymentHold: { select: { capturedAt: true, authorizedAt: true } },
+    },
   },
   client: { select: { name: true } },
   id: true,
@@ -197,6 +200,8 @@ export class ChatService {
           driverDetailsAvailable(
             room.transportRequest.paymentHold?.capturedAt,
             room.transportRequest.status,
+            Date.now(),
+            room.transportRequest.paymentHold?.authorizedAt,
           ),
         )
         .map((room) =>
@@ -592,6 +597,8 @@ export class ChatService {
       !driverDetailsAvailable(
         room.transportRequest.paymentHold?.capturedAt,
         room.transportRequest.status,
+        Date.now(),
+        room.transportRequest.paymentHold?.authorizedAt,
       )
     ) {
       const paidAt = room.transportRequest.paymentHold?.capturedAt;

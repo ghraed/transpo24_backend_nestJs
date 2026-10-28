@@ -5735,7 +5735,7 @@ export class DriverService {
       if (
         row.status !== 'DRIVER_ASSIGNED' ||
         row.deferredPaymentState !== 'PAID' ||
-        row.paymentStatus !== 'PAYMENT_CAPTURED'
+        !['PAYMENT_CAPTURED', 'PAYMENT_HELD'].includes(row.paymentStatus ?? '')
       )
         throw new ConflictException(
           'The customer must confirm pickup and pay before this trip can start.',

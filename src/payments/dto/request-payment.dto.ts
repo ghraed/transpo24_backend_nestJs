@@ -1,3 +1,4 @@
+import { confirmationSummary, type PaymentPolicy } from '../payment-policy';
 import {
   CustomerWalletTopUpStatus,
   DriverPayoutState,
@@ -17,6 +18,8 @@ export interface SavedPaymentMethodSummaryDto {
 }
 
 export interface PaymentSummaryDto {
+  confirmation?: ReturnType<typeof confirmationSummary>;
+  policy?: PaymentPolicy;
   customerPlatformFeeAmount: number;
   id: string;
   requestId: string;
@@ -162,6 +165,8 @@ export interface TripPaymentSettlementDto {
 }
 
 export interface CancelTripPaymentResponseDto {
+  releasedAmount?: number;
+  nothingCharged?: boolean;
   requestStatus: string;
   currency: string;
   refundedAmount: number;

@@ -1,4 +1,7 @@
 export const HOUR = 60 * 60 * 1000;
+export const UNPAID_RESERVATION_DAYS = 5;
+export const CONFIRMATION_HOURS_BEFORE_PICKUP = 48;
+export const PAYMENT_DEADLINE_HOURS_BEFORE_PICKUP = 24;
 export function bookingDay(date: Date, timeZone = 'UTC'): number {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -19,13 +22,17 @@ export function shouldDeferTransportPayment(
     serviceKey === 'FURNITURE_TRANSPORT' &&
     !!pickup &&
     bookingDay(pickup, timeZone ?? 'UTC') >
-      bookingDay(now, timeZone ?? 'UTC') + 5 * 24 * HOUR
+      bookingDay(now, timeZone ?? 'UTC') + UNPAID_RESERVATION_DAYS * 24 * HOUR
   );
 }
 export function confirmationWindow(pickup: Date) {
   return {
-    confirmationOpensAt: new Date(pickup.getTime() - 48 * HOUR),
-    paymentDeadlineAt: new Date(pickup.getTime() - 24 * HOUR),
+    confirmationOpensAt: new Date(
+      pickup.getTime() - CONFIRMATION_HOURS_BEFORE_PICKUP * HOUR,
+    ),
+    paymentDeadlineAt: new Date(
+      pickup.getTime() - PAYMENT_DEADLINE_HOURS_BEFORE_PICKUP * HOUR,
+    ),
   };
 }
 export type ReservationSummary = {
@@ -40,6 +47,7 @@ export type ReservationSummary = {
 export function reservationSummary(
   request: {
     deferredPaymentState?: string | null;
+    paymentHold?: { confirmationStartedAt?: Date | null } | null;
     confirmationOpensAt?: Date | null;
     paymentDeadlineAt?: Date | null;
     pickupConfirmedAt?: Date | null;
@@ -62,6 +70,7 @@ export function reservationSummary(
     paidAt: request.reservationPaidAt?.toISOString() ?? null,
     canConfirmAndPay:
       request.status === 'RESERVED' &&
+      !request.paymentHold?.confirmationStartedAt &&
       now >= request.confirmationOpensAt &&
       now < request.paymentDeadlineAt,
     canCancel: request.status === 'RESERVED',

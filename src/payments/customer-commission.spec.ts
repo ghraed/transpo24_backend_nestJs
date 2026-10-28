@@ -26,6 +26,7 @@ function setup() {
     reservedBalance: money(0),
   };
   const tx: any = {
+    $queryRaw: jest.fn(async () => []),
     paymentHold: {
       findUnique: jest.fn(async () => hold),
       update: jest.fn(async ({ data }: any) => Object.assign(hold, data)),

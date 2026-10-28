@@ -105,7 +105,7 @@ export class TripsService {
         customerId: true,
         assignedDriverId: true,
         status: true,
-        paymentHold: { select: { capturedAt: true } },
+        paymentHold: { select: { capturedAt: true, authorizedAt: true } },
       },
     });
 
@@ -116,7 +116,10 @@ export class TripsService {
     if (trip.customerId === input.userId) {
       if (
         !trip.assignedDriverId ||
-        !driverTrackingAvailable(trip.paymentHold?.capturedAt, trip.status)
+        !driverTrackingAvailable(
+          trip.paymentHold?.authorizedAt ?? trip.paymentHold?.capturedAt,
+          trip.status,
+        )
       ) {
         throw new ForbiddenException(
           'Driver tracking becomes available after payment and driver assignment.',
@@ -1003,6 +1006,7 @@ export class TripsService {
     tx: Prisma.TransactionClient,
     tripId: string,
   ): Promise<void> {
+    await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${tripId} FOR UPDATE`;
     const existing = await tx.driverEarning.findUnique({
       where: { tripId },
       select: { id: true },

@@ -1,3 +1,4 @@
+import { DelayedBookingPaymentsService } from './delayed-booking-payments.service';
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
@@ -22,10 +23,11 @@ import { StripeService } from './stripe.service';
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
+    DelayedBookingPaymentsService,
     StripeService,
     PrismaService,
     DriverPayoutQueueService,
   ],
-  exports: [PaymentsService, StripeService],
+  exports: [PaymentsService, StripeService, DelayedBookingPaymentsService],
 })
 export class PaymentsModule {}

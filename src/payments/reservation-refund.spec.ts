@@ -55,7 +55,14 @@ describe('late reservation payment refunds', () => {
         ),
       },
       customerWallet: {
-        update: jest.fn(async ({ data }: any) => Object.assign(wallet, data)),
+        update: jest.fn(async ({ data }: any) => {
+          if (data.balance?.increment !== undefined)
+            wallet.balance = wallet.balance.add(
+              data.balance.increment as number,
+            );
+          else Object.assign(wallet, data);
+          return wallet;
+        }),
       },
       customerWalletTransaction: { create: jest.fn() },
       driverEarning: { upsert: jest.fn() },

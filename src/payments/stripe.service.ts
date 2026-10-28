@@ -165,6 +165,103 @@ export class StripeService {
     );
   }
 
+  async validateOwnedCard(customerId: string, paymentMethodId: string) {
+    return this.requireOwnedCard(customerId, paymentMethodId);
+  }
+
+  async createManualAuthorization(input: CreateImmediateCaptureIntentInput) {
+    if (!input.stripePaymentMethodId)
+      throw new BadRequestException('A saved payment method is required.');
+    await this.requireOwnedCard(input.customerId, input.stripePaymentMethodId);
+    // Persist the unconfirmed intent before authorizing. A rolled-back create cannot hold funds.
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.create(
+        {
+          customer: input.customerId,
+          payment_method: input.stripePaymentMethodId,
+          amount: input.amount,
+          currency: input.currency,
+          capture_method: 'manual',
+          payment_method_types: ['card'],
+          metadata: input.metadata,
+          transfer_group: input.transferGroup,
+        },
+        { idempotencyKey: input.idempotencyKey },
+      ),
+    );
+  }
+
+  async confirmManualAuthorization(id: string, idempotencyKey: string) {
+    return this.runStripe(async () => {
+      try {
+        return await this.getClient().paymentIntents.confirm(
+          id,
+          { off_session: true, expand: ['latest_charge'] },
+          { idempotencyKey },
+        );
+      } catch (error) {
+        // Off-session authentication/decline errors contain the intent. Return its canonical
+        // state so the booking can offer authentication or cancel, rather than retry charging.
+        if (error && typeof error === 'object' && 'payment_intent' in error) {
+          const intent = (error as { payment_intent: { id: string } | string })
+            .payment_intent;
+          const current = await this.getClient().paymentIntents.retrieve(
+            typeof intent === 'string' ? intent : intent.id,
+            { expand: ['latest_charge'] },
+          );
+          const authenticationRequired =
+            current.last_payment_error?.code === 'authentication_required' ||
+            current.last_payment_error?.decline_code ===
+              'authentication_required';
+          const authenticationMethod =
+            current.payment_method ??
+            current.last_payment_error?.payment_method;
+          if (authenticationRequired && authenticationMethod) {
+            // Off-session authentication failures can return requires_payment_method.
+            // Reconfirm the same intent for SDK authentication, without creating a new payment.
+            return this.getClient().paymentIntents.confirm(
+              current.id,
+              {
+                payment_method:
+                  typeof authenticationMethod === 'string'
+                    ? authenticationMethod
+                    : authenticationMethod.id,
+                off_session: false,
+                use_stripe_sdk: true,
+                expand: ['latest_charge'],
+              },
+              { idempotencyKey: `${idempotencyKey}_authentication` },
+            );
+          }
+          return current;
+        }
+        throw error;
+      }
+    });
+  }
+
+  async inspectAuthorization(id: string) {
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.retrieve(id, {
+        expand: ['latest_charge'],
+      }),
+    );
+  }
+
+  async captureAuthorization(
+    id: string,
+    amount: number,
+    idempotencyKey: string,
+  ) {
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.capture(
+        id,
+        { amount_to_capture: amount },
+        { idempotencyKey },
+      ),
+    );
+  }
+
   async getCustomerDefaultPaymentMethod(
     customerId: string,
   ): Promise<StripeCardPaymentMethodSummary | null> {
@@ -303,6 +400,36 @@ export class StripeService {
           idempotencyKey: input.idempotencyKey,
         },
       ),
+    );
+  }
+
+  // Persist this unconfirmed intent before charging an additional expense.
+  async prepareAdditionalExpense(input: {
+    customerId: string;
+    amount: number;
+    currency: string;
+    additionalChargeId: string;
+  }) {
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.create(
+        {
+          amount: input.amount,
+          currency: input.currency,
+          customer: input.customerId,
+          payment_method_types: ['card'],
+          metadata: { additionalChargeId: input.additionalChargeId },
+        },
+        { idempotencyKey: `additional_expense_${input.additionalChargeId}` },
+      ),
+    );
+  }
+
+  async confirmAdditionalExpense(intentId: string, paymentMethodId: string) {
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.confirm(intentId, {
+        payment_method: paymentMethodId,
+        off_session: true,
+      }),
     );
   }
 

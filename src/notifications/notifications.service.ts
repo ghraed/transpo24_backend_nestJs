@@ -116,6 +116,7 @@ export class NotificationsService {
           'FURNITURE_CONFIRMATION_DUE',
           'FURNITURE_RESERVATION_CANCELLED',
           'NEW_DRIVER_OFFER',
+          'BOOKING_FUNDS_RESERVED',
           'DRIVER_GOING_TO_PICKUP',
           'DRIVER_ARRIVED_PICKUP',
           'ITEM_PICKED_UP',
@@ -221,6 +222,19 @@ export class NotificationsService {
           receiptTokenIds,
           input.type,
         );
+        if (
+          input.retryPersistedEvent &&
+          (tickets.length !== chunk.length ||
+            tickets.some(
+              (ticket) =>
+                (ticket.status === 'ok' && !ticket.id) ||
+                (ticket.status === 'error' &&
+                  ticket.details?.error !== EXPO_DEVICE_NOT_REGISTERED),
+            ))
+        )
+          throw new BadGatewayException(
+            'The push provider did not accept the notification.',
+          );
       }
 
       await this.resolveReceipts(receiptTokenIds, input.type);
@@ -280,7 +294,11 @@ export class NotificationsService {
     return { success: true };
   }
 
-  async notifyCustomerTripUpdate(tripId: string, type: string) {
+  async notifyCustomerTripUpdate(
+    tripId: string,
+    type: string,
+    retryPersistedEvent = false,
+  ) {
     const copy: Record<string, [string, string]> = {
       DRIVER_GOING_TO_PICKUP: [
         'Driver confirmed',
@@ -302,6 +320,18 @@ export class NotificationsService {
         'Delivery confirmed by you',
         'You confirmed successful delivery and authorized release of the driver payment.',
       ],
+      BOOKING_FUNDS_RESERVED: [
+        'Booking confirmed',
+        'Your booking amount is now reserved and your driver is assigned. You will be charged when you confirm successful delivery.',
+      ],
+      BOOKING_BANK_APPROVAL_REQUIRED: [
+        'Bank approval required',
+        'Open your booking to approve the payment before the approval deadline.',
+      ],
+      BOOKING_PAYMENT_REVIEW: [
+        'Payment needs review',
+        'Your booking payment requires manual review. Open the booking for details.',
+      ],
       TRIP_CANCELLED: [
         'Job cancelled',
         'Your job was cancelled. Open the job to review the cancellation and payment details.',
@@ -322,6 +352,7 @@ export class NotificationsService {
       title: message[0],
       body: message[1],
       data: { tripId, requestId: tripId },
+      retryPersistedEvent,
     });
   }
 
@@ -381,15 +412,17 @@ export class NotificationsService {
     driverUserId: string;
     requestId: string;
     serviceType?: string | null;
+    retryPersistedEvent?: boolean;
   }): Promise<void> {
     const serviceLabel = input.serviceType?.trim() || 'transport request';
 
     await this.sendToUsers({
       userIds: [input.driverUserId],
       app: PushApp.DRIVER,
-      title: 'Customer selected you',
-      body: `You were selected for ${serviceLabel}.`,
+      title: 'Offer accepted',
+      body: `Your offer for ${serviceLabel} has been accepted.`,
       type: 'DRIVER_SELECTED',
+      retryPersistedEvent: input.retryPersistedEvent,
       data: {
         requestId: input.requestId,
         serviceType: input.serviceType ?? null,
