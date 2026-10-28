@@ -1,3 +1,4 @@
+import type { RequestIneligibilityReason } from '../request-eligibility';
 import {
   DriverRequestAlertStatus,
   DriverOfferStatus,
@@ -70,6 +71,10 @@ export interface DriverRequestAlertsResponseDto {
 
 export interface DriverRequestDetailsResponseDto extends DriverRequestAlertSummaryDto {
   requestVersion: string;
+  offerEligibility?: {
+    canSendOffer: boolean;
+    reason: RequestIneligibilityReason | null;
+  };
   offerStatus: DriverOfferStatus | null;
   customerNote: string | null;
   customer: {

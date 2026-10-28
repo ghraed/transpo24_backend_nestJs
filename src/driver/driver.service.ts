@@ -17,6 +17,8 @@ import {
   coverageDistance,
   immediateReference,
   isEligibleRequest,
+  offerIneligibilityReason,
+  REQUEST_INELIGIBILITY_MESSAGES,
   LIVE_LOCATION_MAX_AGE_MS,
 } from './request-eligibility';
 import {
@@ -1950,12 +1952,22 @@ export class DriverService {
           })
         : alert;
 
-    return this.toRequestDetailsResponse(
+    const vehicles = await this.getApprovedDriverVehicles(profile.id);
+    const reason = offerIneligibilityReason(
       request,
-      seenAlert,
-      distanceKm,
-      offer?.status ?? null,
+      availability,
+      vehicles,
+      new Date(),
     );
+    return {
+      ...this.toRequestDetailsResponse(
+        request,
+        seenAlert,
+        distanceKm,
+        offer?.status ?? null,
+      ),
+      offerEligibility: { canSendOffer: reason === null, reason },
+    };
   }
 
   async markDriverRequestSeen(
@@ -2020,20 +2032,22 @@ export class DriverService {
         { requestId: request.id, driverId: profile.id },
         tx,
       );
-      if (alert.status !== DriverRequestAlertStatus.ACCEPTED) {
-        const vehicles = await this.getApprovedDriverVehiclesTx(tx, profile.id);
-        const availability = await tx.driverAvailability.findUnique({
-          where: { driverId: profile.id },
-          select: MATCHING_AVAILABILITY_SELECT,
+      const vehicles = await this.getApprovedDriverVehiclesTx(tx, profile.id);
+      const availability = await tx.driverAvailability.findUnique({
+        where: { driverId: profile.id },
+        select: MATCHING_AVAILABILITY_SELECT,
+      });
+      const reason = offerIneligibilityReason(
+        request,
+        availability,
+        vehicles,
+        new Date(),
+      );
+      if (reason) {
+        throw new BadRequestException({
+          code: `REQUEST_${reason}`,
+          message: REQUEST_INELIGIBILITY_MESSAGES[reason],
         });
-        if (
-          !availability ||
-          !isEligibleRequest(request, availability, vehicles, new Date(), false)
-        ) {
-          throw new BadRequestException(
-            'Request is outside your coverage or availability.',
-          );
-        }
       }
       const updated =
         alert.status === DriverRequestAlertStatus.ACCEPTED
@@ -2204,12 +2218,17 @@ export class DriverService {
         );
       }
 
-      if (
-        !isEligibleRequest(request, availability, vehicles, new Date(), false)
-      ) {
-        throw new BadRequestException(
-          'Request is outside your coverage or availability.',
-        );
+      const reason = offerIneligibilityReason(
+        request,
+        availability,
+        vehicles,
+        new Date(),
+      );
+      if (reason) {
+        throw new BadRequestException({
+          code: `REQUEST_${reason}`,
+          message: REQUEST_INELIGIBILITY_MESSAGES[reason],
+        });
       }
 
       const duplicateOffer = await tx.driverOffer.findUnique({

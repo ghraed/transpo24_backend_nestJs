@@ -238,16 +238,64 @@ export function hasCompatibleVehicle(
   });
 }
 
+export const REQUEST_INELIGIBILITY_MESSAGES = {
+  AVAILABILITY_REQUIRED: 'Driver availability must be configured first.',
+  DRIVER_UNAVAILABLE:
+    'Your driver account must be approved and available to receive requests.',
+  REQUEST_CLOSED: 'Request is no longer available for quotes.',
+  IMMEDIATE_DISABLED:
+    'Immediate requests are disabled in your availability settings.',
+  SCHEDULED_DISABLED:
+    'Scheduled requests are disabled in your availability settings.',
+  PICKUP_TIME_PASSED: 'The scheduled pickup time has passed.',
+  LOCATION_UNAVAILABLE:
+    'Go online and enable location access to refresh your GPS location.',
+  OUTSIDE_RADIUS:
+    'This pickup is outside your service radius. Review your availability settings.',
+  OUTSIDE_WORKING_HOURS:
+    'This pickup is outside your working hours. Review your availability settings.',
+  NO_COMPATIBLE_VEHICLE:
+    'No approved vehicle matches this request, its load, and pickup working hours.',
+} as const;
+export type RequestIneligibilityReason =
+  keyof typeof REQUEST_INELIGIBILITY_MESSAGES;
+
 export function isEligibleRequest(
+  ...args: Parameters<typeof requestIneligibilityReason>
+): boolean {
+  return requestIneligibilityReason(...args) === null;
+}
+
+// The map's radius limits notifications, not manually initiated offers.
+// Keep GPS-local working hours, request preferences and vehicle checks.
+export function offerIneligibilityReason(
+  request: MatchingRequest,
+  availability: MatchingAvailability | null,
+  vehicles: MatchingVehicle[],
+  now = new Date(),
+): RequestIneligibilityReason | null {
+  return requestIneligibilityReason(
+    request,
+    availability,
+    vehicles,
+    now,
+    false,
+    undefined,
+    false,
+  );
+}
+
+export function requestIneligibilityReason(
   request: MatchingRequest,
   a: MatchingAvailability | null,
   vehicles: MatchingVehicle[],
   now = new Date(),
   requireOnline = true,
   routeCoverage?: { distanceKm: number; radiusKm: number; origin: Coordinate },
-): boolean {
+  enforceRadius = true,
+): RequestIneligibilityReason | null {
+  if (!a) return 'AVAILABILITY_REQUIRED';
   if (
-    !a ||
     (requireOnline &&
       !a.isOnline &&
       !shouldDeferTransportPayment(
@@ -259,29 +307,30 @@ export function isEligibleRequest(
     a.driver.status !== DriverStatus.APPROVED ||
     !a.driver.isProfileCompleted
   )
-    return false;
+    return 'DRIVER_UNAVAILABLE';
   if (
     !['PENDING_QUOTES', 'QUOTED'].includes(request.status) ||
     request.assignedDriverId ||
     request.acceptedOfferId
   )
-    return false;
+    return 'REQUEST_CLOSED';
   if (
     request.isImmediate
       ? !a.acceptsImmediateRequests
       : !a.acceptsScheduledRequests
   )
-    return false;
+    return request.isImmediate ? 'IMMEDIATE_DISABLED' : 'SCHEDULED_DISABLED';
   if (
     !request.isImmediate &&
     (!request.scheduledPickupAt || request.scheduledPickupAt < now)
   )
-    return false;
+    return 'PICKUP_TIME_PASSED';
   const distance =
     routeCoverage?.distanceKm ?? coverageDistance(request, a, now);
   const radius = routeCoverage?.radiusKm ?? a.serviceRadiusKm;
-  if (distance === null || radius < 1 || radius > 500 || distance > radius)
-    return false;
+  if (distance === null) return 'LOCATION_UNAVAILABLE';
+  if (enforceRadius && (radius < 1 || radius > 500 || distance > radius))
+    return 'OUTSIDE_RADIUS';
 
   // Interpret working hours where the driver currently is, never in the
   // customer's timezone or the driver's legacy saved timezone.
@@ -292,7 +341,7 @@ export function isEligibleRequest(
       longitude: a.liveLongitude!,
     },
   );
-  if (!local) return false;
+  if (!local) return 'LOCATION_UNAVAILABLE';
   const day = a.schedule.find((entry) => entry.dayOfWeek === local.day);
   if (
     !day?.isAvailable ||
@@ -301,8 +350,10 @@ export function isEligibleRequest(
     day.startTime > local.time ||
     local.time >= day.endTime
   )
-    return false;
-  return hasCompatibleVehicle(request, vehicles, local);
+    return 'OUTSIDE_WORKING_HOURS';
+  return hasCompatibleVehicle(request, vehicles, local)
+    ? null
+    : 'NO_COMPATIBLE_VEHICLE';
 }
 
 const SERVICE_VEHICLES: Record<ServiceKey, VehicleType[]> = {

@@ -205,6 +205,7 @@ describe('unresolved driver job requests', () => {
     ).toEqual({
       requestId: 'furniture',
       requestStatus: 'RESERVED',
+      offerEligibility: { canSendOffer: false, reason: 'REQUEST_CLOSED' },
     });
     availability.liveLocationAt = null;
     await expect(
@@ -250,6 +251,64 @@ describe('unresolved driver job requests', () => {
     });
   });
 
+  it.each(['SEEN', 'ACCEPTED'])(
+    'explains unavailable working hours for a %s alert without accepting it',
+    async (status) => {
+      const { service, update } = setup();
+      const prisma = (service as any).prisma;
+      const availability = await prisma.driverAvailability.findUnique();
+      availability.schedule.forEach((day) => {
+        day.isAvailable = false;
+      });
+      Object.assign(service, {
+        ensureDriverRequestAlert: jest.fn().mockResolvedValue({
+          id: 'alert',
+          requestId: 'request',
+          status,
+        }),
+      });
+      await expect(
+        service.acceptDriverRequestAlert({
+          userId: 'user',
+          requestId: 'request',
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'REQUEST_OUTSIDE_WORKING_HOURS' },
+      });
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts a manually selected pickup beyond the notification radius', async () => {
+    const { service, update } = setup();
+    const prisma = (service as any).prisma;
+    const request = await prisma.transportRequest.findUnique();
+    request.pickupLatitude = 45;
+    request.pickupLongitude = 8;
+    Object.assign(service, {
+      ensureDriverRequestAlert: jest.fn().mockResolvedValue({
+        id: 'alert',
+        requestId: 'request',
+        status: 'SEEN',
+      }),
+    });
+    update.mockResolvedValue({
+      id: 'alert',
+      requestId: 'request',
+      status: 'ACCEPTED',
+    });
+    await expect(
+      service.acceptDriverRequestAlert({
+        userId: 'user',
+        requestId: 'request',
+      }),
+    ).resolves.toMatchObject({
+      alertStatus: 'ACCEPTED',
+      nextStep: 'SEND_PRICE_OFFER',
+    });
+    expect(update).toHaveBeenCalled();
+  });
+
   it('can ignore a quoted request', async () => {
     const { service, update } = setup();
     await expect(
@@ -287,7 +346,7 @@ describe('job navigation and assignment access', () => {
     },
   );
 
-  it('rejects acceptance when edited details no longer match driver coverage', async () => {
+  it('rejects acceptance when edited details no longer match the vehicle', async () => {
     const { service, update } = setup();
     Object.assign(service, {
       ensureDriverRequestAlert: jest.fn().mockResolvedValue({
@@ -310,15 +369,18 @@ describe('job navigation and assignment access', () => {
       isImmediate: true,
       pickupLatitude: 45,
       pickupLongitude: 8,
-      itemType: 'GOODS',
-      service: { key: 'GOODS_TRANSPORT' },
+      itemType: 'FURNITURE',
+      itemWeightKg: 2000,
+      service: { key: 'FURNITURE_TRANSPORT' },
     });
     await expect(
       service.acceptDriverRequestAlert({
         userId: 'user',
         requestId: 'request',
       }),
-    ).rejects.toThrow('outside your coverage');
+    ).rejects.toMatchObject({
+      response: { code: 'REQUEST_NO_COMPATIBLE_VEHICLE' },
+    });
     expect(db.$queryRaw).toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
@@ -460,14 +522,25 @@ describe('map request browsing', () => {
     prisma.driverOffer = { findUnique: jest.fn().mockResolvedValue(null) };
     prisma.transportRequest.findUnique.mockResolvedValue({
       id: 'distant',
+      isImmediate: true,
       status: 'PENDING_QUOTES',
       assignedDriverId: null,
       acceptedOfferId: null,
       driverAlerts: [],
+      itemType: 'GOODS',
+      service: { key: 'GOODS_TRANSPORT' },
       pickupLatitude: 45,
       pickupLongitude: 8,
     });
     Object.assign(service, {
+      getApprovedDriverVehicles: jest.fn().mockResolvedValue([
+        {
+          vehicleType: 'VAN',
+          capacityKg: 1000,
+          allowedCargoTypes: ['GOODS'],
+          workingSchedule: [],
+        },
+      ]),
       toRequestDetailsResponse: jest
         .fn()
         .mockReturnValue({ requestId: 'distant' }),
@@ -477,6 +550,9 @@ describe('map request browsing', () => {
         userId: 'user',
         requestId: 'distant',
       }),
-    ).toEqual({ requestId: 'distant' });
+    ).toEqual({
+      requestId: 'distant',
+      offerEligibility: { canSendOffer: true, reason: null },
+    });
   });
 });

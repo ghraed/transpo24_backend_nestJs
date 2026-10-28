@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { DriverService } from './driver.service';
+import { offerIneligibilityReason } from './request-eligibility';
 import {
   requestDetailsVersion,
   REQUEST_VERSION_SELECT,
@@ -8,6 +9,7 @@ import {
 jest.mock('./request-eligibility', () => ({
   ...jest.requireActual('./request-eligibility'),
   isEligibleRequest: jest.fn(() => true),
+  offerIneligibilityReason: jest.fn(() => null),
 }));
 
 const snapshot = () => ({
@@ -149,6 +151,67 @@ describe('offer snapshot guard', () => {
     expect(tx.$queryRaw.mock.calls[0][0].join('?')).toContain('FOR UPDATE');
     expect(tx.driverOffer.create).not.toHaveBeenCalled();
   });
+  it('returns a specific eligibility reason without creating an offer', async () => {
+    const { service, tx, input } = setup();
+    jest
+      .mocked(offerIneligibilityReason)
+      .mockReturnValueOnce('OUTSIDE_WORKING_HOURS');
+    await expect(service.sendDriverPriceOffer(input)).rejects.toMatchObject({
+      response: { code: 'REQUEST_OUTSIDE_WORKING_HOURS' },
+    });
+    expect(tx.driverOffer.create).not.toHaveBeenCalled();
+  });
+
+  it('sends a manual offer beyond notification coverage using real eligibility checks', async () => {
+    const { service, tx, request, input } = setup();
+    Object.assign(request, { service: { key: 'GOODS_TRANSPORT' } });
+    input.requestVersion = version(request);
+    tx.driverAvailability.findUnique.mockResolvedValue({
+      isOnline: true,
+      driver: { status: 'APPROVED', isProfileCompleted: true },
+      acceptsImmediateRequests: true,
+      serviceRadiusKm: 10,
+      liveLatitude: 47.38,
+      liveLongitude: 8.54,
+      liveLocationAt: new Date(),
+      schedule: [
+        'MONDAY',
+        'TUESDAY',
+        'WEDNESDAY',
+        'THURSDAY',
+        'FRIDAY',
+        'SATURDAY',
+        'SUNDAY',
+      ].map((dayOfWeek) => ({
+        dayOfWeek,
+        isAvailable: true,
+        startTime: '00:00',
+        endTime: '24:00',
+      })),
+    });
+    Object.assign(service, {
+      getApprovedDriverVehiclesTx: jest.fn().mockResolvedValue([
+        {
+          vehicleType: 'VAN',
+          capacityKg: 1000,
+          allowedCargoTypes: ['GOODS'],
+          workingSchedule: [],
+        },
+      ]),
+    });
+    jest
+      .mocked(offerIneligibilityReason)
+      .mockImplementationOnce(
+        jest.requireActual<typeof import('./request-eligibility')>(
+          './request-eligibility',
+        ).offerIneligibilityReason,
+      );
+    await expect(service.sendDriverPriceOffer(input)).resolves.toMatchObject({
+      offer: { id: 'offer' },
+    });
+    expect(tx.driverOffer.create).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['PENDING_QUOTES', 'QUOTED'])(
     'sends an offer for matching details with status %s',
     async (status) => {

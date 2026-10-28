@@ -4,6 +4,8 @@ import {
   distanceKm,
   immediateReference,
   isEligibleRequest,
+  requestIneligibilityReason,
+  offerIneligibilityReason,
   LIVE_LOCATION_MAX_AGE_MS,
   MatchingAvailability,
   MatchingRequest,
@@ -74,6 +76,61 @@ const vehicles: MatchingVehicle[] = [
 ];
 
 describe('shared request eligibility', () => {
+  it('reports the blocking setting without changing eligibility rules', () => {
+    const check = (
+      a: MatchingAvailability | null,
+      v = vehicles,
+      r = request(),
+    ) => requestIneligibilityReason(r, a, v, now, false);
+    expect(check(availability())).toBeNull();
+    expect(check(null)).toBe('AVAILABILITY_REQUIRED');
+    expect(check({ ...availability(), acceptsImmediateRequests: false })).toBe(
+      'IMMEDIATE_DISABLED',
+    );
+    expect(
+      check({ ...availability(), acceptsScheduledRequests: false }, vehicles, {
+        ...request(),
+        isImmediate: false,
+        scheduledPickupAt: now,
+      }),
+    ).toBe('SCHEDULED_DISABLED');
+    expect(check({ ...availability(), liveLocationAt: null })).toBe(
+      'LOCATION_UNAVAILABLE',
+    );
+    expect(
+      check({ ...availability(), liveLatitude: 0, liveLongitude: 0 }),
+    ).toBe('OUTSIDE_RADIUS');
+    expect(check({ ...availability(), schedule: [] })).toBe(
+      'OUTSIDE_WORKING_HOURS',
+    );
+    expect(check(availability(), [])).toBe('NO_COMPATIBLE_VEHICLE');
+  });
+
+  it('uses the radius for notifications while allowing manual offers beyond it', () => {
+    const a = availability();
+    const distant = {
+      ...request(),
+      pickupLatitude: 46.2044,
+      pickupLongitude: 6.1432,
+    };
+    expect(isEligibleRequest(distant, a, vehicles, now)).toBe(false);
+    expect(offerIneligibilityReason(distant, a, vehicles, now)).toBeNull();
+    expect(
+      offerIneligibilityReason(distant, { ...a, schedule: [] }, vehicles, now),
+    ).toBe('OUTSIDE_WORKING_HOURS');
+    expect(offerIneligibilityReason(distant, a, [], now)).toBe(
+      'NO_COMPATIBLE_VEHICLE',
+    );
+    expect(
+      offerIneligibilityReason(
+        distant,
+        { ...a, liveLocationAt: null },
+        vehicles,
+        now,
+      ),
+    ).toBe('LOCATION_UNAVAILABLE');
+  });
+
   it('uses fresh GPS instead of a distant base for immediate pickups', () => {
     const a = {
       ...availability(),
