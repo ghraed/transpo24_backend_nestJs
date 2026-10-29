@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import Stripe from 'stripe';
+import { resolveStripeConfiguration } from '../config/stripe';
 
 type EnsureStripeCustomerInput = {
   stripeCustomerId?: string | null;
@@ -43,10 +44,7 @@ export class StripeService {
   private stripeClient: InstanceType<typeof Stripe> | null = null;
 
   get mode(): 'test' | 'live' | null {
-    const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
-    if (secretKey?.startsWith('sk_test_')) return 'test';
-    if (secretKey?.startsWith('sk_live_')) return 'live';
-    return null;
+    return resolveStripeConfiguration().mode;
   }
 
   private getClient(): InstanceType<typeof Stripe> {
@@ -54,7 +52,7 @@ export class StripeService {
       return this.stripeClient;
     }
 
-    const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
+    const { secretKey } = resolveStripeConfiguration();
     if (
       !secretKey ||
       secretKey.startsWith('replace_') ||
@@ -570,18 +568,24 @@ export class StripeService {
   }
 
   constructWebhookEvent(rawBody: Buffer, signature: string) {
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+    const { webhookSecret } = resolveStripeConfiguration();
     if (!webhookSecret) {
       throw new BadRequestException('Stripe webhook secret is not configured.');
     }
 
-    return this.runStripeSync(() =>
+    const event = this.runStripeSync(() =>
       this.getClient().webhooks.constructEvent(
         rawBody,
         signature,
         webhookSecret,
       ),
     );
+    if (event.livemode !== (this.mode === 'live')) {
+      throw new BadRequestException(
+        'Stripe webhook mode does not match the configured Stripe mode.',
+      );
+    }
+    return event;
   }
 
   private async runStripe<T>(operation: () => Promise<T>): Promise<T> {
@@ -616,6 +620,8 @@ export class StripeService {
         'Stripe request failed.';
 
       switch (error.type) {
+        case 'StripeSignatureVerificationError':
+          return new BadRequestException('Invalid Stripe webhook signature.');
         case 'StripeCardError':
         case 'StripeInvalidRequestError':
         case 'StripeAuthenticationError':

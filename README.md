@@ -23,6 +23,15 @@ WEB_PUSH_VAPID_SUBJECT=mailto:admin@transpo24.com
 
 Do not expose the private VAPID key to the frontend. Browser Web Push requires HTTPS in production.
 
+## Stripe testing on a production deployment
+
+Use `STRIPE_MODE=test` with `STRIPE_TEST_SECRET_KEY` and
+`STRIPE_TEST_WEBHOOK_SECRET` while keeping `NODE_ENV=production`. The client must
+select its matching test publishable key. Live credentials have separate
+`STRIPE_LIVE_*` slots; explicit selection never falls back to legacy keys.
+See [Stripe production testing](docs/stripe-production-testing.md) for the prepared
+environment overlays, webhook setup, release steps and switching back to live.
+
 ## Customer authentication with Twilio Verify SMS
 
 Customer registration and login use the same two endpoints: an SMS verification is sent, and an approved code either signs in the existing customer for that E.164 phone number or creates a customer. Driver and admin email/password authentication is unchanged.

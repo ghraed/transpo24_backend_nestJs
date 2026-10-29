@@ -1,3 +1,4 @@
+import { resolveStripeConfiguration } from '../config/stripe';
 import { assertDriverApproved } from '../auth/driver-approval';
 import { driverTrackingAvailable } from '../payments/booking-policy';
 import {
@@ -65,8 +66,7 @@ export const DRIVER_PICKUP_ARRIVAL_RADIUS_METERS = 1500;
 export const PICKUP_ITEM_RADIUS_METERS = 1500;
 export const DELIVER_ITEM_RADIUS_METERS = 1500;
 export const NEAR_DELIVERY_RADIUS_METERS = 5000;
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY?.trim() ?? '';
-const IS_STRIPE_TEST_MODE = STRIPE_SECRET_KEY.startsWith('sk_test_');
+const IS_STRIPE_TEST_MODE = resolveStripeConfiguration().mode === 'test';
 const DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE =
   process.env.DRIVER_PAYOUT_DELAY_HOURS?.trim() ?? '';
 const DRIVER_PAYOUT_DELAY_HOURS_FALLBACK = IS_STRIPE_TEST_MODE ? 0 : 24;

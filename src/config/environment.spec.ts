@@ -131,6 +131,39 @@ describe('validateEnvironment', () => {
     ).toThrow('Stripe live-mode secret');
   });
 
+  it.each(['test', 'live'])(
+    'accepts explicit %s Stripe configuration in production',
+    (mode) => {
+      const environment = {
+        ...configured,
+        NODE_ENV: 'production',
+        ACCESS_TOKEN_SECRET: 'a-secure-random-production-secret-123456',
+        CORS_ORIGINS: 'https://app.example.com',
+        DRIVER_APP_BASE_URL: 'https://driver.example.com',
+        STRIPE_MODE: mode,
+        [`STRIPE_${mode.toUpperCase()}_SECRET_KEY`]: `sk_${mode}_owner`,
+        [`STRIPE_${mode.toUpperCase()}_WEBHOOK_SECRET`]:
+          'whsec_deployed_endpoint',
+      };
+      expect(validateEnvironment(environment)).toBe(environment);
+    },
+  );
+
+  it('test production requires its own webhook secret despite a legacy secret', () => {
+    expect(() =>
+      validateEnvironment({
+        ...configured,
+        NODE_ENV: 'production',
+        ACCESS_TOKEN_SECRET: 'a-secure-random-production-secret-123456',
+        CORS_ORIGINS: 'https://app.example.com',
+        DRIVER_APP_BASE_URL: 'https://driver.example.com',
+        STRIPE_MODE: 'test',
+        STRIPE_TEST_SECRET_KEY: 'sk_test_owner',
+        STRIPE_WEBHOOK_SECRET: 'whsec_live_legacy',
+      }),
+    ).toThrow('STRIPE_TEST_WEBHOOK_SECRET');
+  });
+
   it('requires an HTTPS driver application URL in production', () => {
     expect(() =>
       validateEnvironment({

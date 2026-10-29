@@ -1,3 +1,5 @@
+import { resolveStripeConfiguration } from './stripe';
+
 const REQUIRED_KEYS = [
   'DATABASE_URL',
   'TWILIO_ACCOUNT_SID',
@@ -26,10 +28,28 @@ export function validateEnvironment(
   environment: Record<string, unknown>,
 ): Record<string, unknown> {
   const isProduction = environment.NODE_ENV === 'production';
+  const selectedStripeMode =
+    typeof environment.STRIPE_MODE === 'string'
+      ? environment.STRIPE_MODE.trim()
+      : '';
+  const stripe = resolveStripeConfiguration(environment);
+  const resolvedEnvironment = {
+    ...environment,
+    STRIPE_SECRET_KEY: stripe.secretKey,
+    STRIPE_WEBHOOK_SECRET: stripe.webhookSecret,
+  };
   const requiredKeys = isProduction
     ? [...REQUIRED_KEYS, ...REQUIRED_PRODUCTION_KEYS]
     : REQUIRED_KEYS;
-  const missing = requiredKeys.filter((key) => isMissing(environment[key]));
+  const missing = requiredKeys
+    .filter((key) => isMissing(resolvedEnvironment[key]))
+    .map((key) => {
+      const mode = selectedStripeMode.toUpperCase();
+      return mode &&
+        (key === 'STRIPE_SECRET_KEY' || key === 'STRIPE_WEBHOOK_SECRET')
+        ? key.replace('STRIPE_', `STRIPE_${mode}_`)
+        : key;
+    });
 
   if (missing.length > 0) {
     throw new Error(
@@ -91,15 +111,13 @@ export function validateEnvironment(
       );
     }
 
-    const stripeSecretKey = String(environment.STRIPE_SECRET_KEY);
-    if (!stripeSecretKey.startsWith('sk_live_')) {
+    if (!selectedStripeMode && stripe.mode !== 'live') {
       throw new Error(
         'STRIPE_SECRET_KEY must be a Stripe live-mode secret in production.',
       );
     }
 
-    const stripeWebhookSecret = String(environment.STRIPE_WEBHOOK_SECRET);
-    if (!stripeWebhookSecret.startsWith('whsec_')) {
+    if (!stripe.webhookSecret.startsWith('whsec_')) {
       throw new Error(
         'STRIPE_WEBHOOK_SECRET must be a valid Stripe webhook signing secret in production.',
       );
