@@ -1755,7 +1755,10 @@ export class PaymentsService {
     }
   }
 
-  async createDriverConnectAccount(input: { driverUserId: string }): Promise<{
+  async createDriverConnectAccount(input: {
+    driverUserId: string;
+    email?: string;
+  }): Promise<{
     stripeAccountId: string;
     onboardingUrl: string;
     detailsSubmitted: boolean;
@@ -1769,6 +1772,7 @@ export class PaymentsService {
         firstName: true,
         lastName: true,
         stripeAccountId: true,
+        countryCode: true,
       },
     });
 
@@ -1788,9 +1792,16 @@ export class PaymentsService {
     let accountId = profile.stripeAccountId?.trim() || '';
 
     if (!accountId) {
+      const country = profile.countryCode?.trim().toUpperCase();
+      if (!country || !/^[A-Z]{2}$/.test(country)) {
+        throw new BadRequestException(
+          'Set your country in your driver profile before connecting Stripe.',
+        );
+      }
       const account = await this.stripeService.createExpressAccount({
         driverId: profile.id,
-        email: user.email,
+        country,
+        email: input.email?.trim() || user.email,
         name: `${profile.firstName} ${profile.lastName}`.trim() || user.name,
       });
 
@@ -1823,6 +1834,27 @@ export class PaymentsService {
     return {
       stripeAccountId: accountId,
       onboardingUrl: accountLink.url,
+      detailsSubmitted: false,
+      payoutsEnabled: false,
+    };
+  }
+
+  async removeDriverConnectAccount(input: { driverUserId: string }) {
+    // Unlink only: existing Stripe balances and completed transfers stay with
+    // the old account. Future transfers wait until a new account is ready.
+    await this.prisma.driverProfile.update({
+      where: { userId: input.driverUserId },
+      data: {
+        stripeAccountId: null,
+        stripeAccountStatus: null,
+        stripeDetailsSubmitted: false,
+        stripePayoutsEnabled: false,
+      },
+    });
+
+    return {
+      stripeAccountId: null,
+      accountStatus: null,
       detailsSubmitted: false,
       payoutsEnabled: false,
     };
@@ -1890,8 +1922,9 @@ export class PaymentsService {
       profile.stripeAccountId,
     );
 
-    await this.prisma.driverProfile.update({
-      where: { id: profile.id },
+    // A sync started before removal must not re-enable the detached account.
+    await this.prisma.driverProfile.updateMany({
+      where: { id: profile.id, stripeAccountId: profile.stripeAccountId },
       data: {
         stripeAccountStatus: account.details_submitted
           ? 'details_submitted'
@@ -2552,8 +2585,8 @@ export class PaymentsService {
       return;
     }
 
-    await this.prisma.driverProfile.update({
-      where: { id: profile.id },
+    await this.prisma.driverProfile.updateMany({
+      where: { id: profile.id, stripeAccountId },
       data: {
         stripeAccountStatus: status.detailsSubmitted
           ? 'details_submitted'

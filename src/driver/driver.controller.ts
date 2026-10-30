@@ -1,4 +1,5 @@
 import { ApprovedDriverGuard } from '../auth/guards/approved-driver.guard';
+import { CreateStripeConnectAccountDto } from './dto/create-stripe-connect-account.dto';
 import { RouteRequestsDto } from './dto/route-requests.dto';
 import { UpdateDriverMatchingLocationDto } from './dto/update-driver-availability.dto';
 import {
@@ -645,6 +646,7 @@ export class DriverController {
   @Post('me/stripe-connect/account')
   async createStripeConnectAccount(
     @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateStripeConnectAccountDto,
   ): Promise<{
     stripeAccountId: string;
     onboardingUrl: string;
@@ -652,6 +654,14 @@ export class DriverController {
     payoutsEnabled: boolean;
   }> {
     return this.paymentsService.createDriverConnectAccount({
+      driverUserId: request.user.id,
+      email: dto?.email,
+    });
+  }
+
+  @Delete('me/stripe-connect/account')
+  async removeStripeConnectAccount(@Req() request: AuthenticatedRequest) {
+    return this.paymentsService.removeDriverConnectAccount({
       driverUserId: request.user.id,
     });
   }

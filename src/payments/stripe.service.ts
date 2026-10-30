@@ -39,6 +39,13 @@ export type StripeCardPaymentMethodSummary = {
   expYear: number | null;
 };
 
+// Express + Stripe-managed losses requires this preview version. Keep it scoped
+// to Connect calls; customer payment and webhook API versions are unchanged.
+const CONNECT_API_OPTIONS = { apiVersion: '2026-10-28.preview' };
+type CoreAccount = Awaited<
+  ReturnType<InstanceType<typeof Stripe>['v2']['core']['accounts']['retrieve']>
+>;
+
 @Injectable()
 export class StripeService {
   private stripeClient: InstanceType<typeof Stripe> | null = null;
@@ -489,24 +496,55 @@ export class StripeService {
     driverId: string;
     email: string;
     name?: string | null;
-    country?: string;
+    country: string;
   }) {
-    return this.runStripe(() =>
-      this.getClient().accounts.create({
-        type: 'express',
-        email: input.email,
-        capabilities: {
-          transfers: { requested: true },
+    const account = await this.runStripe(() =>
+      this.getClient().v2.core.accounts.create(
+        {
+          contact_email: input.email,
+          ...(input.name?.trim() ? { display_name: input.name.trim() } : {}),
+          identity: { country: input.country.trim().toUpperCase() },
+          dashboard: 'express',
+          defaults: {
+            responsibilities: {
+              fees_collector: 'stripe',
+              losses_collector: 'stripe',
+            },
+          },
+          configuration: {
+            merchant: { capabilities: { card_payments: { requested: true } } },
+          },
+          metadata: { driverId: input.driverId },
+          include: ['configuration.merchant', 'requirements'],
         },
-        metadata: {
-          driverId: input.driverId,
-        },
-        ...(input.name?.trim()
-          ? { business_profile: { name: input.name.trim() } }
-          : {}),
-        ...(input.country?.trim() ? { country: input.country.trim() } : {}),
-      }),
+        CONNECT_API_OPTIONS,
+      ),
     );
+    return this.normalizeCoreAccount(account);
+  }
+
+  private normalizeCoreAccount(account: CoreAccount) {
+    const merchant = account.configuration?.merchant;
+    const requirements = account.requirements;
+    // V2 has no details_submitted flag. Treat currently required information
+    // awaiting the user as incomplete, while verification by Stripe may continue.
+    const needsUserInput = requirements?.entries?.some(
+      (entry) =>
+        entry.awaiting_action_from === 'user' &&
+        entry.minimum_deadline.status !== 'eventually_due',
+    );
+    return {
+      id: account.id,
+      accountApi: 'v2' as const,
+      details_submitted: Boolean(
+        !account.closed && merchant && requirements && !needsUserInput,
+      ),
+      payouts_enabled: Boolean(
+        !account.closed &&
+        merchant?.capabilities?.card_payments?.status === 'active' &&
+        merchant?.capabilities?.stripe_balance?.payouts?.status === 'active',
+      ),
+    };
   }
 
   async createAccountLink(input: {
@@ -514,6 +552,29 @@ export class StripeService {
     refreshUrl: string;
     returnUrl: string;
   }) {
+    const account = await this.retrieveAccount(input.accountId);
+    if (account.accountApi === 'v2') {
+      return this.runStripe(
+        () =>
+          // The installed SDK still requires the obsolete configurations field.
+          // The pinned preview collects the account's applied configurations.
+          this.getClient().rawRequest(
+            'POST',
+            '/v2/core/account_links',
+            {
+              account: input.accountId,
+              use_case: {
+                type: 'account_onboarding',
+                account_onboarding: {
+                  refresh_url: input.refreshUrl,
+                  return_url: input.returnUrl,
+                },
+              },
+            },
+            CONNECT_API_OPTIONS,
+          ) as Promise<{ url: string }>,
+      );
+    }
     return this.runStripe(() =>
       this.getClient().accountLinks.create({
         account: input.accountId,
@@ -525,19 +586,38 @@ export class StripeService {
   }
 
   async retrieveAccount(accountId: string) {
-    return this.runStripe(() => this.getClient().accounts.retrieve(accountId));
+    return this.runStripe(async () => {
+      try {
+        const account = await this.getClient().v2.core.accounts.retrieve(
+          accountId,
+          { include: ['configuration.merchant', 'requirements'] },
+          CONNECT_API_OPTIONS,
+        );
+        return this.normalizeCoreAccount(account);
+      } catch (error) {
+        // Only explicit legacy-account errors permit a V1 fallback. Never hide
+        // authentication, permission, network or preview-availability errors.
+        const code = (error as { code?: string } | null)?.code;
+        if (
+          code !== 'v1_account_instead_of_v2_account' &&
+          code !== 'account_not_yet_compatible_with_v2'
+        ) {
+          throw error;
+        }
+        const account = await this.getClient().accounts.retrieve(accountId);
+        return {
+          id: account.id,
+          accountApi: 'v1' as const,
+          details_submitted: account.details_submitted,
+          payouts_enabled: account.payouts_enabled,
+        };
+      }
+    });
   }
 
   async createExpressLoginLink(accountId: string) {
     return this.runStripe(() =>
-      this.getClient().accountLinks.create({
-        account: accountId,
-        refresh_url:
-          process.env.DRIVER_APP_BASE_URL?.trim() || 'http://localhost:8081',
-        return_url:
-          process.env.DRIVER_APP_BASE_URL?.trim() || 'http://localhost:8081',
-        type: 'account_onboarding',
-      }),
+      this.getClient().accounts.createLoginLink(accountId),
     );
   }
 

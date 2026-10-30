@@ -106,6 +106,50 @@ overlay and remote API environment now contain the supplied test endpoint secret
 
 ## Verify the customer, driver and platform split
 
+### Driver account creation with Stripe-managed risk
+
+The selected Connect configuration is direct charges, Stripe-managed negative
+balance liability, Stripe collecting processing fees from drivers, Express
+Dashboard access, and Stripe-hosted onboarding. New driver accounts use Accounts
+v2 with the merchant/card-payments configuration, `losses_collector=stripe`, and
+`fees_collector=stripe`. There is no fallback that accepts platform liability.
+The optional platform loss-liability acknowledgement is not needed for this
+configuration.
+
+Express with Managed Risk currently requires `2026-10-28.preview`. This version
+is pinned only on the Connect account creation, retrieval and onboarding-link
+requests. Existing customer payment and webhook API versions are unchanged.
+The installed Stripe SDK still describes `use_case.account_onboarding.configurations`,
+which the preview rejects, so onboarding links use the SDK's raw-request method
+with the documented current body. Driver country comes from the saved profile;
+Accounts v2 requires it before applying the merchant configuration. Drivers
+without a country must complete their profile before creating an account.
+
+Status refresh maps V2 merchant/card-payment and bank-payout capabilities to the
+existing mobile response fields. User information currently due keeps onboarding
+incomplete; verification awaiting Stripe is distinct from missing user input.
+Closed accounts are never payout-ready. Explicit V1 compatibility errors permit
+retrieval and onboarding of existing legacy accounts using V1. Other Stripe
+errors are returned without silently changing account responsibilities. The
+Dashboard action uses an Express login link.
+
+After building, run `node scripts/test-stripe-connect.cjs` with explicitly selected
+Stripe test credentials. The check refuses live mode, creates one synthetic
+connected account, verifies the responsibility settings and onboarding link,
+then closes the fixture. It does not write app data or create payments.
+
+**Rollout scope:** this change enables account creation and onboarding only.
+The existing payment code still uses platform charges followed by transfers.
+That funds flow must be migrated to compatible direct charges before using the
+new merchant accounts for payments. Completing onboarding does not complete the
+payment migration. Trip-completion, release, commission, cancellation and dispute
+conditions are unchanged by this onboarding change. Existing balances and
+payments must not be moved between accounts as part of account setup.
+
+References: [Stripe Managed Risk account creation](https://docs.stripe.com/connect/risk-management/connected-accounts-with-managed-risk),
+[V2 onboarding links](https://docs.stripe.com/api/v2/core/account-links/create),
+and [Managed Risk payment compatibility](https://docs.stripe.com/connect/risk-management/managed-risk).
+
 The driver app has no Stripe SDK or active publishable-key integration. Its
 Connect onboarding, account sync and payout requests call this API, which uses
 the same selected Stripe secret key as customer payments. Both apps must point
