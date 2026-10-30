@@ -535,7 +535,8 @@ export class NotificationsService {
     tripId: string;
     amount: string;
     currency: string;
-    stripeTransferId: string;
+    stripeTransferId?: string | null;
+    stripePaymentIntentId?: string;
   }): Promise<void> {
     const normalizedCurrency = input.currency.trim().toUpperCase();
     const amountLabel = `${input.amount} ${normalizedCurrency}`;
@@ -543,13 +544,22 @@ export class NotificationsService {
     await this.sendToUsers({
       userIds: [input.customerId],
       app: PushApp.CUSTOMER,
-      title: 'Trip payout transferred',
-      body: 'The driver payout for your completed trip was transferred.',
+      title: input.stripePaymentIntentId
+        ? 'Trip payment released'
+        : 'Trip payout transferred',
+      body: input.stripePaymentIntentId
+        ? 'Your completed trip payment was released to the driver.'
+        : 'The driver payout for your completed trip was transferred.',
       type: 'TRIP_FUNDS_TRANSFERRED',
       data: {
         requestId: input.tripId,
         tripId: input.tripId,
-        stripeTransferId: input.stripeTransferId,
+        ...(input.stripeTransferId
+          ? { stripeTransferId: input.stripeTransferId }
+          : {}),
+        ...(input.stripePaymentIntentId
+          ? { stripePaymentIntentId: input.stripePaymentIntentId }
+          : {}),
         currency: normalizedCurrency,
       },
     });
@@ -557,13 +567,22 @@ export class NotificationsService {
     await this.sendToUsers({
       userIds: [input.driverUserId],
       app: PushApp.DRIVER,
-      title: 'Payout transferred',
-      body: `Your trip payout of ${amountLabel} was transferred to your Stripe payout account.`,
+      title: input.stripePaymentIntentId
+        ? 'Trip payment released'
+        : 'Payout transferred',
+      body: input.stripePaymentIntentId
+        ? `Your trip payment of ${amountLabel} before Stripe fees was released to your Stripe account.`
+        : `Your trip payout of ${amountLabel} was transferred to your Stripe payout account.`,
       type: 'TRIP_FUNDS_TRANSFERRED',
       data: {
         requestId: input.tripId,
         tripId: input.tripId,
-        stripeTransferId: input.stripeTransferId,
+        ...(input.stripeTransferId
+          ? { stripeTransferId: input.stripeTransferId }
+          : {}),
+        ...(input.stripePaymentIntentId
+          ? { stripePaymentIntentId: input.stripePaymentIntentId }
+          : {}),
         amount: input.amount,
         currency: normalizedCurrency,
       },

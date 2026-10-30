@@ -258,6 +258,22 @@ export class PaymentsController {
     return charge;
   }
 
+  @Post('webhooks/stripe/connect')
+  async handleConnectedStripeWebhook(
+    @Req() request: Request<Record<string, string>, unknown, Buffer>,
+    @Headers('stripe-signature') signature: string | undefined,
+  ): Promise<{ received: true; type: string }> {
+    if (!signature?.trim()) {
+      throw new BadRequestException('Missing Stripe signature.');
+    }
+
+    return this.paymentsService.handleStripeWebhook(
+      request.body,
+      signature,
+      true,
+    );
+  }
+
   @Post('webhooks/stripe')
   async handleStripeWebhook(
     @Req() request: Request<Record<string, string>, unknown, Buffer>,

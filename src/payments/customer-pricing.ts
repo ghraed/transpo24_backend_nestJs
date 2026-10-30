@@ -1,5 +1,19 @@
 import { Prisma } from '@prisma/client';
 
+export const DRIVER_PLATFORM_COMMISSION_RATE = new Prisma.Decimal('0.15');
+
+export function directApplicationFee(
+  total: Prisma.Decimal,
+  customerFee: Prisma.Decimal,
+) {
+  return customerFee.add(
+    total
+      .sub(customerFee)
+      .mul(DRIVER_PLATFORM_COMMISSION_RATE)
+      .toDecimalPlaces(2),
+  );
+}
+
 const CUSTOMER_PLATFORM_COMMISSION_RATE = new Prisma.Decimal('0.05');
 
 /** The offer is the driver's service price, before the client's commission. */

@@ -178,3 +178,40 @@ describe('validateEnvironment', () => {
     ).toThrow('must be an HTTPS URL');
   });
 });
+
+describe('direct payment rollout requirements', () => {
+  const environment = {
+    DATABASE_URL: 'postgresql://localhost/transpo24_test',
+    TWILIO_ACCOUNT_SID: 'AC_test',
+    TWILIO_AUTH_TOKEN: 'secret',
+    TWILIO_VERIFY_SERVICE_SID: 'VA_test',
+    NODE_ENV: 'production',
+    ACCESS_TOKEN_SECRET: 'a-secure-random-production-secret-123456',
+    CORS_ORIGINS: 'https://app.example.com',
+    DRIVER_APP_BASE_URL: 'https://driver.example.com',
+    STRIPE_MODE: 'test',
+    STRIPE_TEST_SECRET_KEY: 'sk_test_fixture',
+    STRIPE_TEST_WEBHOOK_SECRET: 'whsec_platform_fixture',
+    STRIPE_DIRECT_CHARGES_ENABLED: 'true',
+  };
+  it('requires the connected-account webhook secret and release workers before activation', () => {
+    expect(() => validateEnvironment(environment)).toThrow(
+      'STRIPE_TEST_CONNECT_WEBHOOK_SECRET',
+    );
+    const webhook = {
+      ...environment,
+      STRIPE_TEST_CONNECT_WEBHOOK_SECRET: 'whsec_connected_fixture',
+    };
+    expect(() => validateEnvironment(webhook)).toThrow('REDIS_HOST');
+    const ready = { ...webhook, REDIS_HOST: 'localhost' };
+    expect(validateEnvironment(ready)).toBe(ready);
+  });
+  it('does not silently fall back to platform charges for a misspelled flag', () => {
+    expect(() =>
+      validateEnvironment({
+        ...environment,
+        STRIPE_DIRECT_CHARGES_ENABLED: 'yes',
+      }),
+    ).toThrow('must be true or false');
+  });
+});

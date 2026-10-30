@@ -15,7 +15,10 @@ import {
 export const PAYMENT_POLICY_VERSION = 'delayed-authorization-v1';
 export const BANK_APPROVAL_MS = 5 * 60 * 1000;
 export const RENEWAL_LEAD_MS = 6 * 60 * 60 * 1000;
+export const directChargesEnabled = () =>
+  process.env.STRIPE_DIRECT_CHARGES_ENABLED === 'true';
 export const delayedBookingsEnabled = () =>
+  directChargesEnabled() ||
   process.env.DELAYED_BOOKING_AUTHORIZATION_ENABLED === 'true';
 
 export function requirePaymentPolicy(
@@ -31,6 +34,7 @@ export function requirePaymentPolicy(
 export function paymentPolicy(delayed = delayedBookingsEnabled()) {
   return {
     version: delayed ? PAYMENT_POLICY_VERSION : 'immediate-capture-v1',
+    directCharges: directChargesEnabled(),
     booking: {
       authorization: delayed
         ? ('AFTER_COUNTDOWN' as const)

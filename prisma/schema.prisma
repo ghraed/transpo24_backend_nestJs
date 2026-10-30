@@ -1126,6 +1126,7 @@ model PaymentHold {
   provider              PaymentProvider
   status                PaymentStatus
   stripePaymentMethodId String?
+  stripeAccountId       String?
   stripePaymentIntentId String?                    @unique
   stripeClientSecret    String?
   stripeChargeId        String?
@@ -1287,6 +1288,7 @@ model AdditionalCharge {
   approvedByCustomerId String?             @map("approved_by_customer_id")
   approvalLocale    String?                @map("approval_locale")
   approvalConfirmationText String?         @map("approval_confirmation_text")
+  stripeAccountId       String?             @map("stripe_account_id")
   stripePaymentIntentId String?            @unique @map("stripe_payment_intent_id")
   stripeChargeId    String?                @map("stripe_charge_id")
   savedPaymentMethodId String?             @map("saved_payment_method_id")

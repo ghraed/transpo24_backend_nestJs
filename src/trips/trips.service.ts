@@ -77,7 +77,7 @@ export const DRIVER_PAYOUT_DELAY_HOURS =
     ? Math.max(0, parsedDriverPayoutDelayHours)
     : DRIVER_PAYOUT_DELAY_HOURS_FALLBACK;
 const MAX_PROOF_PHOTOS = 8;
-const PLATFORM_FEE_PERCENTAGE = new Prisma.Decimal('0.15');
+import { DRIVER_PLATFORM_COMMISSION_RATE as PLATFORM_FEE_PERCENTAGE } from '../payments/customer-pricing';
 const DEFAULT_CURRENCY =
   process.env.STRIPE_CURRENCY?.trim().toUpperCase() || 'CHF';
 const PROOF_PHOTO_SELECT = {

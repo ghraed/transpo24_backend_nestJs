@@ -22,6 +22,8 @@ type CreateCustomerFundingIntentInput = {
 };
 
 type CreateImmediateCaptureIntentInput = {
+  stripeAccountId?: string | null;
+  applicationFeeAmount?: number;
   customerId: string;
   amount: number;
   currency: string;
@@ -178,31 +180,69 @@ export class StripeService {
     if (!input.stripePaymentMethodId)
       throw new BadRequestException('A saved payment method is required.');
     await this.requireOwnedCard(input.customerId, input.stripePaymentMethodId);
-    // Persist the unconfirmed intent before authorizing. A rolled-back create cannot hold funds.
+    const method = input.stripeAccountId
+      ? await this.cloneCard(
+          input.customerId,
+          input.stripePaymentMethodId,
+          input.stripeAccountId,
+          `${input.idempotencyKey}_card`,
+        )
+      : input.stripePaymentMethodId;
+    // Persist before confirmation; a create response cannot move customer funds.
     return this.runStripe(() =>
       this.getClient().paymentIntents.create(
         {
-          customer: input.customerId,
-          payment_method: input.stripePaymentMethodId,
+          ...(!input.stripeAccountId ? { customer: input.customerId } : {}),
+          payment_method: method,
           amount: input.amount,
           currency: input.currency,
           capture_method: 'manual',
           payment_method_types: ['card'],
+          ...(input.stripeAccountId
+            ? { application_fee_amount: input.applicationFeeAmount }
+            : {}),
           metadata: input.metadata,
           transfer_group: input.transferGroup,
         },
-        { idempotencyKey: input.idempotencyKey },
+        this.accountOptions(input.stripeAccountId, input.idempotencyKey),
       ),
     );
   }
 
-  async confirmManualAuthorization(id: string, idempotencyKey: string) {
+  private accountOptions(accountId?: string | null, idempotencyKey?: string) {
+    return {
+      ...(accountId ? { stripeAccount: accountId } : {}),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+    };
+  }
+
+  private async cloneCard(
+    customerId: string,
+    methodId: string,
+    accountId: string,
+    key: string,
+  ) {
+    await this.requireOwnedCard(customerId, methodId);
+    const method = await this.runStripe(() =>
+      this.getClient().paymentMethods.create(
+        { customer: customerId, payment_method: methodId },
+        this.accountOptions(accountId, key),
+      ),
+    );
+    return method.id;
+  }
+
+  async confirmManualAuthorization(
+    id: string,
+    idempotencyKey: string,
+    accountId?: string | null,
+  ) {
     return this.runStripe(async () => {
       try {
         return await this.getClient().paymentIntents.confirm(
           id,
           { off_session: true, expand: ['latest_charge'] },
-          { idempotencyKey },
+          this.accountOptions(accountId, idempotencyKey),
         );
       } catch (error) {
         // Off-session authentication/decline errors contain the intent. Return its canonical
@@ -213,6 +253,7 @@ export class StripeService {
           const current = await this.getClient().paymentIntents.retrieve(
             typeof intent === 'string' ? intent : intent.id,
             { expand: ['latest_charge'] },
+            this.accountOptions(accountId),
           );
           const authenticationRequired =
             current.last_payment_error?.code === 'authentication_required' ||
@@ -235,7 +276,10 @@ export class StripeService {
                 use_stripe_sdk: true,
                 expand: ['latest_charge'],
               },
-              { idempotencyKey: `${idempotencyKey}_authentication` },
+              this.accountOptions(
+                accountId,
+                `${idempotencyKey}_authentication`,
+              ),
             );
           }
           return current;
@@ -245,11 +289,13 @@ export class StripeService {
     });
   }
 
-  async inspectAuthorization(id: string) {
+  async inspectAuthorization(id: string, accountId?: string | null) {
     return this.runStripe(() =>
-      this.getClient().paymentIntents.retrieve(id, {
-        expand: ['latest_charge'],
-      }),
+      this.getClient().paymentIntents.retrieve(
+        id,
+        { expand: ['latest_charge'] },
+        this.accountOptions(accountId),
+      ),
     );
   }
 
@@ -257,12 +303,19 @@ export class StripeService {
     id: string,
     amount: number,
     idempotencyKey: string,
+    accountId?: string | null,
+    applicationFeeAmount?: number,
   ) {
     return this.runStripe(() =>
       this.getClient().paymentIntents.capture(
         id,
-        { amount_to_capture: amount },
-        { idempotencyKey },
+        {
+          amount_to_capture: amount,
+          ...(accountId && applicationFeeAmount !== undefined
+            ? { application_fee_amount: applicationFeeAmount }
+            : {}),
+        },
+        this.accountOptions(accountId, idempotencyKey),
       ),
     );
   }
@@ -414,39 +467,75 @@ export class StripeService {
     amount: number;
     currency: string;
     additionalChargeId: string;
+    stripeAccountId?: string | null;
+    stripePaymentMethodId?: string;
+    applicationFeeAmount?: number;
   }) {
+    const key = `additional_expense_${input.additionalChargeId}`;
+    const clonedMethod =
+      input.stripeAccountId && input.stripePaymentMethodId
+        ? await this.cloneCard(
+            input.customerId,
+            input.stripePaymentMethodId,
+            input.stripeAccountId,
+            `${key}_card`,
+          )
+        : undefined;
     return this.runStripe(() =>
       this.getClient().paymentIntents.create(
         {
           amount: input.amount,
           currency: input.currency,
-          customer: input.customerId,
+          ...(!input.stripeAccountId
+            ? { customer: input.customerId }
+            : {
+                payment_method: clonedMethod,
+                application_fee_amount: input.applicationFeeAmount ?? 0,
+              }),
           payment_method_types: ['card'],
           metadata: { additionalChargeId: input.additionalChargeId },
         },
-        { idempotencyKey: `additional_expense_${input.additionalChargeId}` },
+        this.accountOptions(input.stripeAccountId, key),
       ),
     );
   }
 
-  async confirmAdditionalExpense(intentId: string, paymentMethodId: string) {
+  async confirmAdditionalExpense(
+    intentId: string,
+    paymentMethodId: string,
+    accountId?: string | null,
+  ) {
     return this.runStripe(() =>
-      this.getClient().paymentIntents.confirm(intentId, {
-        payment_method: paymentMethodId,
-        off_session: true,
-      }),
+      this.getClient().paymentIntents.confirm(
+        intentId,
+        {
+          ...(!accountId ? { payment_method: paymentMethodId } : {}),
+          off_session: true,
+        },
+        this.accountOptions(accountId),
+      ),
     );
   }
 
-  async retrievePaymentIntent(paymentIntentId: string) {
+  async retrievePaymentIntent(
+    paymentIntentId: string,
+    accountId?: string | null,
+  ) {
     return this.runStripe(() =>
-      this.getClient().paymentIntents.retrieve(paymentIntentId),
+      this.getClient().paymentIntents.retrieve(
+        paymentIntentId,
+        {},
+        this.accountOptions(accountId),
+      ),
     );
   }
 
-  async retrievePaymentIntentIfExists(paymentIntentId: string) {
+  async retrievePaymentIntentIfExists(
+    paymentIntentId: string,
+    accountId?: string | null,
+  ) {
     try {
-      return await this.retrievePaymentIntent(paymentIntentId);
+      return await this.retrievePaymentIntent(paymentIntentId, accountId);
     } catch (error) {
       if (this.isMissingPaymentIntentError(error)) {
         return null;
@@ -455,15 +544,25 @@ export class StripeService {
     }
   }
 
-  async cancelPaymentIntent(paymentIntentId: string) {
+  async cancelPaymentIntent(
+    paymentIntentId: string,
+    accountId?: string | null,
+  ) {
     return this.runStripe(() =>
-      this.getClient().paymentIntents.cancel(paymentIntentId),
+      this.getClient().paymentIntents.cancel(
+        paymentIntentId,
+        {},
+        this.accountOptions(accountId),
+      ),
     );
   }
 
-  async cancelPaymentIntentIfExists(paymentIntentId: string) {
+  async cancelPaymentIntentIfExists(
+    paymentIntentId: string,
+    accountId?: string | null,
+  ) {
     try {
-      return await this.cancelPaymentIntent(paymentIntentId);
+      return await this.cancelPaymentIntent(paymentIntentId, accountId);
     } catch (error) {
       if (this.isMissingPaymentIntentError(error)) {
         return null;
@@ -473,21 +572,29 @@ export class StripeService {
   }
 
   async createRefund(input: {
+    stripeAccountId?: string | null;
     paymentIntentId: string;
     amount?: number;
     metadata?: Record<string, string>;
     idempotencyKey: string;
   }) {
+    const directIntent = input.stripeAccountId
+      ? await this.retrievePaymentIntent(
+          input.paymentIntentId,
+          input.stripeAccountId,
+        )
+      : null;
     return this.runStripe(() =>
       this.getClient().refunds.create(
         {
           payment_intent: input.paymentIntentId,
+          ...(directIntent?.application_fee_amount
+            ? { refund_application_fee: true }
+            : {}),
           ...(typeof input.amount === 'number' ? { amount: input.amount } : {}),
           ...(input.metadata ? { metadata: input.metadata } : {}),
         },
-        {
-          idempotencyKey: input.idempotencyKey,
-        },
+        this.accountOptions(input.stripeAccountId, input.idempotencyKey),
       ),
     );
   }
@@ -647,8 +754,15 @@ export class StripeService {
     );
   }
 
-  constructWebhookEvent(rawBody: Buffer, signature: string) {
-    const { webhookSecret } = resolveStripeConfiguration();
+  constructWebhookEvent(rawBody: Buffer, signature: string, connected = false) {
+    const config = resolveStripeConfiguration();
+    const webhookSecret = connected
+      ? process.env[
+          config.mode === 'live'
+            ? 'STRIPE_LIVE_CONNECT_WEBHOOK_SECRET'
+            : 'STRIPE_TEST_CONNECT_WEBHOOK_SECRET'
+        ]?.trim()
+      : config.webhookSecret;
     if (!webhookSecret) {
       throw new BadRequestException('Stripe webhook secret is not configured.');
     }

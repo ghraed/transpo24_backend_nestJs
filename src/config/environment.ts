@@ -33,6 +33,29 @@ export function validateEnvironment(
       ? environment.STRIPE_MODE.trim()
       : '';
   const stripe = resolveStripeConfiguration(environment);
+  if (
+    environment.STRIPE_DIRECT_CHARGES_ENABLED !== undefined &&
+    environment.STRIPE_DIRECT_CHARGES_ENABLED !== 'true' &&
+    environment.STRIPE_DIRECT_CHARGES_ENABLED !== 'false'
+  )
+    throw new Error('STRIPE_DIRECT_CHARGES_ENABLED must be true or false.');
+  if (isProduction && environment.STRIPE_DIRECT_CHARGES_ENABLED === 'true') {
+    const secretName =
+      stripe.mode === 'live'
+        ? 'STRIPE_LIVE_CONNECT_WEBHOOK_SECRET'
+        : 'STRIPE_TEST_CONNECT_WEBHOOK_SECRET';
+    if (
+      typeof environment[secretName] !== 'string' ||
+      !String(environment[secretName]).trim().startsWith('whsec_')
+    )
+      throw new Error(
+        `${secretName} must be configured before enabling direct driver payments.`,
+      );
+    if (isMissing(environment.REDIS_HOST))
+      throw new Error(
+        'REDIS_HOST must be configured for direct payment authorization and release workers.',
+      );
+  }
   const resolvedEnvironment = {
     ...environment,
     STRIPE_SECRET_KEY: stripe.secretKey,

@@ -2,6 +2,7 @@ import { DelayedBookingPaymentsService } from './delayed-booking-payments.servic
 import {
   confirmationSummary,
   delayedBookingsEnabled,
+  directChargesEnabled,
   paymentPolicy,
   requirePaymentPolicy,
   type ConfirmationFields,
@@ -143,6 +144,7 @@ type WalletTransactionRecord = {
 };
 
 type PaymentHoldRecord = ConfirmationFields & {
+  stripeAccountId?: string | null;
   operationAmount?: Prisma.Decimal | null;
   customerPlatformFeeAmount: Prisma.Decimal;
   capturedAt?: Date | null;
@@ -235,6 +237,10 @@ type DriverPayoutAttemptResult = {
 };
 
 type DriverPayoutContext = {
+  collectedAmount?: Prisma.Decimal;
+  platformShareAmount?: Prisma.Decimal;
+  chargeAccountId?: string | null;
+  stripePaymentIntentId?: string | null;
   tripStatus: TransportRequestStatus;
   deliveryConfirmedByCustomerAt: Date | null;
   settlementId: string;
@@ -438,6 +444,7 @@ export class PaymentsService {
       const paymentIntent =
         await this.stripeService.retrievePaymentIntentIfExists(
           request.paymentHold.stripePaymentIntentId,
+          request.paymentHold.stripeAccountId,
         );
       if (!paymentIntent) {
         await this.prisma.$transaction(async (tx) => {
@@ -844,6 +851,7 @@ export class PaymentsService {
     } else if (request.paymentHold.stripePaymentIntentId) {
       const refund = await this.stripeService.createRefund({
         paymentIntentId: request.paymentHold.stripePaymentIntentId,
+        stripeAccountId: request.paymentHold.stripeAccountId,
         amount: this.toStripeMinorUnit(refundableAmount),
         metadata: {
           requestId,
@@ -1187,6 +1195,10 @@ export class PaymentsService {
   async createCustomerWalletTopUp(
     input: CreateWalletTopUpInput,
   ): Promise<CustomerWalletTopUpResponseDto> {
+    if (directChargesEnabled())
+      throw new BadRequestException(
+        'Wallet top-ups are unavailable for direct driver payments. Existing wallet balances are preserved.',
+      );
     if (input.policyVersion) requirePaymentPolicy(input.policyVersion);
     const amount = this.toMoneyDecimal(input.amount);
     if (amount.lte(0)) {
@@ -1401,6 +1413,7 @@ export class PaymentsService {
         id: true,
         customerId: true,
         status: true,
+        paymentHold: { select: { stripeAccountId: true } },
       },
     });
 
@@ -1477,13 +1490,20 @@ export class PaymentsService {
       try {
         const previous = await this.stripeService.retrievePaymentIntent(
           charge.stripePaymentIntentId,
+          charge.stripeAccountId,
         );
-        await this.syncStripeAdditionalExpense(previous);
+        await this.syncStripeAdditionalExpense(
+          previous,
+          charge.stripeAccountId,
+        );
         if (previous.status === 'succeeded' || previous.status === 'processing')
           throw new ConflictException(
             'The card payment has succeeded or is pending. Refresh before choosing cash.',
           );
-        await this.stripeService.cancelPaymentIntentIfExists(previous.id);
+        await this.stripeService.cancelPaymentIntentIfExists(
+          previous.id,
+          charge.stripeAccountId,
+        );
       } catch (error) {
         await this.prisma.additionalCharge.updateMany({
           where: { id: charge.id },
@@ -1522,6 +1542,18 @@ export class PaymentsService {
     }
 
     let intentId = charge.stripePaymentIntentId;
+    const chargeAccountId = intentId
+      ? charge.stripeAccountId
+      : request.paymentHold?.stripeAccountId;
+    if (directChargesEnabled() && !intentId && !chargeAccountId) {
+      await this.prisma.additionalCharge.update({
+        where: { id: charge.id },
+        data: { approvalInFlightAt: null },
+      });
+      throw new ConflictException(
+        'This legacy payment requires reconciliation before accepting additional card payments.',
+      );
+    }
     try {
       const stripeCustomerId = await this.stripeService.ensureCustomer({
         customerId: customer.id,
@@ -1551,6 +1583,11 @@ export class PaymentsService {
           ),
           currency: charge.currency.toLowerCase(),
           additionalChargeId: charge.id,
+          stripeAccountId: chargeAccountId,
+          stripePaymentMethodId: method.id,
+          applicationFeeAmount: this.toStripeMinorUnit(
+            this.calculateAdditionalChargeAppFee(charge.amount),
+          ),
         });
         intentId = prepared.id;
       }
@@ -1558,6 +1595,7 @@ export class PaymentsService {
         where: { id: charge.id },
         data: {
           stripePaymentIntentId: intentId,
+          stripeAccountId: chargeAccountId,
           approvedAt: new Date(),
           approvedByCustomerId: input.customerId,
           approvalLocale: confirmationLocale,
@@ -1570,7 +1608,10 @@ export class PaymentsService {
           savedPaymentMethodExpYear: method.expYear,
         },
       });
-      let intent = await this.stripeService.retrievePaymentIntent(intentId);
+      let intent = await this.stripeService.retrievePaymentIntent(
+        intentId,
+        chargeAccountId,
+      );
       if (
         ['requires_confirmation', 'requires_payment_method'].includes(
           intent.status,
@@ -1579,8 +1620,9 @@ export class PaymentsService {
         intent = await this.stripeService.confirmAdditionalExpense(
           intentId,
           method.id,
+          chargeAccountId,
         );
-      await this.syncStripeAdditionalExpense(intent);
+      await this.syncStripeAdditionalExpense(intent, chargeAccountId);
       if (intent.status !== 'succeeded')
         throw new BadRequestException(
           intent.status === 'processing'
@@ -1593,12 +1635,16 @@ export class PaymentsService {
       let outcome: StripePaymentIntentRecord | null = null;
       if (intentId) {
         try {
-          outcome = await this.stripeService.retrievePaymentIntent(intentId);
+          outcome = await this.stripeService.retrievePaymentIntent(
+            intentId,
+            chargeAccountId,
+          );
         } catch {
           /* Reconcile the persisted intent on a webhook, retry, or recovery sweep. */
         }
       }
-      if (outcome) await this.syncStripeAdditionalExpense(outcome);
+      if (outcome)
+        await this.syncStripeAdditionalExpense(outcome, chargeAccountId);
       if (outcome?.status !== 'succeeded') {
         await this.prisma.additionalCharge.updateMany({
           where: { id: charge.id, status: { not: 'CAPTURED' } },
@@ -1654,13 +1700,17 @@ export class PaymentsService {
     }
   }
 
-  private async syncStripeAdditionalExpense(intent: StripePaymentIntentRecord) {
+  private async syncStripeAdditionalExpense(
+    intent: StripePaymentIntentRecord,
+    accountId?: string | null,
+  ) {
     // Old and repeated events cannot turn a collected expense into a failed payment.
     return this.prisma.$transaction(async (tx) => {
       const charge = await tx.additionalCharge.findUnique({
         where: { stripePaymentIntentId: intent.id },
       });
-      if (!charge) return;
+      if (!charge || (charge.stripeAccountId ?? null) !== (accountId ?? null))
+        return;
       await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${charge.requestId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM additional_charges WHERE id = ${charge.id} FOR UPDATE`;
       const current = await tx.additionalCharge.findUniqueOrThrow({
@@ -1737,7 +1787,7 @@ export class PaymentsService {
           { approvalInFlightAt: { lt: new Date(Date.now() - 5 * 60000) } },
         ],
       },
-      select: { stripePaymentIntentId: true },
+      select: { stripePaymentIntentId: true, stripeAccountId: true },
       take: 100,
     });
     for (const row of rows) {
@@ -1745,7 +1795,9 @@ export class PaymentsService {
         await this.syncStripeAdditionalExpense(
           await this.stripeService.retrievePaymentIntent(
             row.stripePaymentIntentId!,
+            row.stripeAccountId,
           ),
+          row.stripeAccountId,
         );
       } catch (error) {
         this.logger.error(
@@ -2153,7 +2205,7 @@ export class PaymentsService {
         | 'admin_manual_retry';
     },
   ): Promise<DriverPayoutAttemptResult> {
-    const context = await this.getDriverPayoutContext(tripId);
+    let context = await this.getDriverPayoutContext(tripId);
 
     if (!context) {
       return {
@@ -2190,6 +2242,8 @@ export class PaymentsService {
     const now = new Date();
 
     const hasPayableSettlement =
+      (context.chargeAccountId &&
+        context.settlementStatus === TripPaymentSettlementStatus.AUTHORIZED) ||
       context.settlementStatus === TripPaymentSettlementStatus.COLLECTED ||
       (context.tripStatus === TransportRequestStatus.CANCELLED &&
         (context.settlementStatus ===
@@ -2253,6 +2307,115 @@ export class PaymentsService {
           status: DriverEarningStatus.AVAILABLE,
         },
       });
+    }
+
+    if (context.chargeAccountId) {
+      if (context.settlementStatus === TripPaymentSettlementStatus.AUTHORIZED) {
+        if (!this.delayedBookings)
+          throw new ServiceUnavailableException(
+            'Direct payment release is unavailable.',
+          );
+        await this.delayedBookings.captureDelivery(
+          context.customerId,
+          context.tripId,
+          true,
+        );
+        context = await this.getDriverPayoutContext(tripId);
+        if (
+          !context ||
+          context.settlementStatus !== TripPaymentSettlementStatus.COLLECTED
+        )
+          return {
+            transferred: false,
+            stripeTransferId: null,
+            reason: 'Direct payment capture is still pending.',
+          };
+      }
+      if (
+        !context.stripePaymentIntentId ||
+        !context.collectedAmount ||
+        !context.platformShareAmount
+      )
+        return this.failDriverPayoutAttempt(context, now, {
+          reason: 'Direct payment reference is missing.',
+        });
+      const intent = await this.stripeService.retrievePaymentIntent(
+        context.stripePaymentIntentId,
+        context.chargeAccountId,
+      );
+      if (
+        intent.status !== 'succeeded' ||
+        intent.currency.toUpperCase() !== context.currency ||
+        intent.amount_received !==
+          this.toStripeMinorUnit(context.collectedAmount) ||
+        intent.application_fee_amount !==
+          this.toStripeMinorUnit(context.platformShareAmount)
+      )
+        return this.failDriverPayoutAttempt(context, now, {
+          reason:
+            'The direct payment has not been captured with the agreed commission.',
+        });
+      // Capture already credited the driver's own Stripe balance. Never create
+      // a platform transfer or charge the customer again for this payment.
+      const released = context;
+      const newlyReleased = await this.prisma.$transaction(async (tx) => {
+        const claimed = await tx.driverEarning.updateMany({
+          where: {
+            id: released.earningId,
+            status: { not: DriverEarningStatus.PAID_OUT },
+          },
+          data: {
+            status: DriverEarningStatus.PAID_OUT,
+            paidOutAt: now,
+            stripeTransferStatus: 'direct_charge',
+          },
+        });
+        await tx.tripPaymentSettlement.update({
+          where: { id: released.settlementId },
+          data: {
+            driverPayoutState: DriverPayoutState.PAID_OUT,
+            payoutFailureReason: null,
+            nextPayoutRetryAt: null,
+          },
+        });
+        return claimed.count > 0;
+      });
+      if (newlyReleased) {
+        try {
+          await this.notificationsService.notifyTripFundsTransferred({
+            customerId: released.customerId,
+            driverUserId: released.driverUserId,
+            tripId: released.tripId,
+            amount: released.netAmount.toFixed(2),
+            currency: released.currency,
+            stripePaymentIntentId: released.stripePaymentIntentId!,
+          });
+        } catch {
+          this.logger.warn(
+            `Direct payment released but notification failed for trip ${released.tripId}.`,
+          );
+        }
+      }
+      return { transferred: true, stripeTransferId: null, reason: null };
+    }
+
+    if (directChargesEnabled()) {
+      // Captured historical platform charges cannot become direct charges.
+      // Preserve the money and require explicit reconciliation, never re-charge.
+      await this.prisma.tripPaymentSettlement.update({
+        where: { id: context.settlementId },
+        data: {
+          requiresManualReview: true,
+          nextPayoutRetryAt: null,
+          payoutFailureReason:
+            'Legacy platform payment requires reconciliation before paying the driver. The customer must not be charged again.',
+        },
+      });
+      return {
+        transferred: false,
+        stripeTransferId: null,
+        reason: 'Legacy platform payment requires reconciliation.',
+      };
     }
 
     if (!context.destinationAccountId || !context.stripePayoutsEnabled) {
@@ -2384,12 +2547,16 @@ export class PaymentsService {
             paymentSettlement: {
               select: {
                 id: true,
+                collectedAmount: true,
+                platformShareAmount: true,
                 payoutAttemptCount: true,
                 status: true,
                 requiresManualReview: true,
                 paymentHold: {
                   select: {
                     stripeChargeId: true,
+                    stripeAccountId: true,
+                    stripePaymentIntentId: true,
                   },
                 },
               },
@@ -2404,6 +2571,8 @@ export class PaymentsService {
     }
 
     return {
+      collectedAmount: earning.trip.paymentSettlement.collectedAmount,
+      platformShareAmount: earning.trip.paymentSettlement.platformShareAmount,
       tripStatus: earning.trip.status,
       deliveryConfirmedByCustomerAt: earning.trip.deliveryConfirmedByCustomerAt,
       settlementId: earning.trip.paymentSettlement.id,
@@ -2418,6 +2587,10 @@ export class PaymentsService {
       paidOutAt: earning.paidOutAt,
       netAmount: earning.netAmount,
       stripeChargeId: earning.trip.paymentSettlement.paymentHold.stripeChargeId,
+      chargeAccountId:
+        earning.trip.paymentSettlement.paymentHold.stripeAccountId,
+      stripePaymentIntentId:
+        earning.trip.paymentSettlement.paymentHold.stripePaymentIntentId,
       stripeTransferId: earning.stripeTransferId,
       stripeTransferStatus: earning.stripeTransferStatus,
       destinationAccountId: earning.driver.stripeAccountId,
@@ -2516,11 +2689,20 @@ export class PaymentsService {
   async handleStripeWebhook(
     rawBody: Buffer,
     signature: string,
+    connected = false,
   ): Promise<{
     received: true;
     type: string;
   }> {
-    const event = this.stripeService.constructWebhookEvent(rawBody, signature);
+    const event = this.stripeService.constructWebhookEvent(
+      rawBody,
+      signature,
+      connected,
+    );
+    if (connected && !event.account)
+      throw new BadRequestException(
+        'Connected Stripe events require an account.',
+      );
 
     switch (event.type) {
       case 'payment_intent.amount_capturable_updated':
@@ -2528,18 +2710,29 @@ export class PaymentsService {
       case 'payment_intent.payment_failed':
       case 'payment_intent.canceled': {
         const paymentIntent = event.data.object as StripePaymentIntentRecord;
-        await this.syncStripePaymentIntent(paymentIntent, event.type);
-        await this.syncStripeWalletTopUp(paymentIntent, event.type);
-        await this.syncStripeAdditionalExpense(paymentIntent);
+        await this.syncStripePaymentIntent(
+          paymentIntent,
+          event.type,
+          event.account,
+        );
+        if (!event.account)
+          await this.syncStripeWalletTopUp(paymentIntent, event.type);
+        await this.syncStripeAdditionalExpense(paymentIntent, event.account);
         break;
       }
       case 'charge.refunded': {
         const charge = event.data.object as {
           id: string;
           payment_intent: string | null;
+          amount_refunded?: number;
         };
         if (typeof charge.payment_intent === 'string') {
-          await this.markPaymentRefunded(charge.payment_intent, charge.id);
+          await this.markPaymentRefunded(
+            charge.payment_intent,
+            charge.id,
+            event.account,
+            charge.amount_refunded,
+          );
         }
         break;
       }
@@ -2547,7 +2740,7 @@ export class PaymentsService {
       case 'charge.dispute.updated':
       case 'charge.dispute.closed': {
         const dispute = event.data.object as StripeDisputeRecord;
-        await this.syncStripeDispute(dispute, event.type);
+        await this.syncStripeDispute(dispute, event.type, event.account);
         break;
       }
       case 'account.updated': {
@@ -2600,6 +2793,7 @@ export class PaymentsService {
   private async syncStripePaymentIntent(
     paymentIntent: StripePaymentIntentRecord,
     eventType: string,
+    accountId?: string | null,
   ): Promise<void> {
     const nextStatus = this.mapStripeEventToPaymentStatus(
       paymentIntent,
@@ -2622,6 +2816,7 @@ export class PaymentsService {
           select: PAYMENT_HOLD_SELECT,
         });
       }
+      if ((hold?.stripeAccountId ?? null) !== (accountId ?? null)) return;
       if (hold?.confirmationStartedAt) return;
       if (
         hold &&
@@ -2876,6 +3071,8 @@ export class PaymentsService {
   private async markPaymentRefunded(
     paymentIntentId: string,
     chargeId: string,
+    accountId?: string | null,
+    refundedMinor?: number,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const hold = await tx.paymentHold.findUnique({
@@ -2883,7 +3080,57 @@ export class PaymentsService {
         select: PAYMENT_HOLD_SELECT,
       });
 
-      if (!hold) {
+      if (!hold || (hold.stripeAccountId ?? null) !== (accountId ?? null)) {
+        if (!hold && accountId) {
+          const expense = await tx.additionalCharge.findUnique({
+            where: { stripePaymentIntentId: paymentIntentId },
+          });
+          if (expense?.stripeAccountId === accountId) {
+            await tx.additionalCharge.update({
+              where: { id: expense.id },
+              data: {
+                paymentFailureReason:
+                  'This direct expense payment was refunded and requires reconciliation.',
+              },
+            });
+            await tx.tripPaymentSettlement.updateMany({
+              where: { requestId: expense.requestId },
+              data: {
+                requiresManualReview: true,
+                nextPayoutRetryAt: null,
+                payoutFailureReason:
+                  'A direct expense refund requires reconciliation before release.',
+              },
+            });
+          }
+        }
+        return;
+      }
+      if (
+        hold.stripeAccountId &&
+        refundedMinor !== undefined &&
+        refundedMinor <
+          this.toStripeMinorUnit(hold.operationAmount ?? hold.amount)
+      ) {
+        await tx.paymentHold.update({
+          where: { id: hold.id },
+          data: { status: PaymentStatus.PAYMENT_PARTIALLY_REFUNDED },
+        });
+        await tx.transportRequest.update({
+          where: { id: hold.requestId },
+          data: { paymentStatus: PaymentStatus.PAYMENT_PARTIALLY_REFUNDED },
+        });
+        await tx.tripPaymentSettlement.updateMany({
+          where: { requestId: hold.requestId },
+          data: {
+            status: TripPaymentSettlementStatus.PARTIALLY_REFUNDED,
+            refundedAmount: new Prisma.Decimal(refundedMinor).div(100),
+            requiresManualReview: true,
+            nextPayoutRetryAt: null,
+            payoutFailureReason:
+              'A partial direct payment refund requires reconciliation before release.',
+          },
+        });
         return;
       }
 
@@ -2933,6 +3180,7 @@ export class PaymentsService {
   private async syncStripeDispute(
     dispute: StripeDisputeRecord,
     eventType: string,
+    accountId?: string | null,
   ): Promise<void> {
     const paymentIntentId = this.normalizeStripeDisputeReference(
       dispute.payment_intent,
@@ -2946,7 +3194,9 @@ export class PaymentsService {
     await this.syncTripChargeDispute(dispute, eventType, {
       paymentIntentId,
       chargeId,
+      accountId,
     });
+    if (accountId) return;
     await this.syncWalletTopUpDispute(dispute, eventType, {
       paymentIntentId,
       chargeId,
@@ -2957,6 +3207,7 @@ export class PaymentsService {
     dispute: StripeDisputeRecord,
     eventType: string,
     input: {
+      accountId?: string | null;
       paymentIntentId: string | null;
       chargeId: string | null;
     },
@@ -2969,7 +3220,10 @@ export class PaymentsService {
         select: PAYMENT_HOLD_SELECT,
       });
 
-      if (!hold) {
+      if (
+        !hold ||
+        (hold.stripeAccountId ?? null) !== (input.accountId ?? null)
+      ) {
         return;
       }
 
@@ -3675,6 +3929,7 @@ export class PaymentsService {
         hold.provider === PaymentProvider.STRIPE
           ? this.stripeService.mode
           : null,
+      stripeAccountId: hold.stripeAccountId ?? null,
       stripePaymentIntentId: hold.stripePaymentIntentId,
       stripeClientSecret: hold.stripeClientSecret,
       stripeChargeId: hold.stripeChargeId,
@@ -4132,6 +4387,7 @@ const PAYMENT_HOLD_SELECT = {
   paymentMethod: true,
   provider: true,
   status: true,
+  stripeAccountId: true,
   stripePaymentIntentId: true,
   stripeClientSecret: true,
   stripeChargeId: true,
@@ -4156,6 +4412,7 @@ const ADDITIONAL_CHARGE_SELECT = {
   approvedByCustomerId: true,
   approvalLocale: true,
   approvalConfirmationText: true,
+  stripeAccountId: true,
   stripePaymentIntentId: true,
   stripeChargeId: true,
   savedPaymentMethodId: true,

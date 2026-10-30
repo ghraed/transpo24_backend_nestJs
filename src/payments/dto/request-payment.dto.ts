@@ -36,6 +36,7 @@ export interface PaymentSummaryDto {
   /** The Stripe environment that issued this payment intent. */
   stripeMode: 'test' | 'live' | null;
   stripePaymentIntentId: string | null;
+  stripeAccountId?: string | null;
   stripeClientSecret: string | null;
   stripeChargeId: string | null;
   createdAt: string;

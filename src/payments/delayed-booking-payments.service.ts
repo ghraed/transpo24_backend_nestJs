@@ -1,3 +1,5 @@
+import { directChargesEnabled } from './payment-policy';
+import { directApplicationFee } from './customer-pricing';
 import {
   BadRequestException,
   ConflictException,
@@ -93,6 +95,26 @@ export class DelayedBookingPaymentsService {
         input.stripePaymentMethodId,
       );
     }
+    let stripeAccountId: string | null = null;
+    if (directChargesEnabled()) {
+      if (input.paymentMethod === 'APP_WALLET')
+        throw new BadRequestException(
+          'Direct driver payments require a card. Existing wallet funds remain available.',
+        );
+      const driver = await tx.driverProfile.findUniqueOrThrow({
+        where: { id: input.driverId },
+      });
+      if (!driver.stripeAccountId)
+        throw new BadRequestException(
+          'The driver must connect Stripe before accepting payment.',
+        );
+      const account = await this.stripe.retrieveAccount(driver.stripeAccountId);
+      if (!account.payouts_enabled)
+        throw new BadRequestException(
+          'The driver must complete Stripe onboarding before accepting payment.',
+        );
+      stripeAccountId = driver.stripeAccountId;
+    }
     const now = new Date();
     const hold = await tx.paymentHold.create({
       data: {
@@ -108,6 +130,7 @@ export class DelayedBookingPaymentsService {
           input.paymentMethod === 'APP_WALLET' ? 'APP_WALLET' : 'STRIPE',
         status: 'PAYMENT_HOLD_PENDING',
         stripePaymentMethodId: input.stripePaymentMethodId,
+        stripeAccountId,
         policyVersion: PAYMENT_POLICY_VERSION,
         confirmationState: 'GRACE_PERIOD',
         confirmationStartedAt: now,
@@ -279,7 +302,10 @@ export class DelayedBookingPaymentsService {
           hold.previousStripePaymentIntentId &&
           ['CONFIRMED', 'CAPTURED'].includes(hold.confirmationState ?? '')
         ) {
-          await this.releaseStripeIntent(hold.previousStripePaymentIntentId);
+          await this.releaseStripeIntent(
+            hold.previousStripePaymentIntentId,
+            hold.stripeAccountId,
+          );
           hold = await tx.paymentHold.update({
             where: { id: hold.id },
             data: { previousStripePaymentIntentId: null },
@@ -360,6 +386,7 @@ export class DelayedBookingPaymentsService {
           if (hold.provider === 'STRIPE' && hold.stripePaymentIntentId) {
             const current = await this.stripe.inspectAuthorization(
               hold.stripePaymentIntentId,
+              hold.stripeAccountId,
             );
             if (current.status !== 'requires_capture') {
               await this.authorizationFailed(
@@ -439,6 +466,15 @@ export class DelayedBookingPaymentsService {
           });
           const intent = await this.stripe.createManualAuthorization({
             customerId: user.stripeCustomerId!,
+            stripeAccountId: hold.stripeAccountId,
+            applicationFeeAmount: hold.stripeAccountId
+              ? minor(
+                  directApplicationFee(
+                    hold.amount,
+                    hold.customerPlatformFeeAmount,
+                  ),
+                )
+              : undefined,
             amount: minor(hold.amount),
             currency: hold.currency.toLowerCase(),
             stripePaymentMethodId: hold.stripePaymentMethodId!,
@@ -465,11 +501,13 @@ export class DelayedBookingPaymentsService {
         }
         let intent = await this.stripe.inspectAuthorization(
           hold.stripePaymentIntentId,
+          hold.stripeAccountId,
         );
         if (intent.status === 'requires_confirmation')
           intent = await this.stripe.confirmManualAuthorization(
             intent.id,
             `booking_confirm_${hold.id}_${hold.authorizationAttempt}`,
+            hold.stripeAccountId,
           );
         if (
           intent.amount !== minor(hold.amount) ||
@@ -502,7 +540,8 @@ export class DelayedBookingPaymentsService {
             stripeChargeId: charge?.id,
             authorizationExpiresAt: new Date(expires * 1000),
           });
-          if (previous) await this.releaseStripeIntent(previous);
+          if (previous)
+            await this.releaseStripeIntent(previous, hold.stripeAccountId);
           await tx.paymentHold.update({
             where: { id: hold.id },
             data: { previousStripePaymentIntentId: null },
@@ -663,6 +702,7 @@ export class DelayedBookingPaymentsService {
         ) {
           const intent = await this.stripe.inspectAuthorization(
             hold.stripePaymentIntentId,
+            hold.stripeAccountId,
           );
           if (intent.status === 'requires_capture')
             hold = await tx.paymentHold.update({
@@ -772,13 +812,16 @@ export class DelayedBookingPaymentsService {
     });
   }
 
-  private async releaseStripeIntent(id: string) {
-    const intent = await this.stripe.inspectAuthorization(id);
+  private async releaseStripeIntent(id: string, accountId?: string | null) {
+    const intent = await this.stripe.inspectAuthorization(id, accountId);
     if (intent.status === 'canceled' || intent.status === 'succeeded') return;
     try {
-      await this.stripe.cancelPaymentIntentIfExists(id);
+      await this.stripe.cancelPaymentIntentIfExists(id, accountId);
     } catch (error) {
-      if ((await this.stripe.inspectAuthorization(id)).status !== 'canceled')
+      if (
+        (await this.stripe.inspectAuthorization(id, accountId)).status !==
+        'canceled'
+      )
         throw error;
     }
   }
@@ -809,12 +852,16 @@ export class DelayedBookingPaymentsService {
         hold.previousStripePaymentIntentId,
       ])
         if (id) {
-          await this.releaseStripeIntent(id);
+          await this.releaseStripeIntent(id, hold.stripeAccountId);
         }
     }
   }
 
-  async captureDelivery(customerId: string, requestId: string) {
+  async captureDelivery(
+    customerId: string,
+    requestId: string,
+    releaseNow = false,
+  ) {
     const original = await this.prisma.paymentHold.findUnique({
       where: { requestId },
     });
@@ -835,6 +882,25 @@ export class DelayedBookingPaymentsService {
         );
       const hold = request.paymentHold!;
       if (hold.status === 'PAYMENT_CAPTURED') return;
+      if (hold.stripeAccountId) {
+        // Customer confirmation records eligibility. Only the payout worker may
+        // capture after the existing availability delay and review checks.
+        if (!releaseNow) return;
+        const settlement = await tx.tripPaymentSettlement.findUniqueOrThrow({
+          where: { requestId },
+        });
+        const earning = await tx.driverEarning.findUniqueOrThrow({
+          where: { tripId: requestId },
+        });
+        if (
+          settlement.requiresManualReview ||
+          settlement.status !== 'AUTHORIZED' ||
+          (earning.availableAt && earning.availableAt.getTime() > Date.now())
+        )
+          throw new ConflictException(
+            'This trip is not yet eligible for payment release.',
+          );
+      }
       if (
         hold.confirmationState !== 'CONFIRMED' &&
         hold.operationKind !== 'DELIVERY'
@@ -866,6 +932,7 @@ export class DelayedBookingPaymentsService {
         if (hold.stripePaymentIntentId) {
           const intent = await this.stripe.inspectAuthorization(
             hold.stripePaymentIntentId,
+            hold.stripeAccountId,
           );
           // Do not cancel a successful approval just because the SDK lost its response.
           if (intent.status === 'requires_capture') return;
@@ -891,6 +958,7 @@ export class DelayedBookingPaymentsService {
       if (hold.provider === 'STRIPE') {
         let intent = await this.stripe.inspectAuthorization(
           hold.stripePaymentIntentId ?? hold.previousStripePaymentIntentId!,
+          hold.stripeAccountId,
         );
         if (
           !['requires_capture', 'succeeded'].includes(intent.status) &&
@@ -898,6 +966,7 @@ export class DelayedBookingPaymentsService {
         )
           intent = await this.stripe.inspectAuthorization(
             hold.previousStripePaymentIntentId,
+            hold.stripeAccountId,
           );
         const captured =
           intent.status === 'succeeded'
@@ -906,6 +975,21 @@ export class DelayedBookingPaymentsService {
                 intent.id,
                 minor(amount),
                 `booking_${hold.operationKind}_${hold.id}`,
+                hold.stripeAccountId,
+                hold.stripeAccountId
+                  ? minor(
+                      hold.operationKind === 'CANCEL'
+                        ? amount.sub(
+                            request.assignedDriverId
+                              ? amount.mul(0.5).toDecimalPlaces(2)
+                              : zero(),
+                          )
+                        : directApplicationFee(
+                            hold.amount,
+                            hold.customerPlatformFeeAmount,
+                          ),
+                    )
+                  : undefined,
               );
         if (
           captured.status !== 'succeeded' ||
@@ -919,6 +1003,10 @@ export class DelayedBookingPaymentsService {
           where: { id: hold.id },
           data: {
             stripePaymentIntentId: captured.id,
+            stripeChargeId:
+              typeof captured.latest_charge === 'string'
+                ? captured.latest_charge
+                : captured.latest_charge?.id,
             previousStripePaymentIntentId: null,
           },
         });

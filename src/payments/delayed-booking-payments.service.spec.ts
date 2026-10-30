@@ -564,6 +564,8 @@ describe('delayed booking money lifecycle', () => {
       expect.any(String),
       1575,
       'booking_CANCEL_hold',
+      null,
+      undefined,
     );
     expect(x.state.request.status).toBe('CANCELLED');
     expect(x.state.request.capturedAmount.toNumber()).toBe(15.75);
@@ -787,5 +789,122 @@ describe('delayed booking money lifecycle', () => {
       bankApprovalSeconds: 300,
       capture: 'CUSTOMER_CONFIRMS_DELIVERY',
     });
+  });
+});
+
+describe('direct booking authorization and release', () => {
+  let prior: string | undefined;
+  beforeEach(() => {
+    prior = process.env.STRIPE_DIRECT_CHARGES_ENABLED;
+    process.env.STRIPE_DIRECT_CHARGES_ENABLED = 'true';
+    jest.useFakeTimers().setSystemTime(start);
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    if (prior === undefined) delete process.env.STRIPE_DIRECT_CHARGES_ENABLED;
+    else process.env.STRIPE_DIRECT_CHARGES_ENABLED = prior;
+  });
+  function directFixture() {
+    const x = setup('CREDIT_CARD');
+    x.db.driverProfile = {
+      findUniqueOrThrow: jest.fn(async () => ({
+        stripeAccountId: 'acct_original',
+      })),
+    };
+    x.stripe.retrieveAccount = jest.fn(async () => ({ payouts_enabled: true }));
+    x.db.tripPaymentSettlement.findUniqueOrThrow = jest.fn(
+      async () => x.state.settlement,
+    );
+    x.db.driverEarning.findUniqueOrThrow = jest.fn(async () => ({
+      availableAt: new Date(start.getTime() + 660000),
+    }));
+    return x;
+  }
+
+  it('pins the driver account and commission before authorization and keeps that account after reconnection', async () => {
+    const x = directFixture();
+    await x.authorize();
+    expect(x.state.hold.stripeAccountId).toBe('acct_original');
+    expect(x.stripe.createManualAuthorization).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeAccountId: 'acct_original',
+        amount: 10500,
+        applicationFeeAmount: 2000,
+      }),
+    );
+    expect(x.stripe.confirmManualAuthorization).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'acct_original',
+    );
+    x.db.driverProfile.findUniqueOrThrow.mockResolvedValue({
+      stripeAccountId: 'acct_reconnected',
+    });
+    jest.setSystemTime(x.state.hold.authorizationExpiresAt.getTime() - 60000);
+    await x.service.process('request');
+    await x.service.process('request');
+    expect(x.stripe.createManualAuthorization).toHaveBeenLastCalledWith(
+      expect.objectContaining({ stripeAccountId: 'acct_original' }),
+    );
+    expect(x.stripe.captureAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('keeps customer confirmation, availability delay and review gates before capturing, then captures once', async () => {
+    const x = directFixture();
+    await x.authorize();
+    x.state.request.status = 'DELIVERED';
+    x.state.request.assignedDriverId = 'driver';
+    await expect(
+      x.service.captureDelivery('customer', 'request', true),
+    ).rejects.toThrow('Client-confirmed');
+    x.state.request.deliveryConfirmedByCustomerAt = new Date();
+    await x.service.captureDelivery('customer', 'request');
+    expect(x.stripe.captureAuthorization).not.toHaveBeenCalled();
+    await expect(
+      x.service.captureDelivery('customer', 'request', true),
+    ).rejects.toThrow('not yet eligible');
+    jest.setSystemTime(start.getTime() + 660000);
+    x.state.settlement.requiresManualReview = true;
+    await expect(
+      x.service.captureDelivery('customer', 'request', true),
+    ).rejects.toThrow('not yet eligible');
+    x.state.settlement.requiresManualReview = false;
+    await x.service.captureDelivery('customer', 'request', true);
+    await x.service.captureDelivery('customer', 'request', true);
+    expect(x.stripe.captureAuthorization).toHaveBeenCalledTimes(1);
+    expect(x.stripe.captureAuthorization).toHaveBeenCalledWith(
+      expect.any(String),
+      10500,
+      'booking_DELIVERY_hold',
+      'acct_original',
+      2000,
+    );
+    expect(x.state.hold.status).toBe('PAYMENT_CAPTURED');
+  });
+
+  it('captures the existing cancellation fee and splits it 50/50 on the direct account', async () => {
+    const x = directFixture();
+    await x.authorize();
+    x.state.request.assignedDriverId = 'driver';
+    x.state.hold.operationKind = 'CANCEL';
+    x.state.hold.operationAmount = D('15.75');
+    x.state.hold.confirmationState = 'CANCELLING';
+    await x.service.process('request');
+    expect(x.stripe.captureAuthorization).toHaveBeenCalledWith(
+      expect.any(String),
+      1575,
+      'booking_CANCEL_hold',
+      'acct_original',
+      787,
+    );
+    expect(x.state.settlement.driverShareAmount.toFixed(2)).toBe('7.88');
+    expect(x.state.settlement.platformShareAmount.toFixed(2)).toBe('7.87');
+  });
+
+  it('does not use wallet balances or create platform charges for a new direct booking', async () => {
+    const x = setup('APP_WALLET');
+    await expect(x.stage()).rejects.toThrow('require a card');
+    expect(x.db.paymentHold.create).not.toHaveBeenCalled();
+    expect(x.db.customerWallet.update).not.toHaveBeenCalled();
   });
 });

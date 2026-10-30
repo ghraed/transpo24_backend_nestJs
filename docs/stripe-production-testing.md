@@ -139,9 +139,9 @@ connected account, verifies the responsibility settings and onboarding link,
 then closes the fixture. It does not write app data or create payments.
 
 **Rollout scope:** this change enables account creation and onboarding only.
-The existing payment code still uses platform charges followed by transfers.
-That funds flow must be migrated to compatible direct charges before using the
-new merchant accounts for payments. Completing onboarding does not complete the
+The existing production payment code uses platform charges followed by transfers.
+The direct-charge migration is implemented behind `STRIPE_DIRECT_CHARGES_ENABLED`;
+follow [the coordinated rollout](stripe-direct-charges.md) before enabling it. Completing onboarding does not complete the
 payment migration. Trip-completion, release, commission, cancellation and dispute
 conditions are unchanged by this onboarding change. Existing balances and
 payments must not be moved between accounts as part of account setup.
