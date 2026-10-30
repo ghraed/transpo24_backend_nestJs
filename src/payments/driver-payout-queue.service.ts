@@ -188,7 +188,8 @@ export class DriverPayoutQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   private getTripJobId(tripId: string): string {
-    return `driver-payout:${tripId}`;
+    // Colons are reserved by BullMQ and reject custom payout job IDs.
+    return `driver-payout-${tripId}`;
   }
 
   private resolveDelay(runAt?: Date | null): number {

@@ -1,15 +1,42 @@
 import { ConfigService } from '@nestjs/config';
-import { Queue, Worker } from 'bullmq';
+import { Queue, Worker, type JobsOptions } from 'bullmq';
 import { DriverPayoutQueueService } from './driver-payout-queue.service';
 
 jest.mock('bullmq', () => ({ Queue: jest.fn(), Worker: jest.fn() }));
 
 const queueConstructor = Queue as jest.MockedClass<typeof Queue>;
 const workerConstructor = Worker as jest.MockedClass<typeof Worker>;
+const { Job: ActualJob } =
+  jest.requireActual<typeof import('bullmq')>('bullmq');
+
+// Exercise BullMQ's real pre-Redis validation so mocked enqueueing cannot
+// silently accept identifiers that the production queue rejects.
+class ValidatedJob extends ActualJob {
+  assertValid() {
+    this.validateOptions(this.asJSON());
+  }
+}
 
 function setup(redisHost?: string) {
   const queue = {
-    add: jest.fn().mockResolvedValue(undefined),
+    add: jest
+      .fn()
+      .mockImplementation(
+        async (name: string, data: unknown, options: JobsOptions) => {
+          const job = new ValidatedJob(
+            {
+              name: 'driver-payouts',
+              qualifiedName: 'bull:driver-payouts',
+              keys: {},
+              toKey: (key: string) => `bull:driver-payouts:${key}`,
+            } as never,
+            name,
+            data,
+            options,
+          );
+          job.assertValid();
+        },
+      ),
     getJob: jest.fn().mockResolvedValue(null),
     close: jest.fn().mockResolvedValue(undefined),
   };
@@ -112,7 +139,24 @@ describe('DriverPayoutQueueService', () => {
         tripId: 'trip-1',
         reason: 'admin_manual_retry',
       }),
-      expect.objectContaining({ jobId: 'driver-payout:trip-1' }),
+      expect.objectContaining({ jobId: 'driver-payout-trip-1' }),
+    );
+  });
+
+  it('enqueues a trip payout with a BullMQ-valid ID and uses that ID for duplicate lookup', async () => {
+    const { service, queue } = setup('redis.local');
+    await service.onModuleInit();
+    queue.add.mockClear();
+    const tripId = 'cmtestpayout00000000000001';
+    await expect(
+      service.enqueueDriverPayout({ tripId, reason: 'delivery' }),
+    ).resolves.toBe(true);
+    const jobId = queue.add.mock.calls[0][2].jobId;
+    expect(queue.getJob).toHaveBeenCalledWith(jobId);
+    expect(queue.add).toHaveBeenCalledWith(
+      'process-driver-payout',
+      expect.objectContaining({ tripId, reason: 'delivery' }),
+      expect.objectContaining({ delay: 0 }),
     );
   });
 
