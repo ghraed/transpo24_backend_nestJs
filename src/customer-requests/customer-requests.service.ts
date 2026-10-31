@@ -4026,9 +4026,9 @@ export class CustomerRequestsService {
       ),
       canEdit: false,
       paymentPolicy: paymentPolicy(
-        Boolean(request.paymentHold?.confirmationStartedAt) ||
-          (!request.paymentHold &&
-            process.env.DELAYED_BOOKING_AUTHORIZATION_ENABLED === 'true'),
+        request.paymentHold
+          ? Boolean(request.paymentHold.confirmationStartedAt)
+          : undefined,
       ),
       confirmation: request.paymentHold
         ? confirmationSummary(request.paymentHold)

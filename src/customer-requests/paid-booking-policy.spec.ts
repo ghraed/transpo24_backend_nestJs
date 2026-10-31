@@ -74,6 +74,41 @@ describe('customer booking disclosure', () => {
     return { row, service, db };
   }
   it.each([
+    ['true', 'false', 'delayed-authorization-v1'],
+    ['false', 'true', 'delayed-authorization-v1'],
+    ['false', 'false', 'immediate-capture-v1'],
+  ])(
+    'unpaid requests use the current policy with direct charges=%s and delayed bookings=%s',
+    (directCharges, delayed, version) => {
+      const previousDirect = process.env.STRIPE_DIRECT_CHARGES_ENABLED;
+      const previousDelayed = process.env.DELAYED_BOOKING_AUTHORIZATION_ENABLED;
+      process.env.STRIPE_DIRECT_CHARGES_ENABLED = directCharges;
+      process.env.DELAYED_BOOKING_AUTHORIZATION_ENABLED = delayed;
+      try {
+        const { row, service } = setup(0, 'QUOTED');
+        const mapper = service as any;
+        jest.spyOn(mapper, 'toResponseDto').mockReturnValue({});
+        const unpaid = mapper.toStatusResponseDto({
+          ...row,
+          paymentHold: null,
+        });
+        expect(unpaid.paymentPolicy.version).toBe(version);
+        // Existing captured bookings retain the policy they used, even after rollout.
+        expect(mapper.toStatusResponseDto(row).paymentPolicy.version).toBe(
+          'immediate-capture-v1',
+        );
+      } finally {
+        if (previousDirect === undefined)
+          delete process.env.STRIPE_DIRECT_CHARGES_ENABLED;
+        else process.env.STRIPE_DIRECT_CHARGES_ENABLED = previousDirect;
+        if (previousDelayed === undefined)
+          delete process.env.DELAYED_BOOKING_AUTHORIZATION_ENABLED;
+        else
+          process.env.DELAYED_BOOKING_AUTHORIZATION_ENABLED = previousDelayed;
+      }
+    },
+  );
+  it.each([
     [600000, false],
     [600001, true],
   ])(
