@@ -99,7 +99,7 @@ function setup(method = 'APP_WALLET') {
         async ({ create, update }) =>
           (state.settlement = state.settlement
             ? merge(state.settlement, update)
-            : { ...create }),
+            : { driverPayoutState: 'NOT_EARNED', ...create }),
       ),
       updateMany: jest.fn(async ({ data }) => {
         if (state.settlement) merge(state.settlement, data);
@@ -138,6 +138,7 @@ function setup(method = 'APP_WALLET') {
           status: 'requires_confirmation',
           amount: input.amount,
           currency: input.currency,
+          application_fee_amount: input.applicationFeeAmount ?? null,
           client_secret: `${id}_secret`,
           amount_received: 0,
           latest_charge: {
@@ -164,13 +165,24 @@ function setup(method = 'APP_WALLET') {
       intents.get(id).status = 'canceled';
       return intents.get(id);
     }),
-    captureAuthorization: jest.fn(async (id: string, amount: number) => {
-      Object.assign(intents.get(id), {
-        status: 'succeeded',
-        amount_received: amount,
-      });
-      return { ...intents.get(id) };
-    }),
+    captureAuthorization: jest.fn(
+      async (
+        id: string,
+        amount: number,
+        _key: string,
+        _account: string,
+        applicationFee?: number,
+      ) => {
+        Object.assign(intents.get(id), {
+          status: 'succeeded',
+          amount_received: amount,
+          ...(applicationFee !== undefined
+            ? { application_fee_amount: applicationFee }
+            : {}),
+        });
+        return { ...intents.get(id) };
+      },
+    ),
   };
   const notifications = {
     notifyCustomerTripUpdate: jest.fn(),
@@ -899,6 +911,133 @@ describe('direct booking authorization and release', () => {
     );
     expect(x.state.settlement.driverShareAmount.toFixed(2)).toBe('7.88');
     expect(x.state.settlement.platformShareAmount.toFixed(2)).toBe('7.87');
+  });
+
+  it.each(['DRIVER_GOING_TO_PICKUP', 'IN_TRANSIT', 'CANCELLED'])(
+    'reconciles an external capture without cancelling or restoring a %s trip',
+    async (status) => {
+      const x = directFixture();
+      await x.authorize();
+      x.state.request.status = status;
+      const intent = x.intents.get(String(x.state.hold.stripePaymentIntentId));
+      Object.assign(intent, { status: 'succeeded', amount_received: 10500 });
+      await x.service.process('request');
+      await x.service.process('request');
+      expect(x.state.request.status).toBe(status);
+      expect(x.state.request.paymentStatus).toBe('PAYMENT_CAPTURED');
+      expect(x.state.hold).toMatchObject({
+        status: 'PAYMENT_CAPTURED',
+        confirmationState: 'MANUAL_REVIEW',
+      });
+      expect(x.state.settlement.collectedAmount.toNumber()).toBe(105);
+      expect(x.state.settlement.requiresManualReview).toBe(true);
+      expect(x.state.settlement.driverPayoutState).toBe('NOT_EARNED');
+      expect(x.stripe.captureAuthorization).not.toHaveBeenCalled();
+      expect(x.stripe.cancelPaymentIntentIfExists).not.toHaveBeenCalled();
+      expect(x.db.driverEarning.upsert).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { amount_received: 10000 },
+    { currency: 'usd' },
+    { application_fee_amount: 1 },
+  ])('flags mismatched captured money for review: %j', async (change) => {
+    const x = directFixture();
+    await x.authorize();
+    Object.assign(x.intents.get(String(x.state.hold.stripePaymentIntentId)), {
+      status: 'succeeded',
+      amount_received: 10500,
+      ...change,
+    });
+    await x.service.process('request');
+    expect(x.state.settlement.requiresManualReview).toBe(true);
+    expect(x.state.hold.failureReason).toContain('does not match');
+    expect(x.state.hold.status).toBe('PAYMENT_CAPTURED');
+    expect(x.state.request.status).not.toBe('CANCELLED');
+  });
+
+  it('does not record release when Stripe has not confirmed cancellation', async () => {
+    const x = directFixture();
+    await x.authorize();
+    x.stripe.cancelPaymentIntentIfExists.mockResolvedValueOnce(null);
+    await expect(x.service.cancel('customer', 'request', true)).rejects.toThrow(
+      'not confirmed release',
+    );
+    expect(x.state.hold.status).toBe('PAYMENT_HELD');
+    expect(x.state.request.status).not.toBe('CANCELLED');
+  });
+
+  it('keeps refunds visible when retrying a persisted delivery capture', async () => {
+    const x = directFixture();
+    await x.authorize();
+    Object.assign(x.intents.get(String(x.state.hold.stripePaymentIntentId)), {
+      status: 'succeeded',
+      amount_received: 10500,
+      latest_charge: { id: 'ch_1', amount_refunded: 1000 },
+    });
+    Object.assign(x.state.hold, {
+      operationKind: 'DELIVERY',
+      operationAmount: D(105),
+    });
+    await x.service.process('request');
+    expect(x.state.hold.status).toBe('PAYMENT_PARTIALLY_REFUNDED');
+    expect(x.state.settlement.refundedAmount.toNumber()).toBe(10);
+    expect(x.state.settlement.requiresManualReview).toBe(true);
+  });
+
+  it('does not report release when capture wins a cancellation race', async () => {
+    const x = directFixture();
+    await x.authorize();
+    x.stripe.cancelPaymentIntentIfExists.mockImplementationOnce(
+      async (id: string) => {
+        Object.assign(x.intents.get(id), {
+          status: 'succeeded',
+          amount_received: 10500,
+        });
+        throw new Error('Already captured');
+      },
+    );
+    await expect(x.service.cancel('customer', 'request', true)).rejects.toThrow(
+      'release were not confirmed',
+    );
+    expect(x.state.request.status).not.toBe('CANCELLED');
+    expect(x.state.hold.status).toBe('PAYMENT_CAPTURED');
+    expect(x.state.settlement.collectedAmount.toNumber()).toBe(105);
+    expect(x.state.settlement.requiresManualReview).toBe(true);
+  });
+
+  it('reconciles a full external capture instead of treating it as a partial cancellation fee', async () => {
+    const x = directFixture();
+    await x.authorize();
+    Object.assign(x.intents.get(String(x.state.hold.stripePaymentIntentId)), {
+      status: 'succeeded',
+      amount_received: 10500,
+    });
+    Object.assign(x.state.hold, {
+      operationKind: 'CANCEL',
+      operationAmount: D('15.75'),
+      confirmationState: 'CANCELLING',
+    });
+    await x.service.process('request');
+    expect(x.state.hold.status).toBe('PAYMENT_CAPTURED');
+    expect(x.state.settlement.collectedAmount.toNumber()).toBe(105);
+    expect(x.state.settlement.requiresManualReview).toBe(true);
+    expect(x.state.request.status).not.toBe('CANCELLED');
+  });
+
+  it('preserves a refund observed with an unexpected capture', async () => {
+    const x = directFixture();
+    await x.authorize();
+    Object.assign(x.intents.get(String(x.state.hold.stripePaymentIntentId)), {
+      status: 'succeeded',
+      amount_received: 10500,
+      latest_charge: { id: 'ch_1', amount_refunded: 10500 },
+    });
+    await x.service.process('request');
+    expect(x.state.hold.status).toBe('PAYMENT_REFUNDED');
+    expect(x.state.settlement.refundedAmount.toNumber()).toBe(105);
+    expect(x.state.settlement.refundableAmount.toNumber()).toBe(0);
   });
 
   it('does not use wallet balances or create platform charges for a new direct booking', async () => {

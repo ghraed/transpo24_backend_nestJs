@@ -630,6 +630,21 @@ export class DriverController {
     });
   }
 
+  @Get('me/payment-history')
+  async getMyPaymentHistory(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: DriverEarningsListQueryDto,
+  ): Promise<PaginatedResponse<DriverEarningItemResponse>> {
+    return this.driverService.getDriverPaymentHistory({
+      driverId: request.user.id,
+      page: query.page ?? 1,
+      limit: query.limit ?? 20,
+      status: query.status,
+      from: query.from,
+      to: query.to,
+    });
+  }
+
   @Get('me/ratings')
   async getMyRatings(
     @Req() request: AuthenticatedRequest,

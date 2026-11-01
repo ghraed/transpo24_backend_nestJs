@@ -317,6 +317,10 @@ export type DriverEarningsSummaryResponse = {
 };
 
 export type DriverEarningItemResponse = {
+  paymentStatus?: string | null;
+  tripStatus?: TransportRequestStatus;
+  deliveredAt?: string | null;
+  requiresManualReview?: boolean;
   id: string;
   tripId: string;
   grossAmount: number;

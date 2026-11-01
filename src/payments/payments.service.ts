@@ -2803,6 +2803,21 @@ export class PaymentsService {
       return;
     }
 
+    // Delayed bookings own their state machine. Re-read Stripe through that
+    // worker so duplicate/out-of-order webhooks cannot regress a captured hold.
+    const delayedHold = await this.prisma.paymentHold.findUnique({
+      where: { stripePaymentIntentId: paymentIntent.id },
+      select: PAYMENT_HOLD_SELECT,
+    });
+    if (delayedHold?.confirmationStartedAt) {
+      if ((delayedHold.stripeAccountId ?? null) !== (accountId ?? null)) return;
+      if (!this.delayedBookings)
+        throw new ServiceUnavailableException(
+          'Booking payment reconciliation is unavailable.',
+        );
+      await this.delayedBookings.process(delayedHold.requestId);
+      return;
+    }
     await this.prisma.$transaction(async (tx) => {
       let hold = await tx.paymentHold.findUnique({
         where: { stripePaymentIntentId: paymentIntent.id },

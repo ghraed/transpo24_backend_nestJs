@@ -95,3 +95,26 @@ References: [Direct charges](https://docs.stripe.com/connect/direct-charges?plat
 [cloning saved cards](https://docs.stripe.com/connect/direct-charges-multiple-accounts),
 [Stripe Managed Risk](https://docs.stripe.com/connect/risk-management/managed-risk),
 and [authorization and capture](https://docs.stripe.com/payments/place-a-hold-on-a-payment-method).
+
+## Capture reconciliation and driver history
+
+A successful Stripe capture is not an expired authorization. The booking worker
+and connected-account payment webhooks reconcile against the current intent on
+its pinned account. Unexpected captures preserve the captured amount and charge
+reference, put the settlement under manual review, and do not cancel or restore
+the trip. No additional charge, transfer or automatic refund is performed.
+Cancellation records funds as released only after Stripe confirms cancellation;
+if capture wins that race, the captured payment is committed for review instead.
+Expected capture retries still use their persisted operation and idempotency key.
+Amount, currency and direct application fee must match before normal accounting.
+
+`GET /driver/me/payment-history` is an authenticated, paginated history containing
+held payments before an earning exists, together with captured earnings. It
+returns one entry per trip and preserves the existing earnings-summary endpoint.
+The driver history labels capture separately from net earnings before Stripe
+fees. Pending entries open `/driver-trip-completed` with the original trip ID;
+opening an active payment neither stops tracking nor confirms delivery. Release
+still requires the existing customer confirmation, availability and review gates.
+Deploy the backend endpoint before publishing the driver update. Existing
+cancelled/captured inconsistencies require reconciliation; the release itself
+does not restore a cancelled booking or choose a refund on behalf of its owner.

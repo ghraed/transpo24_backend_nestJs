@@ -1,4 +1,7 @@
-import { customerOfferPrice } from '../payments/customer-pricing';
+import {
+  customerOfferPrice,
+  DRIVER_PLATFORM_COMMISSION_RATE,
+} from '../payments/customer-pricing';
 import { distanceToRouteKm, type RoutePoint } from './route-distance';
 import { assertDriverApproved } from '../auth/driver-approval';
 import { normalizeDriverBusiness } from './driver-business';
@@ -2739,6 +2742,116 @@ export class DriverService {
 
     return {
       items: items.map((item) => this.mapDriverEarningItemResponse(item)),
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  async getDriverPaymentHistory(
+    input: DriverEarningsListInput,
+  ): Promise<PaginatedResponse<DriverEarningItemResponse>> {
+    const profile = await this.validateDriverCanViewEarnings(input.driverId);
+    const dateRange = this.validateDateRange(input.from, input.to);
+    const page = this.normalizePage(input.page);
+    const limit = this.normalizeLimit(input.limit);
+    // Query trips once: a held payment can later gain an earning without
+    // becoming a duplicate entry or disappearing between pagination pages.
+    const where: Prisma.TransportRequestWhereInput = {
+      OR: [
+        { driverEarning: { is: { driverId: profile.id } } },
+        { paymentHold: { is: { driverId: profile.id } } },
+      ],
+      ...(dateRange
+        ? { createdAt: { gte: dateRange.from, lte: dateRange.to } }
+        : {}),
+      ...(input.status
+        ? {
+            AND: [
+              {
+                OR: [
+                  {
+                    driverEarning: {
+                      is: { driverId: profile.id, status: input.status },
+                    },
+                  },
+                  ...(['PENDING', 'CANCELLED'].includes(input.status)
+                    ? [
+                        {
+                          driverEarning: { is: null },
+                          paymentHold: { is: { driverId: profile.id } },
+                          status:
+                            input.status === 'CANCELLED'
+                              ? TransportRequestStatus.CANCELLED
+                              : { not: TransportRequestStatus.CANCELLED },
+                        },
+                      ]
+                    : []),
+                ],
+              },
+            ],
+          }
+        : {}),
+    };
+    const [trips, total] = await Promise.all([
+      this.prisma.transportRequest.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          driverEarning: true,
+          paymentHold: true,
+          paymentSettlement: true,
+        },
+      }),
+      this.prisma.transportRequest.count({ where }),
+    ]);
+    return {
+      items: trips.map((trip) => {
+        const hold = trip.paymentHold;
+        // A re-assignment must never expose another driver's earning/payment.
+        const earning =
+          trip.driverEarning?.driverId === profile.id
+            ? trip.driverEarning
+            : null;
+        const ownHold = hold?.driverId === profile.id ? hold : null;
+        const gross = ownHold
+          ? ownHold.amount.sub(ownHold.customerPlatformFeeAmount)
+          : new Prisma.Decimal(0);
+        const commission = gross
+          .mul(DRIVER_PLATFORM_COMMISSION_RATE)
+          .toDecimalPlaces(2);
+        const row = earning
+          ? this.mapDriverEarningItemResponse(earning)
+          : {
+              id: ownHold!.id,
+              tripId: trip.id,
+              grossAmount: Number(gross),
+              platformFeeAmount: Number(commission),
+              netAmount: Number(gross.sub(commission)),
+              currency: ownHold!.currency,
+              status:
+                trip.status === 'CANCELLED'
+                  ? DriverEarningStatus.CANCELLED
+                  : DriverEarningStatus.PENDING,
+              createdAt: trip.createdAt.toISOString(),
+              availableAt: null,
+              paidOutAt: null,
+              stripeTransferId: null,
+              stripeTransferStatus: null,
+            };
+        return {
+          ...row,
+          paymentStatus: ownHold?.status ?? null,
+          tripStatus: trip.status,
+          deliveredAt: trip.deliveredAt?.toISOString() ?? null,
+          requiresManualReview:
+            ownHold?.confirmationState === 'MANUAL_REVIEW' ||
+            (trip.paymentSettlement?.requiresManualReview ?? false),
+        };
+      }),
       page,
       limit,
       total,

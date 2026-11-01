@@ -298,6 +298,27 @@ export class DelayedBookingPaymentsService {
           where: { id: requestId },
         });
         if (!hold?.confirmationStartedAt || !request) return null;
+        // Dashboard captures and lost capture responses must never be mistaken
+        // for expired authorizations. Inspect the current, account-scoped intent.
+        if (
+          !hold.operationKind &&
+          hold.provider === 'STRIPE' &&
+          hold.stripePaymentIntentId &&
+          ![
+            'PAYMENT_CAPTURED',
+            'PAYMENT_REFUNDED',
+            'PAYMENT_PARTIALLY_REFUNDED',
+          ].includes(hold.status)
+        ) {
+          const intent = await this.stripe.inspectAuthorization(
+            hold.stripePaymentIntentId,
+            hold.stripeAccountId,
+          );
+          if (intent.status === 'succeeded') {
+            await this.reconcileUnexpectedCapture(tx, hold, request, intent);
+            return null;
+          }
+        }
         if (
           hold.previousStripePaymentIntentId &&
           ['CONFIRMED', 'CAPTURED'].includes(hold.confirmationState ?? '')
@@ -389,6 +410,15 @@ export class DelayedBookingPaymentsService {
               hold.stripeAccountId,
             );
             if (current.status !== 'requires_capture') {
+              if (current.status === 'succeeded') {
+                await this.reconcileUnexpectedCapture(
+                  tx,
+                  hold,
+                  request,
+                  current,
+                );
+                return null;
+              }
               await this.authorizationFailed(
                 tx,
                 hold,
@@ -765,6 +795,10 @@ export class DelayedBookingPaymentsService {
       where: { requestId },
     });
     const fee = Number(hold.operationAmount ?? 0);
+    if (hold.confirmationState !== 'CANCELLED')
+      throw new ConflictException(
+        'Payment requires review; cancellation and release were not confirmed.',
+      );
     return {
       requestStatus: 'CANCELLED' as const,
       currency: hold.currency,
@@ -781,7 +815,7 @@ export class DelayedBookingPaymentsService {
     request: TransportRequest,
     reason: string,
   ) {
-    await this.release(tx, hold);
+    if (!(await this.releaseOrReconcile(tx, hold, request))) return;
     await tx.paymentHold.update({
       where: { id: hold.id },
       data: {
@@ -812,11 +846,28 @@ export class DelayedBookingPaymentsService {
     });
   }
 
-  private async releaseStripeIntent(id: string, accountId?: string | null) {
+  private async releaseStripeIntent(
+    id: string,
+    accountId?: string | null,
+    allowCaptured = false,
+  ) {
     const intent = await this.stripe.inspectAuthorization(id, accountId);
-    if (intent.status === 'canceled' || intent.status === 'succeeded') return;
+    if (intent.status === 'canceled') return;
+    if (intent.status === 'succeeded') {
+      if (allowCaptured) return;
+      throw new ConflictException(
+        'Captured payment requires reconciliation before release.',
+      );
+    }
     try {
-      await this.stripe.cancelPaymentIntentIfExists(id, accountId);
+      const cancelled = await this.stripe.cancelPaymentIntentIfExists(
+        id,
+        accountId,
+      );
+      if (cancelled?.status !== 'canceled')
+        throw new ConflictException(
+          'Stripe has not confirmed release of the payment hold.',
+        );
     } catch (error) {
       if (
         (await this.stripe.inspectAuthorization(id, accountId)).status !==
@@ -826,7 +877,11 @@ export class DelayedBookingPaymentsService {
     }
   }
 
-  private async release(tx: Prisma.TransactionClient, hold: PaymentHold) {
+  private async release(
+    tx: Prisma.TransactionClient,
+    hold: PaymentHold,
+    allowCaptured = false,
+  ) {
     if (hold.provider === 'APP_WALLET' && hold.status === 'PAYMENT_HELD') {
       await tx.customerWallet.update({
         where: { customerId: hold.customerId },
@@ -852,9 +907,120 @@ export class DelayedBookingPaymentsService {
         hold.previousStripePaymentIntentId,
       ])
         if (id) {
-          await this.releaseStripeIntent(id, hold.stripeAccountId);
+          await this.releaseStripeIntent(
+            id,
+            hold.stripeAccountId,
+            allowCaptured,
+          );
         }
     }
+  }
+
+  private async releaseOrReconcile(
+    tx: Prisma.TransactionClient,
+    hold: PaymentHold,
+    request: TransportRequest,
+  ) {
+    try {
+      await this.release(tx, hold);
+      return true;
+    } catch (error) {
+      // Capture can win the race with cancellation at Stripe even while our
+      // database request is locked. Commit the observed money state for review.
+      if (hold.provider === 'STRIPE' && hold.stripePaymentIntentId) {
+        const intent = await this.stripe.inspectAuthorization(
+          hold.stripePaymentIntentId,
+          hold.stripeAccountId,
+        );
+        if (intent.status === 'succeeded') {
+          await this.reconcileUnexpectedCapture(tx, hold, request, intent);
+          return false;
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async reconcileUnexpectedCapture(
+    tx: Prisma.TransactionClient,
+    hold: PaymentHold,
+    request: TransportRequest,
+    intent: Awaited<ReturnType<StripeService['inspectAuthorization']>>,
+  ) {
+    const amount = new Prisma.Decimal(intent.amount_received).div(100);
+    const refunded = new Prisma.Decimal(
+      typeof intent.latest_charge === 'object' && intent.latest_charge
+        ? (intent.latest_charge.amount_refunded ?? 0)
+        : 0,
+    ).div(100);
+    const expectedFee = hold.stripeAccountId
+      ? minor(directApplicationFee(hold.amount, hold.customerPlatformFeeAmount))
+      : null;
+    const matches =
+      intent.amount_received === minor(hold.amount) &&
+      intent.currency.toUpperCase() === hold.currency.toUpperCase() &&
+      (!hold.stripeAccountId || intent.application_fee_amount === expectedFee);
+    const reason = matches
+      ? 'Payment was captured outside the pending booking operation. Review delivery and settlement before release.'
+      : 'Captured payment amount, currency or application fee does not match the booking. Reconciliation is required.';
+    await tx.paymentHold.update({
+      where: { id: hold.id },
+      data: {
+        status:
+          refunded.gte(amount) && amount.gt(0)
+            ? 'PAYMENT_REFUNDED'
+            : refunded.gt(0)
+              ? 'PAYMENT_PARTIALLY_REFUNDED'
+              : 'PAYMENT_CAPTURED',
+        confirmationState: 'MANUAL_REVIEW',
+        stripeChargeId:
+          typeof intent.latest_charge === 'string'
+            ? intent.latest_charge
+            : intent.latest_charge?.id,
+        capturedAt: hold.capturedAt ?? new Date(),
+        releasedAt: null,
+        failureReason: reason,
+        operationKind: null,
+      },
+    });
+    await tx.transportRequest.update({
+      where: { id: request.id },
+      data: {
+        paymentStatus:
+          refunded.gte(amount) && amount.gt(0)
+            ? 'PAYMENT_REFUNDED'
+            : refunded.gt(0)
+              ? 'PAYMENT_PARTIALLY_REFUNDED'
+              : 'PAYMENT_CAPTURED',
+        capturedAmount: amount,
+        heldAmount: zero(),
+      },
+    });
+    const settlement = {
+      currency: intent.currency.toUpperCase(),
+      collectedAmount: amount,
+      refundedAmount: refunded,
+      refundableAmount: amount.sub(refunded),
+      status: 'MANUAL_REVIEW' as const,
+      requiresManualReview: true,
+      payoutFailureReason: reason,
+      nextPayoutRetryAt: null,
+    };
+    await tx.tripPaymentSettlement.upsert({
+      where: { requestId: request.id },
+      update: settlement,
+      create: {
+        ...settlement,
+        requestId: request.id,
+        paymentHoldId: hold.id,
+        customerId: hold.customerId,
+        driverId: hold.driverId,
+        driverPayoutState: 'NOT_EARNED',
+      },
+    });
+    this.logger.warn(
+      `Captured booking payment requires review: request=${request.id}, intent=${intent.id}`,
+    );
   }
 
   async captureDelivery(
@@ -991,6 +1157,28 @@ export class DelayedBookingPaymentsService {
                     )
                   : undefined,
               );
+        const expectedApplicationFee =
+          hold.operationKind === 'CANCEL'
+            ? amount.sub(
+                request.assignedDriverId
+                  ? amount.mul(0.5).toDecimalPlaces(2)
+                  : zero(),
+              )
+            : directApplicationFee(hold.amount, hold.customerPlatformFeeAmount);
+        if (
+          captured.status === 'succeeded' &&
+          (captured.amount_received !== minor(amount) ||
+            (typeof captured.latest_charge === 'object' &&
+              captured.latest_charge &&
+              captured.latest_charge.amount_refunded > 0) ||
+            captured.currency.toUpperCase() !== hold.currency.toUpperCase() ||
+            (hold.stripeAccountId &&
+              captured.application_fee_amount !==
+                minor(expectedApplicationFee)))
+        ) {
+          await this.reconcileUnexpectedCapture(tx, hold, request, captured);
+          return;
+        }
         if (
           captured.status !== 'succeeded' ||
           captured.amount_received !== minor(amount)
@@ -998,7 +1186,7 @@ export class DelayedBookingPaymentsService {
           throw new ConflictException(
             'Payment capture is still pending. Please refresh.',
           );
-        if (hold.operationKind === 'CANCEL') await this.release(tx, hold);
+        if (hold.operationKind === 'CANCEL') await this.release(tx, hold, true);
         await tx.paymentHold.update({
           where: { id: hold.id },
           data: {
@@ -1046,7 +1234,7 @@ export class DelayedBookingPaymentsService {
             },
           });
       }
-    } else await this.release(tx, hold);
+    } else if (!(await this.releaseOrReconcile(tx, hold, request))) return;
     const cancelling = hold.operationKind === 'CANCEL';
     const driverShare =
       cancelling && request.assignedDriverId
