@@ -28,6 +28,7 @@ async function main() {
   );
   const service = new StripeService();
   service.getClient = () => stripe;
+  await service.requirePlatformProcessingFees(accountId);
   const run = randomUUID();
   const customer = await stripe.customers.create({
     name: 'Direct charge integration fixture',
@@ -47,10 +48,11 @@ async function main() {
         ? setup.payment_method
         : setup.payment_method.id;
     for (const [currency, amount, fee] of [
+      ['chf', 10500, 2000],
       ['chf', 630, 120],
       ['usd', 525, 100],
     ]) {
-      const key = `direct_fixture_${run}_${currency}`;
+      const key = `direct_fixture_${run}_${currency}_${amount}`;
       const intent = await service.createManualAuthorization({
         customerId: customer.id,
         stripePaymentMethodId: methodId,
@@ -90,6 +92,42 @@ async function main() {
       assert.equal(captured.status, 'succeeded');
       assert.equal(captured.amount_received, amount);
       assert.equal(captured.application_fee_amount, fee);
+      const charge = await stripe.charges.retrieve(
+        typeof captured.latest_charge === 'string'
+          ? captured.latest_charge
+          : captured.latest_charge.id,
+        { expand: ['balance_transaction'] },
+        { stripeAccount: accountId },
+      );
+      const balance = charge.balance_transaction;
+      assert.ok(
+        balance && typeof balance === 'object',
+        'Expected an expanded driver balance transaction.',
+      );
+      assert.equal(
+        balance.fee_details
+          .filter((detail) => detail.type === 'stripe_fee')
+          .reduce((sum, detail) => sum + detail.amount, 0),
+        0,
+        'Stripe processing fees must not be charged to the driver.',
+      );
+      if (currency === 'chf') {
+        assert.equal(
+          balance.currency,
+          'chf',
+          'Use a test merchant settling CHF to verify the exact CHF driver credit.',
+        );
+        assert.equal(
+          balance.net,
+          amount - fee,
+          'Driver must receive the full 85% of the fare.',
+        );
+        assert.equal(
+          balance.fee,
+          fee,
+          'Only the agreed application fee may reduce the driver credit.',
+        );
+      }
       const repeated = await service.captureAuthorization(
         intent.id,
         amount,
@@ -99,7 +137,7 @@ async function main() {
       );
       assert.equal(repeated.latest_charge, captured.latest_charge);
       console.log(
-        `PASS ${currency}: driver receives ${amount - fee} minor units before Stripe fees; platform fee ${fee}; capture retry is idempotent.`,
+        `PASS ${currency}: driver share ${amount - fee} minor units; processing fees paid by platform; platform gross fee ${fee}; capture retry is idempotent.`,
       );
       await service.createRefund({
         paymentIntentId: intent.id,

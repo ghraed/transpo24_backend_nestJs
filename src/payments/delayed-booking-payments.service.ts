@@ -113,6 +113,7 @@ export class DelayedBookingPaymentsService {
         throw new BadRequestException(
           'The driver must complete Stripe onboarding before accepting payment.',
         );
+      await this.stripe.requirePlatformProcessingFees(driver.stripeAccountId);
       stripeAccountId = driver.stripeAccountId;
     }
     const now = new Date();

@@ -862,6 +862,9 @@ describe('direct booking authorization and release', () => {
         stripeAccountId: 'acct_original',
       })),
     };
+    x.stripe.requirePlatformProcessingFees = jest
+      .fn()
+      .mockResolvedValue(undefined);
     x.stripe.retrieveAccount = jest.fn(async () => ({ payouts_enabled: true }));
     x.db.tripPaymentSettlement.findUniqueOrThrow = jest.fn(
       async () => x.state.settlement,
@@ -871,6 +874,18 @@ describe('direct booking authorization and release', () => {
     }));
     return x;
   }
+
+  it('rejects incompatible fee responsibility before creating a booking hold', async () => {
+    const x = directFixture();
+    x.stripe.requirePlatformProcessingFees.mockRejectedValue(
+      new ConflictException('Platform must pay processing fees'),
+    );
+    await expect(x.authorize()).rejects.toThrow(
+      'Platform must pay processing fees',
+    );
+    expect(x.db.paymentHold.create).not.toHaveBeenCalled();
+    expect(x.stripe.createManualAuthorization).not.toHaveBeenCalled();
+  });
 
   it('pins the driver account and commission before authorization and keeps that account after reconnection', async () => {
     const x = directFixture();

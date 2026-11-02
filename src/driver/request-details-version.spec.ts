@@ -79,6 +79,62 @@ function setup() {
   return { service, tx, request, input, notifications };
 }
 
+describe('minimum driver offers', () => {
+  it.each([
+    ['CH', 'CHF', 15],
+    ['US', 'USD', 18.32],
+    ['DE', 'EUR', 18.32],
+    ['AE', 'AED', 67.29],
+    ['SA', 'SAR', 68.7],
+    ['QA', 'QAR', 66.69],
+  ])(
+    '%s enforces the %s minimum of %s using the saved country',
+    async (countryCode, currency, minimum) => {
+      const { service, tx, input } = setup();
+      Object.assign(service, {
+        ensureDriverProfile: jest
+          .fn()
+          .mockResolvedValue({ id: 'driver', countryCode }),
+      });
+      // A caller cannot bypass the country minimum by submitting another currency.
+      await expect(
+        service.sendDriverPriceOffer({
+          ...input,
+          currency: 'CHF',
+          price: Number(minimum) - 0.01,
+        }),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: {
+          code: 'MINIMUM_OFFER_PRICE',
+          minimumAmount: minimum,
+          currency,
+        },
+      });
+      expect(tx.driverOffer.create).not.toHaveBeenCalled();
+      expect(tx.transportRequest.update).not.toHaveBeenCalled();
+      await expect(
+        service.sendDriverPriceOffer({
+          ...input,
+          price: Number(minimum),
+          currency: 'CHF',
+        }),
+      ).resolves.toBeDefined();
+      expect(tx.driverOffer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            currency,
+            price: expect.objectContaining({}),
+          }),
+        }),
+      );
+      expect(tx.driverOffer.create.mock.calls[0][0].data.price.toNumber()).toBe(
+        minimum,
+      );
+    },
+  );
+});
+
 describe('request content version', () => {
   it.each(Object.keys(REQUEST_VERSION_SELECT))(
     'detects a change to %s',

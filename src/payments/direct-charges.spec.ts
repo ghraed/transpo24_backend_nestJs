@@ -7,15 +7,28 @@ import {
   DriverEarningStatus,
   TripPaymentSettlementStatus,
 } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { PaymentsService } from './payments.service';
-import { directApplicationFee } from './customer-pricing';
+import {
+  calculateCustomerPricing,
+  directApplicationFee,
+} from './customer-pricing';
 
 const account = 'acct_driver';
 const D = (value: string | number) => new Prisma.Decimal(value);
 
 function stripeFixture() {
   const api = {
+    v2: {
+      core: {
+        accounts: {
+          retrieve: jest.fn().mockResolvedValue({
+            defaults: { responsibilities: { fees_collector: 'application' } },
+          }),
+        },
+      },
+    },
     paymentMethods: {
       retrieve: jest.fn().mockResolvedValue({
         id: 'pm_saved',
@@ -54,6 +67,114 @@ describe('Direct Stripe charges', () => {
     expect(directApplicationFee(D('5.25'), D('.25')).toFixed(2)).toBe('1.00');
     expect(directApplicationFee(D('105'), D('5')).toFixed(2)).toBe('20.00');
   });
+
+  it.each(['stripe', null, undefined])(
+    'blocks driver-paid or unknown fee responsibility (%s) before charging',
+    async (collector) => {
+      const { service, api } = stripeFixture();
+      api.v2.core.accounts.retrieve.mockResolvedValue({
+        defaults: { responsibilities: { fees_collector: collector } },
+      });
+      await expect(
+        service.createManualAuthorization({
+          customerId: 'cus_platform',
+          stripePaymentMethodId: 'pm_saved',
+          stripeAccountId: account,
+          amount: 10500,
+          applicationFeeAmount: 2000,
+          currency: 'chf',
+          metadata: {},
+          idempotencyKey: 'guard',
+          transferGroup: 'trip',
+        }),
+      ).rejects.toThrow('platform must cover Stripe processing fees');
+      await expect(
+        service.confirmManualAuthorization('pi_old', 'confirm', account),
+      ).rejects.toThrow('platform must cover Stripe processing fees');
+      await expect(
+        service.captureAuthorization('pi_old', 10500, 'capture', account, 2000),
+      ).rejects.toThrow('platform must cover Stripe processing fees');
+      await expect(
+        service.prepareAdditionalExpense({
+          customerId: 'cus_platform',
+          amount: 1000,
+          currency: 'chf',
+          additionalChargeId: 'extra',
+          stripeAccountId: account,
+        }),
+      ).rejects.toThrow('platform must cover Stripe processing fees');
+      await expect(
+        service.confirmAdditionalExpense('pi_extra', 'pm_saved', account),
+      ).rejects.toThrow('platform must cover Stripe processing fees');
+      expect(api.paymentMethods.create).not.toHaveBeenCalled();
+      expect(api.paymentIntents.create).not.toHaveBeenCalled();
+      expect(api.paymentIntents.confirm).not.toHaveBeenCalled();
+      expect(api.paymentIntents.capture).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { fare: '100', client: 10500, fee: 2000, driver: 8500 },
+    { fare: '200', client: 21000, fee: 4000, driver: 17000 },
+    { fare: '19.99', client: 2099, fee: 400, driver: 1699 },
+  ])(
+    'CHF $fare: authorizes and captures 105%, leaving the full driver share with platform-paid processing',
+    async (expected) => {
+      const { service, api } = stripeFixture();
+      const price = calculateCustomerPricing(D(expected.fare));
+      const fee = directApplicationFee(
+        price.totalAmount,
+        price.customerPlatformFeeAmount,
+      )
+        .mul(100)
+        .toNumber();
+      await service.createManualAuthorization({
+        customerId: 'cus_platform',
+        stripePaymentMethodId: 'pm_saved',
+        stripeAccountId: account,
+        amount: price.totalAmount.mul(100).toNumber(),
+        applicationFeeAmount: fee,
+        currency: 'chf',
+        metadata: {},
+        idempotencyKey: 'example',
+        transferGroup: 'trip',
+      });
+      await service.confirmManualAuthorization(
+        'pi_direct',
+        'confirm_example',
+        account,
+      );
+      await service.captureAuthorization(
+        'pi_direct',
+        price.totalAmount.mul(100).toNumber(),
+        'capture_example',
+        account,
+        fee,
+      );
+      const [payment] = api.paymentIntents.create.mock.calls[0];
+      expect(payment.amount).toBe(expected.client);
+      expect(payment.application_fee_amount).toBe(expected.fee);
+      expect(payment.amount - payment.application_fee_amount).toBe(
+        expected.driver,
+      );
+      expect(api.paymentIntents.capture).toHaveBeenCalledWith(
+        'pi_direct',
+        {
+          amount_to_capture: expected.client,
+          application_fee_amount: expected.fee,
+        },
+        { stripeAccount: account, idempotencyKey: 'capture_example' },
+      );
+      // Check the account fee payer again at authorization, confirmation and capture.
+      // No estimated processing cost is added to the client or the application fee.
+      expect(api.v2.core.accounts.retrieve).toHaveBeenCalledTimes(3);
+      expect(api.v2.core.accounts.retrieve).toHaveBeenCalledWith(
+        account,
+        { include: ['defaults'] },
+        { apiVersion: '2026-10-28.preview' },
+      );
+    },
+  );
 
   it('clones only an owned platform card and creates an unconfirmed manual-capture intent on the driver account', async () => {
     const { service, api } = stripeFixture();
@@ -230,6 +351,7 @@ function payoutFixture() {
     tripPaymentSettlement: { update: jest.fn(), updateMany: jest.fn() },
   };
   const stripe = {
+    requirePlatformProcessingFees: jest.fn().mockResolvedValue(undefined),
     retrievePaymentIntent: jest.fn().mockResolvedValue({
       status: 'succeeded',
       currency: 'chf',
@@ -262,6 +384,25 @@ function payoutFixture() {
 }
 
 describe('Direct charge release accounting', () => {
+  it('holds legacy driver-paid captures for reconciliation without declaring full earnings released', async () => {
+    const x = payoutFixture();
+    x.stripe.requirePlatformProcessingFees.mockRejectedValue(
+      new BadRequestException('Account requires migration'),
+    );
+    await x.service.processQueuedDriverPayoutJob('trip');
+    expect(x.delayed.captureDelivery).not.toHaveBeenCalled();
+    expect(x.stripe.createTransfer).not.toHaveBeenCalled();
+    expect(x.notifications.notifyTripFundsTransferred).not.toHaveBeenCalled();
+    expect(x.prisma.tripPaymentSettlement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          requiresManualReview: true,
+          nextPayoutRetryAt: null,
+        }),
+      }),
+    );
+  });
+
   it('captures an eligible authorized direct payment through the existing delivery lifecycle before marking it released', async () => {
     const x = payoutFixture();
     x.context.settlementStatus = TripPaymentSettlementStatus.AUTHORIZED;

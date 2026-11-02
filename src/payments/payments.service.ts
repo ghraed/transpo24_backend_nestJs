@@ -2310,6 +2310,24 @@ export class PaymentsService {
     }
 
     if (context.chargeAccountId) {
+      try {
+        await this.stripeService.requirePlatformProcessingFees(
+          context.chargeAccountId,
+        );
+      } catch (error) {
+        if (!(error instanceof BadRequestException)) throw error;
+        const reason =
+          'Stripe fee responsibility requires reconciliation before release. The driver must receive their full earnings without processing deductions.';
+        await this.prisma.tripPaymentSettlement.update({
+          where: { id: context.settlementId },
+          data: {
+            requiresManualReview: true,
+            nextPayoutRetryAt: null,
+            payoutFailureReason: reason,
+          },
+        });
+        return { transferred: false, stripeTransferId: null, reason };
+      }
       if (context.settlementStatus === TripPaymentSettlementStatus.AUTHORIZED) {
         if (!this.delayedBookings)
           throw new ServiceUnavailableException(

@@ -571,7 +571,7 @@ export class NotificationsService {
         ? 'Trip payment released'
         : 'Payout transferred',
       body: input.stripePaymentIntentId
-        ? `Your trip payment of ${amountLabel} before Stripe fees was released to your Stripe account.`
+        ? `Your trip payment of ${amountLabel} was released to your Stripe account.`
         : `Your trip payout of ${amountLabel} was transferred to your Stripe payout account.`,
       type: 'TRIP_FUNDS_TRANSFERRED',
       data: {

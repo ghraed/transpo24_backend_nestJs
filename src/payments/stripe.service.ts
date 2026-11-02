@@ -177,6 +177,8 @@ export class StripeService {
   }
 
   async createManualAuthorization(input: CreateImmediateCaptureIntentInput) {
+    if (input.stripeAccountId)
+      await this.requirePlatformProcessingFees(input.stripeAccountId);
     if (!input.stripePaymentMethodId)
       throw new BadRequestException('A saved payment method is required.');
     await this.requireOwnedCard(input.customerId, input.stripePaymentMethodId);
@@ -209,6 +211,39 @@ export class StripeService {
     );
   }
 
+  /** Fail closed for existing accounts: Stripe fee responsibility is immutable.
+   * The application fee remains 20% of the service price; Stripe bills processing
+   * to the platform separately, leaving the driver's entire 85% intact.
+   */
+  async requirePlatformProcessingFees(accountId: string): Promise<void> {
+    const platformPays = await this.runStripe(async () => {
+      try {
+        const account = await this.getClient().v2.core.accounts.retrieve(
+          accountId,
+          { include: ['defaults'] },
+          CONNECT_API_OPTIONS,
+        );
+        return (
+          account.defaults?.responsibilities?.fees_collector === 'application'
+        );
+      } catch (error) {
+        const code = (error as { code?: string } | null)?.code;
+        if (
+          code !== 'v1_account_instead_of_v2_account' &&
+          code !== 'account_not_yet_compatible_with_v2'
+        )
+          throw error;
+        const account = await this.getClient().accounts.retrieve(accountId);
+        return account.controller?.fees?.payer === 'application';
+      }
+    });
+    if (!platformPays) {
+      throw new BadRequestException(
+        'Payment configuration requires an update before processing. The platform must cover Stripe processing fees. Contact support.',
+      );
+    }
+  }
+
   private accountOptions(accountId?: string | null, idempotencyKey?: string) {
     return {
       ...(accountId ? { stripeAccount: accountId } : {}),
@@ -238,6 +273,7 @@ export class StripeService {
     accountId?: string | null,
   ) {
     return this.runStripe(async () => {
+      if (accountId) await this.requirePlatformProcessingFees(accountId);
       try {
         return await this.getClient().paymentIntents.confirm(
           id,
@@ -306,6 +342,7 @@ export class StripeService {
     accountId?: string | null,
     applicationFeeAmount?: number,
   ) {
+    if (accountId) await this.requirePlatformProcessingFees(accountId);
     return this.runStripe(() =>
       this.getClient().paymentIntents.capture(
         id,
@@ -472,6 +509,8 @@ export class StripeService {
     applicationFeeAmount?: number;
   }) {
     const key = `additional_expense_${input.additionalChargeId}`;
+    if (input.stripeAccountId)
+      await this.requirePlatformProcessingFees(input.stripeAccountId);
     const clonedMethod =
       input.stripeAccountId && input.stripePaymentMethodId
         ? await this.cloneCard(
@@ -505,6 +544,7 @@ export class StripeService {
     paymentMethodId: string,
     accountId?: string | null,
   ) {
+    if (accountId) await this.requirePlatformProcessingFees(accountId);
     return this.runStripe(() =>
       this.getClient().paymentIntents.confirm(
         intentId,
@@ -614,7 +654,7 @@ export class StripeService {
           dashboard: 'express',
           defaults: {
             responsibilities: {
-              fees_collector: 'stripe',
+              fees_collector: 'application',
               losses_collector: 'stripe',
             },
           },

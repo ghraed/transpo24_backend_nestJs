@@ -69,7 +69,35 @@ describe('StripeService', () => {
     };
   };
 
-  it('creates an Express merchant with Stripe-managed losses and fees, using the scoped preview', async () => {
+  it.each(['application', 'account', 'application_express', undefined])(
+    'allows legacy accounts only when the platform explicitly pays fees: %s',
+    async (payer) => {
+      const { service, retrieve, legacyRetrieve } = mockConnect();
+      retrieve.mockRejectedValue({ code: 'v1_account_instead_of_v2_account' });
+      legacyRetrieve.mockResolvedValue({ controller: { fees: { payer } } });
+      const result = service.requirePlatformProcessingFees('acct_legacy');
+      if (payer === 'application')
+        await expect(result).resolves.toBeUndefined();
+      else
+        await expect(result).rejects.toThrow(
+          'platform must cover Stripe processing fees',
+        );
+    },
+  );
+
+  it('does not allow payment when Stripe fee responsibility cannot be verified', async () => {
+    const { service, retrieve, legacyRetrieve } = mockConnect();
+    retrieve.mockRejectedValue({
+      type: 'StripePermissionError',
+      message: 'Forbidden',
+    });
+    await expect(
+      service.requirePlatformProcessingFees('acct_driver'),
+    ).rejects.toThrow();
+    expect(legacyRetrieve).not.toHaveBeenCalled();
+  });
+
+  it('creates an Express merchant with platform-paid processing and Stripe-managed losses, using the scoped preview', async () => {
     const { service, create } = mockConnect();
     await expect(
       service.createExpressAccount({
@@ -91,7 +119,7 @@ describe('StripeService', () => {
         dashboard: 'express',
         defaults: {
           responsibilities: {
-            fees_collector: 'stripe',
+            fees_collector: 'application',
             losses_collector: 'stripe',
           },
         },

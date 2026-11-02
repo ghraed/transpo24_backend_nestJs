@@ -14,7 +14,7 @@ jest.mock('../notifications/notifications.service', () => ({
 
 const money = (value: number | string) => new Prisma.Decimal(value);
 
-function setup() {
+function setup(servicePrice = 100, currency = 'USD') {
   let hold: any = null;
   let earning: any = null;
   let settlement: any = null;
@@ -57,8 +57,8 @@ function setup() {
         id: 'trip',
         assignedDriverId: 'driver',
         acceptedOfferId: 'offer',
-        finalPrice: money(100),
-        currency: 'USD',
+        finalPrice: money(servicePrice),
+        currency,
         status: 'DELIVERED',
         deliveredAt: new Date(),
         paymentHold: hold,
@@ -75,7 +75,10 @@ function setup() {
       }),
     },
     driverOffer: {
-      findUnique: jest.fn(async () => ({ price: money(100), currency: 'USD' })),
+      findUnique: jest.fn(async () => ({
+        price: money(servicePrice),
+        currency,
+      })),
     },
     additionalCharge: {
       aggregate: jest.fn(async () => ({ _sum: { amount: null } })),
@@ -135,6 +138,87 @@ function setup() {
 }
 
 describe('Client platform commission', () => {
+  it.each([
+    {
+      fare: 100,
+      client: '105.00',
+      clientFee: '5.00',
+      driverFee: '15.00',
+      driver: '85.00',
+      platform: '20.00',
+    },
+    {
+      fare: 200,
+      client: '210.00',
+      clientFee: '10.00',
+      driverFee: '30.00',
+      driver: '170.00',
+      platform: '40.00',
+    },
+    {
+      fare: 19.99,
+      client: '20.99',
+      clientFee: '1.00',
+      driverFee: '3.00',
+      driver: '16.99',
+      platform: '4.00',
+    },
+    {
+      fare: 1,
+      client: '1.05',
+      clientFee: '0.05',
+      driverFee: '0.15',
+      driver: '0.85',
+      platform: '0.20',
+    },
+  ])(
+    'CHF $fare: charges the client 105% and records 85% driver / 20% platform with cent rounding',
+    async (expected) => {
+      const model = setup(expected.fare, 'CHF');
+      await model.collect('CREDIT_CARD', money(expected.fare), 'CHF');
+      await model.trips.createDriverEarningForDeliveredTrip(
+        model.tx as Prisma.TransactionClient,
+        'trip',
+      );
+      expect(model.stripe.createImmediateCaptureIntent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: money(expected.client).mul(100).toNumber(),
+          currency: 'chf',
+        }),
+      );
+      expect(model.hold().amount.toFixed(2)).toBe(expected.client);
+      expect(model.hold().customerPlatformFeeAmount.toFixed(2)).toBe(
+        expected.clientFee,
+      );
+      expect(model.earning().grossAmount.toNumber()).toBe(expected.fare);
+      expect(model.earning().currency).toBe('CHF');
+      expect(model.earning().platformFeeAmount.toFixed(2)).toBe(
+        expected.driverFee,
+      );
+      expect(model.earning().netAmount.toFixed(2)).toBe(expected.driver);
+      expect(model.settlement().driverShareAmount.toFixed(2)).toBe(
+        expected.driver,
+      );
+      expect(model.settlement().platformShareAmount.toFixed(2)).toBe(
+        expected.platform,
+      );
+      expect(
+        model
+          .settlement()
+          .driverShareAmount.add(model.settlement().platformShareAmount)
+          .toFixed(2),
+      ).toBe(expected.client);
+      // The platform share contains both commissions; the 15% is based on the
+      // original fare, never the commission-inclusive client charge.
+      expect(
+        model
+          .earning()
+          .platformFeeAmount.add(model.hold().customerPlatformFeeAmount)
+          .toFixed(2),
+      ).toBe(expected.platform);
+    },
+  );
+
   it.each([
     'CREDIT_CARD',
     'DEBIT_CARD',

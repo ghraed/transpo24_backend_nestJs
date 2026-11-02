@@ -1,3 +1,4 @@
+import { MINIMUM_OFFER_AMOUNTS } from './offer-minimum';
 import {
   customerOfferPrice,
   DRIVER_PLATFORM_COMMISSION_RATE,
@@ -2136,6 +2137,16 @@ export class DriverService {
       throw new BadRequestException(
         `currency must be one of: ${Array.from(SUPPORTED_OFFER_CURRENCIES).join(', ')}.`,
       );
+    }
+
+    const minimumAmount = MINIMUM_OFFER_AMOUNTS[normalizedCurrency];
+    if (input.price < minimumAmount) {
+      throw new BadRequestException({
+        code: 'MINIMUM_OFFER_PRICE',
+        message: `The minimum offer is ${minimumAmount.toFixed(2)} ${normalizedCurrency}.`,
+        minimumAmount,
+        currency: normalizedCurrency,
+      });
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
