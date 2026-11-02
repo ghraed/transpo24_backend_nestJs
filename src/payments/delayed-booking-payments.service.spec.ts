@@ -235,6 +235,45 @@ describe('delayed booking money lifecycle', () => {
   beforeEach(() => jest.useFakeTimers().setSystemTime(start));
   afterEach(() => jest.useRealTimers());
 
+  it.each(['APP_WALLET', 'CREDIT_CARD'])(
+    'skips the wait and reserves funds immediately, with safe retries (%s)',
+    async (method) => {
+      const x = setup(method);
+      await x.stage();
+      jest.setSystemTime(start.getTime() + 30000);
+      await x.service.skipCountdown('customer', 'request');
+      expect(x.state.hold.authorizationDueAt).toEqual(new Date());
+      expect(x.state.hold.confirmationStartedAt).toEqual(start);
+      await x.service.process('request');
+      await x.service.process('request');
+      expect(x.state.hold.confirmationState).toBe('CONFIRMED');
+      await x.service.skipCountdown('customer', 'request');
+      await x.service.process('request');
+      expect(x.state.hold.confirmationState).toBe('CONFIRMED');
+      if (method === 'APP_WALLET') {
+        expect(x.state.wallet.reservedBalance.toNumber()).toBe(105);
+        expect(x.state.transactions).toHaveLength(1);
+      } else
+        expect(x.stripe.createManualAuthorization).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('rejects another customer and cancelled bookings without advancing authorization', async () => {
+    const x = setup();
+    await x.stage();
+    await expect(
+      x.service.skipCountdown('someone-else', 'request'),
+    ).rejects.toThrow('does not belong');
+    expect(x.state.hold.authorizationDueAt).toEqual(
+      new Date(start.getTime() + 600000),
+    );
+    x.state.request.status = 'CANCELLED';
+    await expect(
+      x.service.skipCountdown('customer', 'request'),
+    ).rejects.toThrow('can no longer');
+    expect(x.state.wallet.reservedBalance.toNumber()).toBe(0);
+  });
+
   it('persists the selected offer and deadline without reserving or charging booking funds', async () => {
     const x = setup('CREDIT_CARD');
     await x.stage();

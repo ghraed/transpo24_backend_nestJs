@@ -1082,6 +1082,43 @@ export class DelayedBookingPaymentsService {
     await this.process(requestId);
   }
 
+  async skipCountdown(customerId: string, requestId: string) {
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${requestId} FOR UPDATE`;
+        const hold = await tx.paymentHold.findUniqueOrThrow({
+          where: { requestId },
+        });
+        const request = await tx.transportRequest.findUniqueOrThrow({
+          where: { id: requestId },
+        });
+        if (hold.customerId !== customerId)
+          throw new BadRequestException('This payment does not belong to you.');
+        if (
+          !hold.confirmationStartedAt ||
+          request.status === 'CANCELLED' ||
+          ![
+            'GRACE_PERIOD',
+            'AUTHORIZING',
+            'ACTION_REQUIRED',
+            'CONFIRMED',
+          ].includes(hold.confirmationState ?? '')
+        )
+          throw new ConflictException(
+            'This booking countdown can no longer be skipped.',
+          );
+        if (hold.confirmationState === 'GRACE_PERIOD') {
+          // Keep the original start time for cancellation fees and only advance authorization.
+          await tx.paymentHold.update({
+            where: { id: hold.id },
+            data: { authorizationDueAt: new Date() },
+          });
+        }
+      },
+      { timeout: 30000 },
+    );
+  }
+
   async failApproval(customerId: string, requestId: string) {
     await this.prisma.$transaction(
       async (tx) => {

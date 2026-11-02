@@ -51,3 +51,17 @@ were not deployed. No dependencies or database schemas changed.
 Physical iPhone testing and App Store/TestFlight steps remain required. Do not
 publish a mobile build that expects this endpoint until its backend is deployed.
 The integration does not migrate unrelated Places/Geocoding API calls.
+
+## Local development diagnostics
+
+When pins display but the road route is missing, run `npm run routes:check` from
+`api`. It makes a read-only Routes API request using the same backend key and
+IPv4 transport as the app, checks for a real road polyline, and reports a rejected
+outbound IP without printing credentials or customer locations.
+
+The local public IP can change with the development network. If Google returns
+HTTP 403 for an IP restriction, add the reported IPv4 to the existing
+`Transpo24 Routes - Local Development` key in Google Cloud → APIs & Services →
+Credentials → IP addresses. Preserve its API restrictions and the production
+key’s existing restrictions. Re-run the check after saving, then reopen the
+pickup page. Restarting the app alone cannot fix a provider-side IP rejection.

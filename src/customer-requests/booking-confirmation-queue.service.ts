@@ -187,6 +187,22 @@ export class BookingConfirmationQueueService
     }
   }
 
+  async skipCountdown(customerId: string, requestId: string) {
+    await this.bookings.skipCountdown(customerId, requestId);
+    // Wake the original delayed job so approval/retry processing also starts now.
+    try {
+      const job = await this.queue?.getJob(`booking-${requestId}`);
+      if (job && (await job.getState()) === 'delayed') await job.promote();
+    } catch (error) {
+      // A worker may already have picked it up; immediate processing remains safe.
+      this.logger.warn(`Could not wake skipped booking job: ${String(error)}`);
+    }
+    // Card intent creation and confirmation are separate durable worker steps.
+    // Reuse the worker's assignment and notification flow after securing funds.
+    await this.process(requestId);
+    await this.process(requestId);
+  }
+
   async process(requestId: string) {
     const hold = await this.bookings.process(requestId);
     if (hold?.confirmationState === 'CONFIRMED') {

@@ -1,3 +1,4 @@
+import { BookingConfirmationQueueService } from '../customer-requests/booking-confirmation-queue.service';
 import { CancelTripDto } from './dto/cancel-trip.dto';
 import { paymentPolicy } from './payment-policy';
 import {
@@ -53,6 +54,7 @@ export class PaymentsController {
     private readonly tripsGateway: TripsGateway,
     @Inject(forwardRef(() => CustomerRequestsService))
     private readonly customerRequestsService: CustomerRequestsService,
+    private readonly bookingConfirmations: BookingConfirmationQueueService,
   ) {}
 
   @Get('customer/payment-policy')
@@ -87,6 +89,19 @@ export class PaymentsController {
     }
 
     return payment;
+  }
+
+  @Post('customer/requests/:requestId/payment/skip-countdown')
+  @UseGuards(CustomerAuthGuard)
+  async skipBookingCountdown(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ): Promise<PaymentSummaryDto> {
+    await this.bookingConfirmations.skipCountdown(request.user.id, requestId);
+    return this.paymentsService.getRequestPayment({
+      customerId: request.user.id,
+      requestId,
+    });
   }
 
   @Post('customer/requests/:requestId/payment/approval-failed')

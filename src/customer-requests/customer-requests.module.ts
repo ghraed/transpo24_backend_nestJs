@@ -37,6 +37,10 @@ import { CustomerPlacesService } from './customer-places.service';
     CustomerRequestsService,
     PrismaService,
   ],
-  exports: [CustomerRequestsService, FurnitureReservationsService],
+  exports: [
+    CustomerRequestsService,
+    FurnitureReservationsService,
+    BookingConfirmationQueueService,
+  ],
 })
 export class CustomerRequestsModule {}
