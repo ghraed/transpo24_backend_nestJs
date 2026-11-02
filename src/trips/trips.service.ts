@@ -1,3 +1,4 @@
+import { getTripConfirmationRadiusMeters } from '../config/trip-confirmation';
 import { resolveStripeConfiguration } from '../config/stripe';
 import { assertDriverApproved } from '../auth/driver-approval';
 import { driverTrackingAvailable } from '../payments/booking-policy';
@@ -62,9 +63,6 @@ const TERMINAL_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.COMPLETED,
 ];
 
-export const DRIVER_PICKUP_ARRIVAL_RADIUS_METERS = 1500;
-export const PICKUP_ITEM_RADIUS_METERS = 1500;
-export const DELIVER_ITEM_RADIUS_METERS = 1500;
 export const NEAR_DELIVERY_RADIUS_METERS = 5000;
 const IS_STRIPE_TEST_MODE = resolveStripeConfiguration().mode === 'test';
 const DRIVER_PAYOUT_DELAY_HOURS_OVERRIDE =
@@ -345,7 +343,7 @@ export class TripsService {
       { latitude: request.pickupLatitude, longitude: request.pickupLongitude },
     );
 
-    if (distanceMeters > DRIVER_PICKUP_ARRIVAL_RADIUS_METERS) {
+    if (distanceMeters > getTripConfirmationRadiusMeters()) {
       throw new BadRequestException(
         'Driver is too far from pickup location to mark arrival.',
       );
@@ -1851,10 +1849,6 @@ export class TripsService {
     pickupLatitude: number | null;
     pickupLongitude: number | null;
   }): void {
-    if (input.latitude === undefined && input.longitude === undefined) {
-      return;
-    }
-
     if (input.latitude === undefined || input.longitude === undefined) {
       throw new BadRequestException(
         'Both latitude and longitude are required when providing pickup coordinates.',
@@ -1862,6 +1856,8 @@ export class TripsService {
     }
 
     if (
+      !Number.isFinite(input.latitude) ||
+      !Number.isFinite(input.longitude) ||
       input.latitude < -90 ||
       input.latitude > 90 ||
       input.longitude < -180 ||
@@ -1871,7 +1867,7 @@ export class TripsService {
     }
 
     if (input.pickupLatitude === null || input.pickupLongitude === null) {
-      return;
+      throw new BadRequestException('Pickup location is missing.');
     }
 
     const distanceMeters = this.calculateDistanceMeters(
@@ -1879,7 +1875,7 @@ export class TripsService {
       { latitude: input.pickupLatitude, longitude: input.pickupLongitude },
     );
 
-    if (distanceMeters > PICKUP_ITEM_RADIUS_METERS) {
+    if (distanceMeters > getTripConfirmationRadiusMeters()) {
       throw new BadRequestException(
         'Driver is too far from pickup location to confirm item pickup.',
       );
@@ -1892,10 +1888,6 @@ export class TripsService {
     dropoffLatitude: number | null;
     dropoffLongitude: number | null;
   }): void {
-    if (input.latitude === undefined && input.longitude === undefined) {
-      return;
-    }
-
     if (input.latitude === undefined || input.longitude === undefined) {
       throw new BadRequestException(
         'Both latitude and longitude are required when providing delivery coordinates.',
@@ -1903,6 +1895,8 @@ export class TripsService {
     }
 
     if (
+      !Number.isFinite(input.latitude) ||
+      !Number.isFinite(input.longitude) ||
       input.latitude < -90 ||
       input.latitude > 90 ||
       input.longitude < -180 ||
@@ -1920,7 +1914,7 @@ export class TripsService {
       { latitude: input.dropoffLatitude, longitude: input.dropoffLongitude },
     );
 
-    if (distanceMeters > DELIVER_ITEM_RADIUS_METERS) {
+    if (distanceMeters > getTripConfirmationRadiusMeters()) {
       throw new BadRequestException(
         'Driver is too far from dropoff location to confirm delivery.',
       );

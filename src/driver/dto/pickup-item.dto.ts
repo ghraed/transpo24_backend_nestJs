@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsDefined,
   IsNotEmpty,
@@ -8,23 +9,26 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateIf,
 } from 'class-validator';
 
 export class PickupItemDto {
-  @ValidateIf((dto: PickupItemDto) => dto.longitude !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && value.trim() !== '' ? Number(value) : value,
+  )
   @IsDefined()
   @IsNumber()
   @Min(-90)
   @Max(90)
-  latitude?: number;
+  latitude!: number;
 
-  @ValidateIf((dto: PickupItemDto) => dto.latitude !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && value.trim() !== '' ? Number(value) : value,
+  )
   @IsDefined()
   @IsNumber()
   @Min(-180)
   @Max(180)
-  longitude?: number;
+  longitude!: number;
 
   @IsOptional()
   @IsString()
