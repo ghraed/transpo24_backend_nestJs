@@ -122,6 +122,9 @@ async function main() {
     }).compile();
     activeGateway = module.get(TripsGateway);
     app = module.createNestApplication({ bodyParser: false, logger: false });
+    // This disposable fixture owns signals: Nest's default signal re-raise can
+    // terminate the process before Stripe/schema/file cleanup completes.
+    app.enableShutdownHooks = () => app;
     configureHttpApplication(app);
     await app.listen(process.env.AUDIT_DEVICE_SERVER === 'true' ? 57431 : 0, '127.0.0.1');
     const http = () => request(app.getHttpServer());
