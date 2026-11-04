@@ -2,6 +2,7 @@ import type { UserRole } from '@prisma/client';
 import type { Request } from 'express';
 
 export type AuthenticatedUser = {
+  sessionFamily?: string;
   id: string;
   name: string;
   email: string;

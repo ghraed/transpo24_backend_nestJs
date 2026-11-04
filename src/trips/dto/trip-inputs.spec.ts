@@ -47,6 +47,7 @@ describe('trip input validation', () => {
     expect(
       await invalidProperties(DriverLocationUpdateDto, {
         tripId: 'trip-1',
+        measuredAt: new Date().toISOString(),
         latitude: -90,
         longitude: 180,
         heading: 360,

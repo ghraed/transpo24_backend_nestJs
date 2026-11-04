@@ -7,6 +7,8 @@ import {
 } from '@prisma/client';
 
 export interface ChatMessageResponseDto {
+  replayed?: boolean;
+  operationId?: string | null;
   id: string;
   chatRoomId: string;
   senderId: string;

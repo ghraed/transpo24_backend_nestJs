@@ -148,6 +148,7 @@ describe('registration extraction HTTP boundary', () => {
     await scan('separate-customer')
       .attach('images', fixture, 'synthetic.png')
       .expect(201);
-    expect(provider.extract).toHaveBeenCalledTimes(6);
+    // Five identical uploads for A share a cached provider result; B remains isolated.
+    expect(provider.extract).toHaveBeenCalledTimes(2);
   });
 });

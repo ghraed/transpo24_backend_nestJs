@@ -85,29 +85,32 @@ export class ChatController {
       user: request.user,
       roomId,
       body: dto.body,
+      operationId: dto.operationId,
     });
 
-    this.tripsGateway.emitChatMessageCreated(created);
+    if (!created.replayed) this.tripsGateway.emitChatMessageCreated(created);
     return created;
   }
 
   @Post('rooms/:roomId/attachments')
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_FILE_SIZE, files: 1, fields: 0 },
+      limits: { fileSize: MAX_FILE_SIZE, files: 1, fields: 1 },
     }),
   )
   async sendAttachment(
     @Req() request: AuthenticatedRequest,
     @Param('roomId') roomId: string,
     @UploadedFile() file: IncomingFile,
+    @Body('operationId') operationId: string,
   ): Promise<ChatMessageResponseDto> {
     const created = await this.chatService.sendAttachment({
       user: request.user,
       roomId,
       file,
+      operationId,
     });
-    this.tripsGateway.emitChatMessageCreated(created);
+    if (!created.replayed) this.tripsGateway.emitChatMessageCreated(created);
     return created;
   }
 

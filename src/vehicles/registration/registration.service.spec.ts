@@ -182,3 +182,66 @@ describe('registration image processing', () => {
     expect(provider.extract).not.toHaveBeenCalled();
   });
 });
+
+describe('owner-scoped extraction cost controls', () => {
+  const makeFile = async () =>
+    ({
+      buffer: await sharp({
+        create: { width: 128, height: 128, channels: 3, background: '#fff' },
+      })
+        .png()
+        .toBuffer(),
+    }) as Express.Multer.File;
+  it('coalesces simultaneous retries and short-term repeats without sharing results across users', async () => {
+    let release!: (value: any) => void;
+    const provider = {
+      assertConfigured: jest.fn(),
+      extract: jest
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        )
+        .mockResolvedValue({ status: 'partial' }),
+    };
+    const service = new RegistrationService(provider as never);
+    const first = await makeFile(),
+      duplicate = await makeFile();
+    const a = service.extract([first], undefined, 'owner-a');
+    const b = service.extract([duplicate], undefined, 'owner-a');
+    while (!release) await new Promise((resolve) => setTimeout(resolve, 1));
+    release({ status: 'partial' });
+    const [one, two] = await Promise.all([a, b]);
+    expect(one).toEqual(two);
+    expect(one).not.toBe(two);
+    await service.extract([await makeFile()], undefined, 'owner-a');
+    expect(provider.extract).toHaveBeenCalledTimes(1);
+    await service.extract([await makeFile()], undefined, 'owner-b');
+    expect(provider.extract).toHaveBeenCalledTimes(2);
+    expect(first.buffer.length + duplicate.buffer.length).toBe(0);
+  });
+  it('does not cache provider errors, and successful cache expires', async () => {
+    const provider = {
+      assertConfigured: jest.fn(),
+      extract: jest
+        .fn()
+        .mockRejectedValueOnce(Error('provider unavailable'))
+        .mockResolvedValue({ status: 'partial' }),
+    };
+    const service = new RegistrationService(provider as never);
+    await expect(
+      service.extract([await makeFile()], undefined, 'a'),
+    ).rejects.toThrow('provider unavailable');
+    await service.extract([await makeFile()], undefined, 'a');
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now + 61000);
+    try {
+      await service.extract([await makeFile()], undefined, 'a');
+      expect(provider.extract).toHaveBeenCalledTimes(3);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+});

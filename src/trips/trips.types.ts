@@ -29,6 +29,7 @@ export type JoinTripRoomInput = {
 };
 
 export type DriverLocationInput = {
+  measuredAt?: string;
   driverId: string;
   tripId: string;
   latitude: number;

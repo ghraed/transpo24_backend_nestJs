@@ -369,6 +369,7 @@ enum ChatReportStatus {
 }
 
 model User {
+  legalAcceptances LegalAcceptance[]
   savedPlaces SavedPlace[]
   id            String             @id @default(cuid())
   name          String
@@ -407,6 +408,7 @@ model User {
 }
 
 model RefreshSession {
+  familyId String?
   id           String    @id @default(cuid())
   userId       String
   tokenHash    String    @unique
@@ -420,6 +422,7 @@ model RefreshSession {
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
+  @@index([familyId, revokedAt])
   @@map("refresh_sessions")
 }
 
@@ -545,6 +548,7 @@ enum DeferredFurniturePaymentState {
 }
 
 model TransportRequest {
+  deletedByCustomerAt DateTime?
   id                  String                 @id @default(cuid())
   customerId          String
   serviceId           String
@@ -675,6 +679,8 @@ model TransportRequest {
 }
 
 model DriverLocation {
+  measuredAt DateTime?
+  receivedAt DateTime?
   id         String   @id @default(cuid())
   driverId   String
   requestId  String?
@@ -975,6 +981,8 @@ model ChatRoom {
 }
 
 model ChatMessage {
+  operationId String?
+  operationHash String?
   id            String                @id @default(cuid())
   chatRoomId    String
   senderId      String
@@ -991,6 +999,7 @@ model ChatMessage {
 
   @@index([chatRoomId])
   @@index([createdAt])
+  @@unique([chatRoomId, senderId, operationId])
   @@map("chat_messages")
 }
 
@@ -1056,7 +1065,7 @@ model DriverEarning {
   updatedAt         DateTime            @updatedAt
 
   driver DriverProfile    @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  trip   TransportRequest @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  trip   TransportRequest @relation(fields: [tripId], references: [id], onDelete: Restrict)
 
   @@index([driverId, status])
   @@index([createdAt])
@@ -1140,7 +1149,7 @@ model PaymentHold {
   updatedAt             DateTime                   @updatedAt
 
   customer              User                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  request               TransportRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request               TransportRequest           @relation(fields: [requestId], references: [id], onDelete: Restrict)
   acceptedOffer         DriverOffer               @relation(fields: [acceptedOfferId], references: [id], onDelete: Cascade)
   driver                DriverProfile             @relation(fields: [driverId], references: [id], onDelete: Cascade)
   settlement            TripPaymentSettlement?
@@ -1188,7 +1197,7 @@ model TripPaymentSettlement {
   createdAt             DateTime                    @default(now())
   updatedAt             DateTime                    @updatedAt
 
-  request               TransportRequest            @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request               TransportRequest            @relation(fields: [requestId], references: [id], onDelete: Restrict)
   paymentHold           PaymentHold                 @relation(fields: [paymentHoldId], references: [id], onDelete: Cascade)
   customer              User                        @relation(fields: [customerId], references: [id], onDelete: Cascade)
   driver                DriverProfile?              @relation(fields: [driverId], references: [id], onDelete: SetNull)
@@ -1300,7 +1309,7 @@ model AdditionalCharge {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
-  request           TransportRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request           TransportRequest       @relation(fields: [requestId], references: [id], onDelete: Restrict)
   driver            DriverProfile          @relation(fields: [driverId], references: [id], onDelete: Cascade)
   customer          User                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   walletTransactions CustomerWalletTransaction[]
@@ -1410,4 +1419,16 @@ model SavedPlace {
 
   @@unique([customerId, locationKey])
   @@index([customerId, updatedAt])
+}
+
+model LegalAcceptance {
+  id String @id @default(cuid())
+  userId String
+  version String
+  documentHash String
+  acceptedAt DateTime @default(now())
+  method String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@unique([userId, version])
+  @@map("legal_acceptances")
 }

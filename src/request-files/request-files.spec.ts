@@ -1,3 +1,5 @@
+import sharp from 'sharp';
+import { syntheticPdf } from '../test-support/document-fixtures';
 import { ForbiddenException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { RequestFilesService } from './request-files.service';
@@ -15,10 +17,10 @@ const user = (
   hasDriverProfile: role === UserRole.DRIVER,
 });
 const pdf = {
-  buffer: Buffer.from('%PDF-1.7\nprivate document'),
+  buffer: syntheticPdf(),
   originalname: '../contract.pdf',
   mimetype: 'application/pdf',
-  size: 25,
+  size: syntheticPdf().length,
 };
 function setup() {
   const request = {
@@ -150,34 +152,81 @@ describe('private request documents', () => {
   });
 });
 describe('document file validation', () => {
-  it('sanitizes a filename and accepts PDF content', () => {
-    expect(validateFile(pdf)).toMatchObject({
+  it('fully parses a synthetic PDF and sanitizes its filename', async () => {
+    await expect(validateFile(pdf)).resolves.toMatchObject({
       fileName: 'contract.pdf',
       mimeType: 'application/pdf',
       size: pdf.buffer.length,
     });
   });
-  it.each([
-    { signature: Buffer.from([255, 216, 255, 224]), mime: 'image/jpeg' },
-    {
-      signature: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-      mime: 'image/png',
+  it.each(['jpeg', 'png'] as const)(
+    'fully decodes and normalizes %s bytes',
+    async (format) => {
+      const buffer = await sharp({
+        create: { width: 8, height: 8, channels: 3, background: '#fff' },
+      })
+        [format]()
+        .toBuffer();
+      const result = await validateFile({
+        ...pdf,
+        buffer,
+        mimetype: 'image/' + format,
+      });
+      expect(result.mimeType).toBe('image/' + format);
+      expect((await sharp(result.data).metadata()).width).toBe(8);
     },
-  ])('accepts $mime based on file bytes', ({ signature, mime }) => {
-    expect(
-      validateFile({ ...pdf, buffer: signature, mimetype: mime }).mimeType,
-    ).toBe(mime);
+  );
+  it.each([
+    Buffer.from('%PDF-1.7'),
+    Buffer.from([255, 216, 255, 224]),
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  ])('rejects truncated magic-only files', async (buffer) => {
+    await expect(
+      validateFile({ ...pdf, buffer, mimetype: 'application/octet-stream' }),
+    ).rejects.toThrow();
   });
-  it('rejects a disguised executable and MIME mismatch', () => {
-    expect(() =>
+  it('rejects executables, MIME mismatches, empty and oversized uploads', async () => {
+    await expect(
       validateFile({ ...pdf, buffer: Buffer.from('MZ executable') }),
-    ).toThrow();
-    expect(() => validateFile({ ...pdf, mimetype: 'image/png' })).toThrow();
-  });
-  it('rejects empty and oversized uploads', () => {
-    expect(() => validateFile()).toThrow();
-    expect(() =>
+    ).rejects.toThrow();
+    await expect(
+      validateFile({ ...pdf, mimetype: 'image/png' }),
+    ).rejects.toThrow();
+    await expect(validateFile()).rejects.toThrow();
+    await expect(
       validateFile({ ...pdf, buffer: Buffer.alloc(MAX_FILE_SIZE + 1) }),
-    ).toThrow();
+    ).rejects.toThrow();
+  });
+});
+
+describe('complete file resource boundaries', () => {
+  it('rejects a complete PDF exceeding the 100-page limit', async () => {
+    await expect(
+      validateFile({ ...pdf, buffer: syntheticPdf(101) }),
+    ).rejects.toThrow();
+  });
+  it('strips image metadata and rejects dimensions over the limit', async () => {
+    const buffer = await sharp({
+      create: { width: 16, height: 16, channels: 3, background: '#fff' },
+    })
+      .withMetadata({ orientation: 6 })
+      .jpeg()
+      .toBuffer();
+    const result = await validateFile({
+      ...pdf,
+      buffer,
+      mimetype: 'image/jpeg',
+    });
+    const metadata = await sharp(result.data).metadata();
+    expect(metadata.exif).toBeUndefined();
+    expect(metadata.orientation).toBeUndefined();
+    const tooWide = await sharp({
+      create: { width: 12001, height: 1, channels: 3, background: '#fff' },
+    })
+      .png()
+      .toBuffer();
+    await expect(
+      validateFile({ ...pdf, buffer: tooWide, mimetype: 'image/png' }),
+    ).rejects.toThrow();
   });
 });

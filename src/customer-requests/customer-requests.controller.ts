@@ -1,3 +1,4 @@
+import { ValidateDiskUploadsInterceptor } from '../request-files/validate-disk-uploads.interceptor';
 import { FurnitureReservationsService } from './furniture-reservations.service';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { EditCustomerRequestDto } from './dto/edit-customer-request.dto';
@@ -195,6 +196,7 @@ export class CustomerRequestsController {
         callback(null, true);
       },
     }),
+    ValidateDiskUploadsInterceptor,
   )
   async createFurnitureTransportRequest(
     @Req() request: AuthenticatedRequest,
@@ -274,6 +276,7 @@ export class CustomerRequestsController {
         callback(null, true);
       },
     }),
+    ValidateDiskUploadsInterceptor,
   )
   async editRequest(
     @Req() request: AuthenticatedRequest,
@@ -476,6 +479,7 @@ export class CustomerRequestsController {
         callback(null, true);
       },
     }),
+    ValidateDiskUploadsInterceptor,
   )
   async uploadRequestPhotos(
     @Req() request: AuthenticatedRequest,

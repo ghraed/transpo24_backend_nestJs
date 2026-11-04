@@ -30,6 +30,8 @@ export class AuthenticatedUserGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired token.');
     }
 
+    await this.authService.assertTermsAccepted?.(user, request.path);
+
     if (!(await this.authService.isUserActive(user))) {
       throw new UnauthorizedException('This account is no longer active.');
     }

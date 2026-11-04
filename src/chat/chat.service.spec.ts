@@ -1,3 +1,4 @@
+import { syntheticPdf } from '../test-support/document-fixtures';
 import {
   ChatMessageSenderRole,
   ChatMessageType,
@@ -55,6 +56,7 @@ describe('ChatService', () => {
         update: jest.fn(),
       },
       chatMessage: {
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
@@ -70,7 +72,12 @@ describe('ChatService', () => {
       chatReport: {
         create: jest.fn(),
       },
-      $transaction: jest.fn(),
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (fn) =>
+          typeof fn === 'function' ? fn(prisma) : Promise.all(fn),
+        ),
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
 
     const notificationsService = {
@@ -191,6 +198,7 @@ describe('ChatService', () => {
           ).rejects.toThrow('first 10 minutes');
           await expect(
             service.sendTextMessage({
+              operationId: 'fixture-operation-0001',
               user: customerUser,
               roomId: room.id,
               body: 'Hello',
@@ -238,6 +246,7 @@ describe('ChatService', () => {
       readAt: null,
     });
     await service.sendTextMessage({
+      operationId: 'fixture-operation-0001',
       user: customerUser,
       roomId: roomRecord.id,
       body: 'Hello',
@@ -325,6 +334,7 @@ describe('ChatService', () => {
     prisma.chatRoom.update.mockResolvedValue(undefined);
 
     const message = await service.sendTextMessage({
+      operationId: 'fixture-operation-0001',
       user: driverUser,
       roomId: 'room-1',
       body: ' On my way. ',
@@ -337,6 +347,8 @@ describe('ChatService', () => {
         senderId: 'driver-profile-1',
         senderRole: ChatMessageSenderRole.DRIVER,
         type: ChatMessageType.TEXT,
+        operationId: 'fixture-operation-0001',
+        operationHash: expect.any(String),
         body: 'On my way.',
       },
     });
@@ -374,6 +386,7 @@ describe('ChatService', () => {
 
     await expect(
       service.sendTextMessage({
+        operationId: 'fixture-operation-0001',
         user: customerUser,
         roomId: 'room-1',
         body: 'Hello',
@@ -425,6 +438,7 @@ describe('ChatService', () => {
 
     await expect(
       service.sendTextMessage({
+        operationId: 'fixture-operation-0001',
         user: customerUser,
         roomId: 'room-1',
         body: 'Hello',
@@ -466,7 +480,7 @@ describe('ChatService', () => {
   });
   describe('private attachments', () => {
     const file = {
-      buffer: Buffer.from('%PDF-1.7\nattachment'),
+      buffer: syntheticPdf(),
       originalname: 'extra.pdf',
       mimetype: 'application/pdf',
       size: 20,
@@ -487,6 +501,7 @@ describe('ChatService', () => {
         readAt: null,
       });
       const message = await service.sendAttachment({
+        operationId: 'fixture-operation-0001',
         user: customerUser,
         roomId: 'room-1',
         file,
@@ -510,7 +525,12 @@ describe('ChatService', () => {
         blockerUserId: customerUser.id,
       });
       await expect(
-        service.sendAttachment({ user: customerUser, roomId: 'room-1', file }),
+        service.sendAttachment({
+          operationId: 'fixture-operation-0001',
+          user: customerUser,
+          roomId: 'room-1',
+          file,
+        }),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.requestFile.create).not.toHaveBeenCalled();
     });
@@ -521,7 +541,12 @@ describe('ChatService', () => {
         status: ChatRoomStatus.CLOSED,
       });
       await expect(
-        service.sendAttachment({ user: customerUser, roomId: 'room-1', file }),
+        service.sendAttachment({
+          operationId: 'fixture-operation-0001',
+          user: customerUser,
+          roomId: 'room-1',
+          file,
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.requestFile.create).not.toHaveBeenCalled();
     });
@@ -533,7 +558,12 @@ describe('ChatService', () => {
         acceptedOfferId: 'different-offer',
       });
       await expect(
-        service.sendAttachment({ user: customerUser, roomId: 'room-1', file }),
+        service.sendAttachment({
+          operationId: 'fixture-operation-0001',
+          user: customerUser,
+          roomId: 'room-1',
+          file,
+        }),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.requestFile.create).not.toHaveBeenCalled();
     });

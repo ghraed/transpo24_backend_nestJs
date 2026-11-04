@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { assertDriverApproved } from '../auth/driver-approval';
 import {
   driverDetailsAvailable,
@@ -6,6 +7,7 @@ import {
 import { validateFile, IncomingFile } from '../request-files/file-validation';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -267,9 +269,31 @@ export class ChatService {
     };
   }
 
+  private chatOperation(operationId: string | undefined, payload: string) {
+    if (!operationId || !/^[a-zA-Z0-9_-]{16,100}$/.test(operationId))
+      throw new BadRequestException(
+        'A stable chat operationId is required. Update the application and retry.',
+      );
+    return {
+      operationId,
+      operationHash: createHash('sha256').update(payload).digest('hex'),
+    };
+  }
+  private replay<T extends { operationHash: string | null }>(
+    message: T,
+    hash: string,
+  ): T {
+    if (message.operationHash !== hash)
+      throw new ConflictException(
+        'This operationId was already used for a different message.',
+      );
+    return message;
+  }
+
   async sendTextMessage(input: {
     user: AuthenticatedUser;
     roomId: string;
+    operationId?: string;
     body: string;
   }): Promise<ChatMessageResponseDto> {
     const access = await this.getAccessContextByRoom(input.user, input.roomId);
@@ -287,24 +311,45 @@ export class ChatService {
 
     await this.assertMessagingNotBlocked(access);
 
-    const created = await this.prisma.chatMessage.create({
-      data: {
-        chatRoomId: access.room.id,
-        senderId: access.senderId,
-        senderRole: access.senderRole,
-        type: ChatMessageType.TEXT,
-        body: normalizedBody,
-      },
+    const operation = this.chatOperation(
+      input.operationId,
+      'TEXT:' + normalizedBody,
+    );
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM chat_rooms WHERE id = ${access.room.id} FOR UPDATE`;
+      const existing = await tx.chatMessage.findUnique({
+        where: {
+          chatRoomId_senderId_operationId: {
+            chatRoomId: access.room.id,
+            senderId: access.senderId,
+            operationId: operation.operationId,
+          },
+        },
+      });
+      if (existing)
+        return {
+          created: this.replay(existing, operation.operationHash),
+          replayed: true,
+        };
+      const created = await tx.chatMessage.create({
+        data: {
+          chatRoomId: access.room.id,
+          senderId: access.senderId,
+          senderRole: access.senderRole,
+          type: ChatMessageType.TEXT,
+          body: normalizedBody,
+          ...operation,
+        },
+      });
+      await tx.chatRoom.update({
+        where: { id: access.room.id },
+        data: { updatedAt: created.createdAt },
+      });
+      return { created, replayed: false };
     });
-
-    await this.prisma.chatRoom.update({
-      where: {
-        id: access.room.id,
-      },
-      data: {
-        updatedAt: created.createdAt,
-      },
-    });
+    const created = result.created;
+    if (result.replayed)
+      return { ...this.toChatMessageResponse(created), replayed: true };
 
     void this.notificationsService
       .notifyChatMessage({
@@ -331,6 +376,7 @@ export class ChatService {
   async sendAttachment(input: {
     user: AuthenticatedUser;
     roomId: string;
+    operationId?: string;
     file?: IncomingFile;
   }): Promise<ChatMessageResponseDto> {
     const access = await this.getAccessContextByRoom(input.user, input.roomId);
@@ -350,8 +396,30 @@ export class ChatService {
       throw new ForbiddenException(
         'This driver is no longer assigned to the request.',
       );
-    const validated = validateFile(input.file);
-    const created = await this.prisma.$transaction(async (tx) => {
+    const validated = await validateFile(input.file);
+    const operation = this.chatOperation(
+      input.operationId,
+      'FILE:' +
+        validated.fileName +
+        ':' +
+        createHash('sha256').update(validated.data).digest('hex'),
+    );
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM chat_rooms WHERE id = ${access.room.id} FOR UPDATE`;
+      const existing = await tx.chatMessage.findUnique({
+        where: {
+          chatRoomId_senderId_operationId: {
+            chatRoomId: access.room.id,
+            senderId: access.senderId,
+            operationId: operation.operationId,
+          },
+        },
+      });
+      if (existing)
+        return {
+          created: this.replay(existing, operation.operationHash),
+          replayed: true,
+        };
       const file = await tx.requestFile.create({
         data: {
           ...validated,
@@ -367,6 +435,7 @@ export class ChatService {
           senderId: access.senderId,
           senderRole: access.senderRole,
           type: ChatMessageType.FILE,
+          ...operation,
           body: validated.fileName,
           attachmentUrl: `/request-files/${file.id}/content`,
         },
@@ -375,8 +444,11 @@ export class ChatService {
         where: { id: access.room.id },
         data: { updatedAt: message.createdAt },
       });
-      return message;
+      return { created: message, replayed: false };
     });
+    const created = result.created;
+    if (result.replayed)
+      return { ...this.toChatMessageResponse(created), replayed: true };
     void this.notificationsService
       .notifyChatMessage({
         recipientUserId: access.recipientUserId,
@@ -811,6 +883,7 @@ export class ChatService {
   }
 
   private toChatMessageResponse(message: {
+    operationId?: string | null;
     id: string;
     chatRoomId: string;
     senderId: string;
@@ -823,6 +896,7 @@ export class ChatService {
   }): ChatMessageResponseDto {
     return {
       id: message.id,
+      ...(message.operationId ? { operationId: message.operationId } : {}),
       chatRoomId: message.chatRoomId,
       senderId: message.senderId,
       senderRole: message.senderRole,

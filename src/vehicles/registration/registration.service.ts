@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Optional } from '@nestjs/common';
 import sharp from 'sharp';
 import { renderRegistrationPdf } from './registration-pdf';
@@ -16,7 +17,69 @@ export class RegistrationService {
     @Optional() private readonly vehicles?: VehiclesService,
   ) {}
 
-  async extract(files: Express.Multer.File[], signal?: AbortSignal) {
+  private readonly pending = new Map<
+    string,
+    Promise<Awaited<ReturnType<RegistrationService['extractOnce']>>>
+  >();
+  private readonly recent = new Map<
+    string,
+    {
+      expiresAt: number;
+      value: Awaited<ReturnType<RegistrationService['extractOnce']>>;
+    }
+  >();
+
+  async extract(
+    files: Express.Multer.File[],
+    signal?: AbortSignal,
+    ownerId?: string,
+  ) {
+    if (!ownerId) return this.extractOnce(files, signal);
+    const digest = createHash('sha256');
+    for (const file of files ?? []) {
+      if (
+        !file.buffer?.length ||
+        file.buffer.length > MAX_REGISTRATION_IMAGE_BYTES
+      )
+        return this.extractOnce(files, signal);
+      digest.update(String(file.buffer.length) + ':').update(file.buffer);
+    }
+    const key = ownerId + ':' + digest.digest('hex');
+    const now = Date.now();
+    for (const [id, cached] of this.recent)
+      if (cached.expiresAt <= now) this.recent.delete(id);
+    try {
+      if (signal?.aborted) throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
+      const cached = this.recent.get(key);
+      if (cached) return structuredClone(cached.value);
+      const pending = this.pending.get(key);
+      if (pending) return structuredClone(await pending);
+      const operation = this.extractOnce(files, signal);
+      this.pending.set(key, operation);
+      try {
+        const value = await operation;
+        if (this.recent.size >= 64)
+          this.recent.delete(Array.from(this.recent.keys())[0]);
+        this.recent.set(key, {
+          value: structuredClone(value),
+          expiresAt: Date.now() + 60_000,
+        });
+        return value;
+      } finally {
+        this.pending.delete(key);
+      }
+    } finally {
+      for (const file of files ?? []) {
+        file.buffer?.fill(0);
+        file.buffer = Buffer.alloc(0);
+      }
+    }
+  }
+
+  private async extractOnce(
+    files: Express.Multer.File[],
+    signal?: AbortSignal,
+  ) {
     const images: Buffer[] = [];
     try {
       if (!files?.length || files.length > 2)

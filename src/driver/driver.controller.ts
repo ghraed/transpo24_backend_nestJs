@@ -1,3 +1,4 @@
+import { ValidateDiskUploadsInterceptor } from '../request-files/validate-disk-uploads.interceptor';
 import { ApprovedDriverGuard } from '../auth/guards/approved-driver.guard';
 import { CreateStripeConnectAccountDto } from './dto/create-stripe-connect-account.dto';
 import { RouteRequestsDto } from './dto/route-requests.dto';
@@ -275,6 +276,7 @@ export class DriverController {
         },
       },
     ),
+    ValidateDiskUploadsInterceptor,
   )
   async uploadOnboardingDocuments(
     @Req() request: AuthenticatedRequest,
@@ -549,6 +551,7 @@ export class DriverController {
         callback(null, true);
       },
     }),
+    ValidateDiskUploadsInterceptor,
   )
   async createAdditionalCharge(
     @Req() request: AuthenticatedRequest,
@@ -933,6 +936,7 @@ export class DriverController {
         callback(null, true);
       },
     }),
+    ValidateDiskUploadsInterceptor,
   )
   async pickupItem(
     @Req() request: AuthenticatedRequest,
@@ -1038,6 +1042,7 @@ export class DriverController {
         callback(null, true);
       },
     }),
+    ValidateDiskUploadsInterceptor,
   )
   async deliverItem(
     @Req() request: AuthenticatedRequest,
@@ -1154,6 +1159,7 @@ export class DriverController {
         },
       },
     ),
+    ValidateDiskUploadsInterceptor,
   )
   async uploadVehicleDocuments(
     @Req() request: AuthenticatedRequest,

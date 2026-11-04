@@ -1,0 +1,5 @@
+ALTER TABLE "transport_requests" ADD COLUMN "deletedByCustomerAt" TIMESTAMP(3);
+ALTER TABLE "payment_holds" DROP CONSTRAINT "payment_holds_requestId_fkey", ADD CONSTRAINT "payment_holds_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "transport_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "trip_payment_settlements" DROP CONSTRAINT "trip_payment_settlements_requestId_fkey", ADD CONSTRAINT "trip_payment_settlements_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "transport_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "additional_charges" DROP CONSTRAINT "additional_charges_requestId_fkey", ADD CONSTRAINT "additional_charges_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "transport_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "driver_earnings" DROP CONSTRAINT "driver_earnings_tripId_fkey", ADD CONSTRAINT "driver_earnings_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "transport_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

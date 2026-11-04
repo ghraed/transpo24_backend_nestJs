@@ -9,7 +9,7 @@ beforeEach(() => jest.resetAllMocks());
 function respond(status: number, body: string) {
   const req = new EventEmitter() as ClientRequest;
   req.end = jest.fn(() => {
-    const res = new PassThrough() as unknown as IncomingMessage;
+    const res = new PassThrough() as PassThrough & IncomingMessage;
     res.statusCode = status;
     const callback = mocked.mock.calls[0][1] as (r: IncomingMessage) => void;
     callback(res);

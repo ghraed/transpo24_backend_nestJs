@@ -1,3 +1,4 @@
+import { locationMeasurement } from './location-ordering';
 import { getTripConfirmationRadiusMeters } from '../config/trip-confirmation';
 import { resolveStripeConfiguration } from '../config/stripe';
 import { assertDriverApproved } from '../auth/driver-approval';
@@ -232,6 +233,7 @@ export class TripsService {
   async updateDriverLocation(input: DriverLocationInput): Promise<{
     location: DriverLocationUpdatedPayload;
     nearDelivery: DriverNearDeliveryPayload | null;
+    ignored?: boolean;
   }> {
     const trip = await this.validateDriverCanAccessTrip(
       input.driverId,
@@ -252,28 +254,62 @@ export class TripsService {
       throw new BadRequestException('Trip is missing assigned driver.');
     }
 
-    const location = await this.prisma.driverLocation.create({
-      data: {
-        driverId: trip.assignedDriverId,
-        requestId: trip.id,
-        latitude: input.latitude,
-        longitude: input.longitude,
-        heading: input.heading ?? null,
-        speed: input.speed ?? null,
-        accuracy: input.accuracy ?? null,
-        recordedAt: new Date(),
-      },
-      select: {
-        requestId: true,
-        driverId: true,
-        latitude: true,
-        longitude: true,
-        heading: true,
-        speed: true,
-        accuracy: true,
-        recordedAt: true,
-      },
+    const receivedAt = new Date();
+    const measuredAt = locationMeasurement(input.measuredAt, receivedAt);
+    const saved = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${trip.id} FOR UPDATE`;
+      const current = await tx.transportRequest.findUniqueOrThrow({
+        where: { id: trip.id },
+      });
+      if (
+        current.assignedDriverId !== trip.assignedDriverId ||
+        !TRACKABLE_DRIVER_STATUSES.includes(current.status)
+      )
+        throw new ConflictException('Trip no longer permits location sharing.');
+      const latest = await tx.driverLocation.findFirst({
+        where: { requestId: trip.id, driverId: trip.assignedDriverId! },
+        orderBy: { recordedAt: 'desc' },
+      });
+      if (
+        latest &&
+        measuredAt.getTime() <=
+          (latest.measuredAt ?? latest.recordedAt).getTime()
+      )
+        return { location: latest, ignored: true };
+      const location = await tx.driverLocation.create({
+        data: {
+          driverId: trip.assignedDriverId!,
+          requestId: trip.id,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          heading: input.heading ?? null,
+          speed: input.speed ?? null,
+          accuracy: input.accuracy ?? null,
+          recordedAt: measuredAt,
+          measuredAt,
+          receivedAt,
+        },
+        select: {
+          requestId: true,
+          driverId: true,
+          latitude: true,
+          longitude: true,
+          heading: true,
+          speed: true,
+          accuracy: true,
+          recordedAt: true,
+        },
+      });
+
+      return { location, ignored: false };
     });
+    const location = saved.location;
+    if (saved.ignored)
+      return {
+        location: this.mapDriverLocationUpdatedPayload(location),
+        nearDelivery: null,
+        ignored: true,
+      };
 
     let nearDelivery: DriverNearDeliveryPayload | null = null;
 

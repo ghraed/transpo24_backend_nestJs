@@ -1,3 +1,4 @@
+import { IsDateString } from 'class-validator';
 import {
   IsNotEmpty,
   IsNumber,
@@ -8,6 +9,9 @@ import {
 } from 'class-validator';
 
 export class DriverLocationUpdateDto {
+  @IsDateString()
+  measuredAt!: string;
+
   @IsString()
   @IsNotEmpty()
   tripId!: string;

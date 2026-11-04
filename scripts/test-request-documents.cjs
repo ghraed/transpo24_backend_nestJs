@@ -1,6 +1,8 @@
 require('dotenv/config');
 require('reflect-metadata');
 const assert = require('node:assert/strict');
+const sharp = require('sharp');
+const { syntheticPdf } = require('../dist/src/test-support/document-fixtures');
 const { randomUUID } = require('node:crypto');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -59,6 +61,8 @@ let app;
             userId: driverUser.id,
             firstName: 'Test',
             lastName: 'Documents',
+            status: 'APPROVED',
+            isProfileCompleted: true,
             phone: `test-${randomUUID()}`,
           },
         });
@@ -96,6 +100,12 @@ let app;
             paymentStatus: 'PAYMENT_HOLD_PENDING',
           },
         });
+        await tx.paymentHold.create({ data: {
+          requestId, acceptedOfferId: offer.id, driverId: driver.id,
+          customerId: customer.id, amount: 100, currency: 'EUR',
+          paymentMethod: 'APP_WALLET', provider: 'APP_WALLET',
+          status: 'PAYMENT_HELD', authorizedAt: new Date(),
+        } });
         const room = await tx.chatRoom.create({
           data: {
             transportRequestId: requestId,
@@ -145,6 +155,7 @@ let app;
               useValue: {
                 getUserFromAccessToken: (token) => actors[token],
                 isUserActive: async () => true,
+                assertDriverApproved: async () => undefined,
               },
             },
           ],
@@ -162,7 +173,7 @@ let app;
           .post(path)
           .set('Authorization', 'Bearer customer')
           .field('documentType', 'OTHER')
-          .attach('file', Buffer.from('%PDF-1.7\nprivate'), 'test.pdf')
+          .attach('file', Buffer.from(syntheticPdf()), 'test.pdf')
           .expect(403);
         await tx.transportRequest.update({
           where: { id: requestId },
@@ -173,26 +184,28 @@ let app;
           .set('Authorization', 'Bearer customer')
           .expect(200);
         assert.equal(funded.body.shouldPrompt, true);
+        const jpeg=await sharp({create:{width:16,height:16,channels:3,background:'#fff'}}).jpeg().toBuffer();
+        const png=await sharp({create:{width:16,height:16,channels:3,background:'#fff'}}).png().toBuffer();
         const formats = [
           [
             'PICKUP_AUTHORIZATION',
-            '%PDF-1.7\nprivate',
+            syntheticPdf(),
             'authorization.pdf',
             'application/pdf',
           ],
           [
             'INSURANCE',
-            [255, 216, 255, 224, 0, 16],
+            jpeg,
             'insurance.jpg',
             'image/jpeg',
           ],
           [
             'PURCHASE_PROOF',
-            [137, 80, 78, 71, 13, 10, 26, 10, 0],
+            png,
             'proof.png',
             'image/png',
           ],
-          ['OTHER', '%PDF-1.7\nother', 'other.pdf', 'application/pdf'],
+          ['OTHER', syntheticPdf(), 'other.pdf', 'application/pdf'],
         ];
         const ids = [];
         for (const [type, bytes, name, mime] of formats) {
@@ -210,7 +223,9 @@ let app;
               .get(`/request-files/${uploaded.body.id}/content`)
               .set('Authorization', `Bearer ${actor}`)
               .expect(200);
-            assert.deepEqual(downloaded.body, body);
+            const stored=await tx.requestFile.findUniqueOrThrow({where:{id:uploaded.body.id}});
+            assert.deepEqual(downloaded.body,Buffer.from(stored.data));
+            if(mime==='application/pdf')assert.deepEqual(downloaded.body,body);else{const meta=await sharp(downloaded.body).metadata();assert.equal(meta.width,16);assert.equal(meta.exif,undefined);}
             assert.equal(
               downloaded.headers['cache-control'],
               'private, no-store',
@@ -247,12 +262,17 @@ let app;
           .attach('file', Buffer.alloc(10 * 1024 * 1024 + 1), 'too-large.pdf')
           .expect(413);
         for (const actor of ['customer', 'driver']) {
+          const operationId='audit-file-'+actor+'-'+randomUUID();
           const message = await http()
             .post(`/chat/rooms/${room.id}/attachments`)
             .set('Authorization', `Bearer ${actor}`)
-            .attach('file', Buffer.from('%PDF-1.7\nchat'), 'chat.pdf')
+            .field('operationId',operationId)
+            .attach('file', syntheticPdf(), 'chat.pdf')
             .expect(201);
           assert.equal(message.body.type, 'FILE');
+          const retry=await http().post(`/chat/rooms/${room.id}/attachments`).set('Authorization',`Bearer ${actor}`).field('operationId',operationId).attach('file',syntheticPdf(),'chat.pdf').expect(201);
+          assert.equal(retry.body.id,message.body.id);assert.equal(retry.body.replayed,true);
+          await http().post(`/chat/rooms/${room.id}/attachments`).set('Authorization',`Bearer ${actor}`).field('operationId',operationId).attach('file',png,{filename:'changed.png',contentType:'image/png'}).expect(409);
           await http()
             .get(message.body.attachmentUrl)
             .set(
@@ -280,10 +300,12 @@ let app;
         await http()
           .post(`/chat/rooms/${room.id}/attachments`)
           .set('Authorization', 'Bearer driver')
-          .attach('file', Buffer.from('%PDF-1.7'), 'test.pdf')
+          .field('operationId',randomUUID())
+          .attach('file', syntheticPdf(), 'test.pdf')
           .expect(403);
-        await tx.transportRequest.delete({ where: { id: requestId } });
-        assert.equal(await tx.requestFile.count({ where: { requestId } }), 0);
+        await tx.transportRequest.update({where:{id:requestId},data:{status:'CANCELLED',deletedByCustomerAt:new Date()}});
+        assert.equal(await tx.requestFile.count({ where: { requestId } }), 6);
+        assert.equal(await tx.paymentHold.count({where:{requestId}}),1);
         throw rollback;
       },
       { timeout: 60000 },
@@ -296,7 +318,7 @@ let app;
     0,
   );
   console.log(
-    'PASS: real PostgreSQL + authenticated multipart HTTP; four official types; PDF/JPG/PNG round trips; payment gate; private downloads; invalid/oversize rejection; bidirectional chat; realtime/push; admin separation; revoked driver; cascade deletion. All fixture writes rolled back.',
+    'PASS: real PostgreSQL + authenticated multipart HTTP; four official types; PDF/JPG/PNG round trips; payment gate; private downloads; invalid/oversize rejection; bidirectional chat; realtime/push; admin separation; revoked driver; retained documents/financial records after customer archival. All fixture writes rolled back.',
   );
 })()
   .catch((e) => {

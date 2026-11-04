@@ -128,7 +128,7 @@ export class RequestFilesService {
       throw new ForbiddenException(
         'Documents can be uploaded after a driver is selected and payment is held.',
       );
-    const validated = validateFile(file);
+    const validated = await validateFile(file);
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.requestFile.create({
         data: {

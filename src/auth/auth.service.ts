@@ -1,3 +1,10 @@
+import {
+  TERMS_VERSION,
+  TERMS_HASH,
+  TERMS_TEXT,
+  requireTermsVersion,
+  termsEvidence,
+} from './legal';
 import { assertDriverApproved } from './driver-approval';
 import { normalizeDriverBusiness } from '../driver/driver-business';
 import {
@@ -43,6 +50,7 @@ import { TwilioVerifyService } from './twilio-verify.service';
 import { normalizeCountryCode } from '../common/currency/country-currency.util';
 
 type AccessTokenPayload = {
+  sessionFamily?: string;
   sub: string;
   name: string;
   email: string;
@@ -129,6 +137,41 @@ export class AuthService {
     private readonly phoneRateLimit: PhoneAuthRateLimitService,
   ) {}
 
+  async legalStatus(userId: string) {
+    const accepted = await this.prisma.legalAcceptance.findUnique({
+      where: { userId_version: { userId, version: TERMS_VERSION } },
+    });
+    return {
+      version: TERMS_VERSION,
+      documentHash: TERMS_HASH,
+      text: TERMS_TEXT,
+      accepted: Boolean(accepted && accepted.documentHash === TERMS_HASH),
+    };
+  }
+
+  async acceptTerms(
+    userId: string,
+    version: string,
+    method = 'AUTHENTICATED_ACCEPTANCE',
+  ) {
+    requireTermsVersion(version);
+    return this.prisma.legalAcceptance.upsert({
+      where: { userId_version: { userId, version } },
+      create: { userId, ...termsEvidence(method) },
+      update: {},
+    });
+  }
+
+  async assertTermsAccepted(user: AuthenticatedUser, path = '') {
+    if (
+      user.role === UserRole.ADMIN ||
+      /^\/auth\/(legal|logout|account|session\/logout)(\/|$)/.test(path)
+    )
+      return;
+    const status = await this.legalStatus(user.id);
+    if (!status.accepted) requireTermsVersion();
+  }
+
   async sendPhoneCode(
     dto: SendPhoneCodeDto,
     ipAddress: string,
@@ -206,9 +249,11 @@ export class AuthService {
     let user = existing;
     let isNewUser = false;
     if (!user) {
+      requireTermsVersion(dto.acceptedTermsVersion);
       try {
         user = await this.prisma.user.create({
           data: {
+            legalAcceptances: { create: termsEvidence('PHONE_VERIFICATION') },
             name: 'Customer',
             email: this.createCustomerPlaceholderEmail(phoneNumber),
             passwordHash: hashPassword(randomBytes(32).toString('base64url')),
@@ -237,6 +282,12 @@ export class AuthService {
       throw new ForbiddenException('Customer access is required.');
     }
 
+    if (dto.acceptedTermsVersion)
+      await this.acceptTerms(
+        user.id,
+        dto.acceptedTermsVersion,
+        'PHONE_VERIFICATION',
+      );
     return this.issueCustomerSession(user, isNewUser);
   }
 
@@ -280,8 +331,10 @@ export class AuthService {
     });
 
     if (!user) {
+      requireTermsVersion(dto.acceptedTermsVersion);
       user = await this.prisma.user.create({
         data: {
+          legalAcceptances: { create: termsEvidence('PHONE_VERIFICATION') },
           name: 'Driver',
           email: this.createDriverPlaceholderEmail(phoneNumber),
           passwordHash: hashPassword(randomBytes(32).toString('base64url')),
@@ -304,6 +357,12 @@ export class AuthService {
       });
     }
 
+    if (dto.acceptedTermsVersion)
+      await this.acceptTerms(
+        user.id,
+        dto.acceptedTermsVersion,
+        'PHONE_VERIFICATION',
+      );
     return this.buildDriverAuthResponse(user);
   }
 
@@ -312,7 +371,11 @@ export class AuthService {
     // credential. Its normal expiry is intentionally ignored here so a driver
     // can return on the same device without another SMS verification.
     const trustedUser = this.getUserFromSignedAccessToken(accessToken, true);
-    if (!trustedUser || trustedUser.role !== UserRole.DRIVER) {
+    if (
+      !trustedUser ||
+      trustedUser.role !== UserRole.DRIVER ||
+      !(await this.isUserActive(trustedUser))
+    ) {
       throw new UnauthorizedException('Trusted driver session is invalid.');
     }
 
@@ -325,7 +388,7 @@ export class AuthService {
       throw new UnauthorizedException('Trusted driver session is invalid.');
     }
 
-    return this.buildDriverAuthResponse(user);
+    return this.buildDriverAuthResponse(user, trustedUser.sessionFamily);
   }
 
   async refreshCustomerSession(
@@ -350,7 +413,9 @@ export class AuthService {
 
     const replacement = this.createRefreshToken();
     const replacementId = randomUUID();
+    const familyId = session.familyId ?? session.id;
     await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM refresh_sessions WHERE id = ${familyId} FOR UPDATE`;
       const rotated = await tx.refreshSession.updateMany({
         where: {
           id: session.id,
@@ -371,6 +436,7 @@ export class AuthService {
       await tx.refreshSession.create({
         data: {
           id: replacementId,
+          familyId,
           userId: session.userId,
           tokenHash: this.hashRefreshToken(replacement),
           expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
@@ -378,18 +444,58 @@ export class AuthService {
       });
     });
 
-    return this.buildCustomerSessionResponse(session.user, replacement, false);
+    return this.buildCustomerSessionResponse(
+      session.user,
+      replacement,
+      false,
+      familyId,
+    );
   }
 
   async logoutCustomer(refreshToken: string): Promise<{ success: true }> {
-    await this.prisma.refreshSession.updateMany({
-      where: {
-        tokenHash: this.hashRefreshToken(refreshToken),
-        revokedAt: null,
-      },
-      data: { revokedAt: new Date(), lastUsedAt: new Date() },
+    const session = await this.prisma.refreshSession.findUnique({
+      where: { tokenHash: this.hashRefreshToken(refreshToken) },
     });
+    if (session)
+      await this.revokeSessionFamily(
+        session.familyId ?? session.id,
+        session.userId,
+      );
     return { success: true };
+  }
+
+  async logoutSession(user: AuthenticatedUser) {
+    if (user.sessionFamily)
+      await this.revokeSessionFamily(user.sessionFamily, user.id);
+    return { success: true };
+  }
+
+  private async revokeSessionFamily(familyId: string, userId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM refresh_sessions WHERE id = ${familyId} FOR UPDATE`;
+      await tx.refreshSession.updateMany({
+        where: {
+          userId,
+          OR: [{ familyId }, { id: familyId }],
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date(), lastUsedAt: new Date() },
+      });
+    });
+  }
+
+  private async createSessionFamily(userId: string): Promise<string> {
+    const familyId = randomUUID();
+    await this.prisma.refreshSession.create({
+      data: {
+        id: familyId,
+        familyId,
+        userId,
+        tokenHash: this.hashRefreshToken(this.createRefreshToken()),
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      },
+    });
+    return familyId;
   }
 
   /**
@@ -537,6 +643,10 @@ export class AuthService {
     countryCode: string;
   }> {
     const normalizedName = name.trim();
+    if (normalizedName.length < 2 || normalizedName.length > 100)
+      throw new BadRequestException(
+        'name must contain between 2 and 100 characters.',
+      );
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -571,6 +681,10 @@ export class AuthService {
     countryCode: string;
   }> {
     const normalizedName = name.trim();
+    if (normalizedName.length < 2 || normalizedName.length > 100)
+      throw new BadRequestException(
+        'name must contain between 2 and 100 characters.',
+      );
     const normalizedCountryCode = normalizeCountryCode(countryCode);
     if (!normalizedCountryCode) {
       throw new BadRequestException(
@@ -627,6 +741,7 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
+    requireTermsVersion(dto.acceptedTermsVersion);
     const normalizedEmail = dto.email.trim().toLowerCase();
 
     const existingUser = await this.prisma.user.findUnique({
@@ -640,6 +755,7 @@ export class AuthService {
 
     const user = await this.prisma.user.create({
       data: {
+        legalAcceptances: { create: termsEvidence('EMAIL_REGISTRATION') },
         name: dto.name.trim(),
         email: normalizedEmail,
         passwordHash: hashPassword(dto.password),
@@ -662,6 +778,7 @@ export class AuthService {
   async registerDriver(
     dto: RegisterDriverDto,
   ): Promise<RegisterDriverResponseDto> {
+    requireTermsVersion(dto.acceptedTermsVersion);
     const normalizedCountryCodes = this.normalizeCountryCodes(
       dto.countryCodes ?? (dto.countryCode ? [dto.countryCode] : []),
     );
@@ -794,6 +911,7 @@ export class AuthService {
     } else {
       created = await this.prisma.user.create({
         data: {
+          legalAcceptances: { create: termsEvidence('EMAIL_REGISTRATION') },
           name: `${input.firstName} ${input.lastName}`.trim(),
           email: input.email,
           passwordHash: hashPassword(input.password),
@@ -842,7 +960,13 @@ export class AuthService {
       throw new BadRequestException('Unable to create driver profile.');
     }
 
+    await this.acceptTerms(
+      created.id,
+      dto.acceptedTermsVersion!,
+      'EMAIL_REGISTRATION',
+    );
     const accessToken = this.createAccessToken({
+      sessionFamily: await this.createSessionFamily(created.id),
       id: created.id,
       name: `${created.driverProfile.firstName} ${created.driverProfile.lastName}`.trim(),
       email: created.email,
@@ -925,6 +1049,10 @@ export class AuthService {
     }
 
     const accessToken = this.createAccessToken({
+      sessionFamily:
+        user.role === UserRole.ADMIN
+          ? undefined
+          : await this.createSessionFamily(user.id),
       id: user.id,
       name: user.name,
       email: user.email,
@@ -1055,14 +1183,22 @@ export class AuthService {
     isNewUser: boolean,
   ): Promise<PhoneAuthResponseDto> {
     const refreshToken = this.createRefreshToken();
+    const familyId = randomUUID();
     await this.prisma.refreshSession.create({
       data: {
+        id: familyId,
+        familyId,
         userId: user.id,
         tokenHash: this.hashRefreshToken(refreshToken),
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
       },
     });
-    return this.buildCustomerSessionResponse(user, refreshToken, isNewUser);
+    return this.buildCustomerSessionResponse(
+      user,
+      refreshToken,
+      isNewUser,
+      familyId,
+    );
   }
 
   private buildCustomerSessionResponse(
@@ -1077,6 +1213,7 @@ export class AuthService {
     },
     refreshToken: string,
     isNewUser: boolean,
+    sessionFamily: string,
   ): PhoneAuthResponseDto {
     if (!user.phoneNumber || user.role !== UserRole.CUSTOMER) {
       throw new ForbiddenException(
@@ -1092,6 +1229,7 @@ export class AuthService {
           email: user.email,
           role: user.role,
           hasDriverProfile: false,
+          sessionFamily,
         },
         CUSTOMER_ACCESS_TOKEN_TTL_SECONDS,
       ),
@@ -1144,27 +1282,30 @@ export class AuthService {
     }
   }
 
-  private buildDriverAuthResponse(user: {
-    id: string;
-    name: string;
-    email: string;
-    role: UserRole;
-    deletedAt: Date | null;
-    driverProfile: {
+  private async buildDriverAuthResponse(
+    user: {
       id: string;
-      driverType?: string;
-      trn?: string | null;
-      firstName: string;
-      lastName: string;
-      phone: string;
-      countryCode: string | null;
-      countryCodes: string[];
-      city: string | null;
-      cities: string[];
-      status: DriverStatus;
-      isProfileCompleted: boolean;
-    } | null;
-  }): LoginResponseDto {
+      name: string;
+      email: string;
+      role: UserRole;
+      deletedAt: Date | null;
+      driverProfile: {
+        id: string;
+        driverType?: string;
+        trn?: string | null;
+        firstName: string;
+        lastName: string;
+        phone: string;
+        countryCode: string | null;
+        countryCodes: string[];
+        city: string | null;
+        cities: string[];
+        status: DriverStatus;
+        isProfileCompleted: boolean;
+      } | null;
+    },
+    existingFamily?: string,
+  ): Promise<LoginResponseDto> {
     if (
       user.role !== UserRole.DRIVER ||
       user.deletedAt ||
@@ -1178,9 +1319,12 @@ export class AuthService {
       isProfileCompleted: user.driverProfile.isProfileCompleted,
     });
 
+    const sessionFamily =
+      existingFamily ?? (await this.createSessionFamily(user.id));
     return {
       accessToken: this.createAccessToken({
         id: user.id,
+        sessionFamily,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -1285,7 +1429,20 @@ export class AuthService {
       where: { id: user.id, role: user.role, deletedAt: null },
       select: { id: true },
     });
-    return Boolean(account);
+    if (!account) return false;
+    if (user.role === UserRole.ADMIN) return true;
+    if (!user.sessionFamily) return false; // Legacy customer refresh can rotate; legacy drivers must reverify.
+    return Boolean(
+      await this.prisma.refreshSession.findFirst({
+        where: {
+          userId: user.id,
+          familyId: user.sessionFamily,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      }),
+    );
   }
 
   private getUserFromSignedAccessToken(
@@ -1335,6 +1492,9 @@ export class AuthService {
 
       return {
         id: payload.sub,
+        ...(typeof payload.sessionFamily === 'string'
+          ? { sessionFamily: payload.sessionFamily }
+          : {}),
         name: payload.name,
         email: payload.email,
         role: payload.role,
@@ -1354,6 +1514,7 @@ export class AuthService {
   ): string {
     const payload: AccessTokenPayload = {
       sub: user.id,
+      sessionFamily: user.sessionFamily,
       name: user.name,
       email: user.email,
       role: user.role,

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { DriverStatus, Prisma, UserRole } from '@prisma/client';
 
+import { TERMS_VERSION } from './legal';
 import { AuthService } from './auth.service';
 
 const customer = {
@@ -27,12 +28,22 @@ function createHarness() {
       updateMany: jest.fn(),
     },
     driverProfile: { findUnique: jest.fn() },
+    legalAcceptance: {
+      upsert: jest.fn().mockResolvedValue({}),
+      findUnique: jest.fn().mockResolvedValue({ documentHash: 'fixture' }),
+    },
     refreshSession: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'active-family' }),
       create: jest.fn().mockResolvedValue({}),
       findUnique: jest.fn(),
       updateMany: jest.fn(),
     },
-    $transaction: jest.fn(),
+    $queryRaw: jest.fn().mockResolvedValue([]),
+    $transaction: jest
+      .fn()
+      .mockImplementation(async (fn) =>
+        typeof fn === 'function' ? fn(prisma) : Promise.all(fn),
+      ),
   };
   const twilio = { sendCode: jest.fn(), verifyCode: jest.fn() };
   const rateLimit = {
@@ -76,7 +87,11 @@ describe('AuthService phone authentication', () => {
     prisma.user.findUnique.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -115,7 +130,11 @@ describe('AuthService phone authentication', () => {
     });
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -140,7 +159,11 @@ describe('AuthService phone authentication', () => {
     );
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -156,7 +179,11 @@ describe('AuthService phone authentication', () => {
     twilio.verifyCode.mockResolvedValue(status);
     await expect(
       service.verifyPhoneCode(
-        { phoneNumber: customer.phoneNumber, code: '000000' },
+        {
+          phoneNumber: customer.phoneNumber,
+          code: '000000',
+          acceptedTermsVersion: TERMS_VERSION,
+        },
         '127.0.0.1',
       ),
     ).rejects.toThrow(message);
@@ -169,7 +196,11 @@ describe('AuthService phone authentication', () => {
     prisma.user.findUnique.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -187,7 +218,11 @@ describe('AuthService phone authentication', () => {
     prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -212,7 +247,11 @@ describe('AuthService phone authentication', () => {
     prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -235,7 +274,11 @@ describe('AuthService phone authentication', () => {
     prisma.user.create.mockResolvedValue(customer);
 
     const response = await service.verifyPhoneCode(
-      { phoneNumber: customer.phoneNumber, code: '123456' },
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -280,6 +323,7 @@ describe('AuthService phone authentication', () => {
       email: 'driver@example.com',
       phone: '+96170123457',
       password: 'driver@test.com',
+      acceptedTermsVersion: TERMS_VERSION,
       countryCode: 'LB',
       countryCodes: ['LB'],
       city: 'Beirut',
@@ -316,7 +360,11 @@ describe('AuthService phone authentication', () => {
     });
 
     const response = await service.verifyDriverPhoneCode(
-      { phoneNumber: '+96170123458', code: '123456' },
+      {
+        phoneNumber: '+96170123458',
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -349,7 +397,11 @@ describe('AuthService phone authentication', () => {
     });
 
     const response = await service.verifyDriverPhoneCode(
-      { phoneNumber: '+96170123459', code: '123456' },
+      {
+        phoneNumber: '+96170123459',
+        code: '123456',
+        acceptedTermsVersion: TERMS_VERSION,
+      },
       '127.0.0.1',
     );
 
@@ -379,6 +431,7 @@ describe('AuthService phone authentication', () => {
       },
     };
     prisma.user.findUnique.mockResolvedValue(driver);
+    prisma.user.findFirst.mockResolvedValue({ id: driver.id });
 
     const expiredAccessToken = (
       service as unknown as {
@@ -389,6 +442,7 @@ describe('AuthService phone authentication', () => {
             email: string;
             role: UserRole;
             hasDriverProfile: boolean;
+            sessionFamily: string;
           },
           ttlSeconds: number,
         ) => string;
@@ -400,6 +454,7 @@ describe('AuthService phone authentication', () => {
         email: driver.email,
         role: driver.role,
         hasDriverProfile: true,
+        sessionFamily: 'trusted-family',
       },
       -1,
     );
@@ -428,6 +483,7 @@ describe('AuthService phone authentication', () => {
       (callback: (tx: unknown) => unknown) =>
         Promise.resolve(
           callback({
+            $queryRaw: jest.fn().mockResolvedValue([]),
             refreshSession: {
               updateMany: jest.fn().mockResolvedValue({ count: 1 }),
               create: jest.fn().mockResolvedValue({}),
@@ -457,6 +513,12 @@ describe('AuthService phone authentication', () => {
 
   it('revokes the refresh session on logout', async () => {
     const { service, prisma } = createHarness();
+    prisma.refreshSession.findUnique.mockResolvedValue({
+      id: 'root',
+      familyId: 'root',
+      userId: customer.id,
+      revokedAt: new Date(),
+    });
     let logoutInput: { data: { revokedAt: Date } } | undefined;
     prisma.refreshSession.updateMany.mockImplementation((input: unknown) => {
       logoutInput = input as { data: { revokedAt: Date } };
@@ -466,6 +528,15 @@ describe('AuthService phone authentication', () => {
       success: true,
     });
     expect(logoutInput?.data.revokedAt).toBeInstanceOf(Date);
+    expect(prisma.refreshSession.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: customer.id,
+          OR: [{ familyId: 'root' }, { id: 'root' }],
+          revokedAt: null,
+        },
+      }),
+    );
   });
 
   it('allows an admin to log out', async () => {

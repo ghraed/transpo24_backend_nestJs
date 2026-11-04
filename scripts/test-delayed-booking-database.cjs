@@ -1,5 +1,6 @@
 require('dotenv').config({ quiet: true });
 require('reflect-metadata');
+process.env.STRIPE_DIRECT_CHARGES_ENABLED='false';
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
@@ -20,6 +21,7 @@ const D = value => new Prisma.Decimal(value);
 async function main() {
   const url = new URL(process.env.DATABASE_URL);
   if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error('This check refuses a non-local database.');
+  assert.equal(url.pathname,'/transpo24_audit','Dedicated disposable database required');
   const schema = `payment_test_${randomUUID().replaceAll('-', '')}`;
   const admin = new Client({ connectionString: url.toString() });
   let prisma;
@@ -156,6 +158,38 @@ async function main() {
     assert.equal((await prisma.additionalCharge.findUnique({ where: { id: extra.id } })).status, 'CAPTURED');
     assert.equal((await prisma.driverEarning.findUnique({ where: { tripId: held.requestId } })).grossAmount.toString(), earningBefore.grossAmount.add(20).toString());
     console.log('PASS: concurrent additional-expense recovery records a successful payment and allocates driver earnings only once');
+    const driver2User=await prisma.user.create({data:{name:'Race driver two',email:'race-driver2@example.invalid',passwordHash:'not-a-login',role:'DRIVER'}});
+    const driver2=await prisma.driverProfile.create({data:{userId:driver2User.id,firstName:'Race',lastName:'Two',phone:'audit-race2',status:'APPROVED',isProfileCompleted:true,availability:{create:{timezone:'UTC',isOnline:true,serviceRadiusKm:100}}}});
+    const template=await prisma.driverVehicle.findFirstOrThrow({where:{driverId:driver.id},include:{documents:true}});
+    await prisma.driverVehicle.create({data:{driverId:driver2.id,vehicleType:'VAN',make:'Synthetic',model:'Race',year:2026,plateNumber:'AUDIT2',documents:{create:template.documents.map(doc=>({driverId:driver2.id,type:doc.type,url:'fixture',mimeType:'image/jpeg',sizeBytes:1,status:'APPROVED'}))}}});
+    const raceUser=await customer('twelve-race',D(300));const race=await booking(raceUser);
+    const secondOffer=await prisma.driverOffer.create({data:{requestId:race.request.id,driverId:driver2.id,price:D(100),currency:'CHF'}});
+    const attempts=await Promise.allSettled(Array.from({length:12},(_,n)=>requests.acceptDriverOffer({...race.input,offerId:n%2?race.offer.id:secondOffer.id})));
+    const winning=await prisma.paymentHold.findUniqueOrThrow({where:{requestId:race.request.id}});
+    assert.equal(await prisma.paymentHold.count({where:{requestId:race.request.id}}),1);
+    assert(attempts.some(x=>x.status==='fulfilled'));assert(attempts.some(x=>x.status==='rejected'));
+    await makeDue(race.request.id);await Promise.all(Array.from({length:4},()=>queue.process(race.request.id)));
+    const assigned=await prisma.transportRequest.findUniqueOrThrow({where:{id:race.request.id}});
+    assert.equal(assigned.assignedDriverId,winning.driverId);assert.equal(assigned.acceptedOfferId,winning.acceptedOfferId);
+    assert.equal(await prisma.chatRoom.count({where:{transportRequestId:race.request.id}}),1);
+    assert.equal((await prisma.customerWallet.findUniqueOrThrow({where:{customerId:raceUser.id}})).reservedBalance.toNumber(),105);
+    assert.equal(sent.filter(x=>x.event==='DRIVER_SELECTED'&&x.requestId===race.request.id).length,1);
+    console.log('PASS: two approved drivers / twelve concurrent acceptance attempts / four workers: one winning hold, assignment, chat, wallet reserve and acceptance notification');
+    const retainedBefore=await prisma.paymentHold.findUniqueOrThrow({where:{requestId:first.request.id}});
+    const ledgerBefore=await prisma.customerWalletTransaction.findMany({where:{paymentHoldId:retainedBefore.id},orderBy:{id:'asc'}});
+    const settlementBefore=await prisma.tripPaymentSettlement.findUniqueOrThrow({where:{requestId:first.request.id}});
+    await Promise.all([requests.deleteCustomerRequest({customerId:user.id,requestId:first.request.id}),requests.deleteCustomerRequest({customerId:user.id,requestId:first.request.id})]);
+    assert((await prisma.transportRequest.findUniqueOrThrow({where:{id:first.request.id}})).deletedByCustomerAt);
+    assert.deepEqual(await prisma.paymentHold.findUniqueOrThrow({where:{requestId:first.request.id}}),retainedBefore);
+    assert.deepEqual(await prisma.customerWalletTransaction.findMany({where:{paymentHoldId:retainedBefore.id},orderBy:{id:'asc'}}),ledgerBefore);
+    assert.deepEqual(await prisma.tripPaymentSettlement.findUniqueOrThrow({where:{requestId:first.request.id}}),settlementBefore);
+    await assert.rejects(prisma.transportRequest.delete({where:{id:first.request.id}}),error=>error.code==='P2003');
+    const deletionUser=await customer('delete-vs-book',D(200));const deletion=await booking(deletionUser);
+    const deletionRace=await Promise.allSettled([requests.deleteCustomerRequest({customerId:deletionUser.id,requestId:deletion.request.id}),requests.acceptDriverOffer(deletion.input)]);
+    const deletionRow=await prisma.transportRequest.findUniqueOrThrow({where:{id:deletion.request.id},include:{paymentHold:true}});
+    assert(!(deletionRow.deletedByCustomerAt&&deletionRow.paymentHold?.confirmationState!=='CANCELLED'&&deletionRow.paymentHold));
+    assert.equal((await prisma.customerWallet.findUniqueOrThrow({where:{customerId:deletionUser.id}})).reservedBalance.toNumber(),0);
+    console.log('PASS: customer deletion retries retain financial holds, settlement/provider references and ledger; hard deletion is FK-restricted; delete/booking race cannot both succeed');
     if (!['localhost', '127.0.0.1', '::1'].includes(process.env.REDIS_HOST || '')) throw new Error('The restart check requires local Redis.');
     const restartUser = await customer('restart', D(200)); const restartBooking = await booking(restartUser);
     await requests.acceptDriverOffer(restartBooking.input);
@@ -189,4 +223,4 @@ async function main() {
     console.log('Disposable database schema cleaned up.');
   }
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+main().catch(error => { console.error(error.stack); process.exitCode = 1; });

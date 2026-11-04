@@ -3,7 +3,12 @@ import type { Server, Socket } from 'socket.io';
 import { TripsGateway } from './trips.gateway';
 
 describe('driver location acknowledgement', () => {
-  const payload = { tripId: 'trip', latitude: 47.5, longitude: 7.6 };
+  const payload = {
+    measuredAt: '2026-11-04T12:00:00Z',
+    tripId: 'trip',
+    latitude: 47.5,
+    longitude: 7.6,
+  };
 
   function setup() {
     const location = { ...payload, recordedAt: new Date().toISOString() };
@@ -13,16 +18,26 @@ describe('driver location acknowledgement', () => {
         .mockResolvedValue({ location, nearDelivery: null }),
     };
     const emit = jest.fn();
+    const auth = {
+      getUserFromAccessToken: jest.fn(() => ({
+        id: 'driver',
+        role: UserRole.DRIVER,
+      })),
+      isUserActive: jest.fn().mockResolvedValue(true),
+      assertDriverApproved: jest.fn().mockResolvedValue(undefined),
+    };
     const gateway = new TripsGateway(
-      {} as never,
+      auth as never,
       service as never,
       {} as never,
     );
     gateway.server = { to: jest.fn(() => ({ emit })) } as unknown as Server;
     const socket = {
       data: { user: { id: 'driver', role: UserRole.DRIVER } },
+      handshake: { auth: { token: 'token' } },
+      disconnect: jest.fn(),
     } as unknown as Socket;
-    return { gateway, service, emit, socket, location };
+    return { gateway, service, emit, socket, location, auth };
   }
 
   it('removes driver identity and contact text from new-offer socket events', () => {
@@ -86,4 +101,20 @@ describe('driver location acknowledgement', () => {
     ).rejects.toThrow();
     expect(service.updateDriverLocation).not.toHaveBeenCalled();
   });
+  it.each(['expired', 'deleted', 'suspended'])(
+    'rejects an already connected %s actor before writing a location',
+    async (reason) => {
+      const { gateway, service, socket, auth } = setup();
+      if (reason === 'expired')
+        auth.getUserFromAccessToken.mockReturnValue(null as never);
+      if (reason === 'deleted') auth.isUserActive.mockResolvedValue(false);
+      if (reason === 'suspended')
+        auth.assertDriverApproved.mockRejectedValue(new Error('Suspended'));
+      await expect(
+        gateway.driverLocationUpdate(socket, payload),
+      ).rejects.toThrow();
+      expect(service.updateDriverLocation).not.toHaveBeenCalled();
+      expect(socket.disconnect).toHaveBeenCalled();
+    },
+  );
 });

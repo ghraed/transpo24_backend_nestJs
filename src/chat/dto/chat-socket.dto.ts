@@ -1,3 +1,4 @@
+import { Length } from 'class-validator';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ChatJoinRoomDto {
@@ -11,6 +12,10 @@ export class ChatLeaveRoomDto {
 }
 
 export class ChatSendMessageSocketDto {
+  @IsString()
+  @Length(16, 100)
+  operationId!: string;
+
   @IsString()
   roomId!: string;
 

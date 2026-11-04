@@ -1,5 +1,6 @@
 import {
   ForbiddenException,
+  Get,
   Body,
   Controller,
   Delete,
@@ -25,10 +26,26 @@ import { CustomerAuthGuard } from './guards/customer-auth.guard';
 import { AuthenticatedUserGuard } from './guards/authenticated-user.guard';
 import { TestingOnlyGuard } from './guards/testing-only.guard';
 import type { AuthenticatedRequest } from './auth.types';
+import { LegalAcceptanceDto } from './dto/legal-acceptance.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('legal')
+  @UseGuards(AuthenticatedUserGuard)
+  legal(@Req() request: AuthenticatedRequest) {
+    return this.authService.legalStatus(request.user.id);
+  }
+
+  @Post('legal')
+  @UseGuards(AuthenticatedUserGuard)
+  acceptLegal(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: LegalAcceptanceDto,
+  ) {
+    return this.authService.acceptTerms(request.user.id, dto.version);
+  }
 
   @Post('register')
   register(@Body() dto: RegisterDto): Promise<RegisterResponseDto> {
@@ -132,6 +149,12 @@ export class AuthController {
     @Body() dto: RefreshSessionDto,
   ): Promise<PhoneAuthResponseDto> {
     return this.authService.refreshCustomerSession(dto.refreshToken);
+  }
+
+  @Post('session/logout')
+  @UseGuards(AuthenticatedUserGuard)
+  logoutSession(@Req() request: AuthenticatedRequest) {
+    return this.authService.logoutSession(request.user);
   }
 
   @Post('logout')

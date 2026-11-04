@@ -8,7 +8,13 @@ import {
   WebSocketServer,
   WsException,
 } from '@nestjs/websockets';
-import { Inject, Logger, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Logger,
+  UsePipes,
+  ValidationPipe,
+  forwardRef,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
 
@@ -72,6 +78,14 @@ type SocketDebugPongPayload = {
 };
 
 @WebSocketGateway({ cors: { origin: true, credentials: true } })
+@UsePipes(
+  new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    exceptionFactory: () => new WsException('Invalid socket payload.'),
+  }),
+)
 export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(TripsGateway.name);
 
@@ -85,7 +99,18 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly chatService: ChatService,
   ) {}
 
+  private readonly connectionAuthorization = new WeakMap<
+    Socket,
+    Promise<void>
+  >();
+
   async handleConnection(client: Socket): Promise<void> {
+    const authorization = this.authorizeConnection(client);
+    this.connectionAuthorization.set(client, authorization);
+    await authorization;
+  }
+
+  private async authorizeConnection(client: Socket): Promise<void> {
     const token = this.getSocketToken(client);
 
     if (!token) {
@@ -106,6 +131,21 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    try {
+      if (!(await this.authService.isUserActive(user))) {
+        client.disconnect(true);
+        return;
+      }
+    } catch {
+      client.disconnect(true);
+      return;
+    }
+    try {
+      await this.authService.assertTermsAccepted?.(user);
+    } catch {
+      client.disconnect(true);
+      return;
+    }
     if (user.role === UserRole.DRIVER) {
       try {
         await this.authService.assertDriverApproved(user.id);
@@ -120,6 +160,12 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       `Socket connected: socketId=${client.id}, userId=${user.id}, role=${user.role}`,
     );
     void client.join(this.getUserRoom(user));
+    // Remove idle subscribers after token expiry, deletion or driver suspension.
+    const authorizationCheck = setInterval(() => {
+      void this.getAuthenticatedSocketUser(client).catch(() => undefined);
+    }, 30_000);
+    authorizationCheck.unref();
+    client.once('disconnect', () => clearInterval(authorizationCheck));
   }
 
   handleDisconnect(client: Socket): void {
@@ -132,7 +178,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: JoinTripRoomDto,
   ): Promise<{ tripId: string; room: string }> {
     try {
-      const user = this.getAuthenticatedSocketUser(client);
+      const user = await this.getAuthenticatedSocketUser(client);
       await this.tripsService.joinTripRoom({
         userId: user.id,
         role: user.role,
@@ -166,7 +212,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: ChatJoinRoomDto,
   ): Promise<{ roomId: string; room: string }> {
     try {
-      const user = this.getAuthenticatedSocketUser(client);
+      const user = await this.getAuthenticatedSocketUser(client);
       await this.chatService.assertCanAccessRoom({
         user,
         roomId: payload.roomId,
@@ -199,14 +245,15 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: ChatSendMessageSocketDto,
   ): Promise<ChatMessageResponseDto> {
     try {
-      const user = this.getAuthenticatedSocketUser(client);
+      const user = await this.getAuthenticatedSocketUser(client);
       const created = await this.chatService.sendTextMessage({
         user,
         roomId: payload.roomId,
         body: payload.body,
+        operationId: payload.operationId,
       });
 
-      this.emitChatMessageCreated(created);
+      if (!created.replayed) this.emitChatMessageCreated(created);
       return created;
     } catch (error) {
       throw this.toWsException(error);
@@ -219,7 +266,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: ChatTypingDto,
   ): Promise<{ roomId: string; isTyping: boolean }> {
     try {
-      const user = this.getAuthenticatedSocketUser(client);
+      const user = await this.getAuthenticatedSocketUser(client);
       await this.chatService.assertCanAccessRoom({
         user,
         roomId: payload.roomId,
@@ -248,7 +295,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: DriverLocationUpdateDto,
   ): Promise<{ ok: true }> {
     try {
-      const user = this.getAuthenticatedSocketUser(client);
+      const user = await this.getAuthenticatedSocketUser(client);
       if (user.role !== UserRole.DRIVER && !user.hasDriverProfile) {
         throw new WsException('Driver access is required.');
       }
@@ -261,11 +308,13 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         heading: payload.heading,
         speed: payload.speed,
         accuracy: payload.accuracy,
+        measuredAt: payload.measuredAt,
       });
 
-      this.server
-        .to(this.getTripRoom(payload.tripId))
-        .emit('driverLocationUpdated', updated.location);
+      if (!updated.ignored)
+        this.server
+          .to(this.getTripRoom(payload.tripId))
+          .emit('driverLocationUpdated', updated.location);
       if (updated.nearDelivery) {
         this.server
           .to(this.getTripRoom(payload.tripId))
@@ -283,7 +332,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: DriverArrivedPickupDto,
   ): Promise<void> {
     try {
-      const user = this.getAuthenticatedSocketUser(client);
+      const user = await this.getAuthenticatedSocketUser(client);
       if (user.role !== UserRole.DRIVER && !user.hasDriverProfile) {
         throw new WsException('Driver access is required.');
       }
@@ -307,12 +356,12 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('socketDebugPing')
-  socketDebugPing(
+  async socketDebugPing(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SocketDebugPingPayload,
-  ): SocketDebugPongPayload {
+  ): Promise<SocketDebugPongPayload> {
     try {
-      const user = this.getAuthenticatedSocketUser(client);
+      const user = await this.getAuthenticatedSocketUser(client);
       const tripId =
         typeof payload?.tripId === 'string' ? payload.tripId.trim() : '';
       const note = typeof payload?.note === 'string' ? payload.note.trim() : '';
@@ -489,15 +538,30 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       .emit('chat.message.read', payload);
   }
 
-  private getAuthenticatedSocketUser(client: Socket): SocketUser {
+  private async getAuthenticatedSocketUser(
+    client: Socket,
+  ): Promise<SocketUser> {
+    await this.connectionAuthorization.get(client);
     const socketData = client.data as { user?: SocketUser };
-    const user = socketData.user;
-
-    if (!user) {
+    const token = this.getSocketToken(client);
+    const user = token ? this.authService.getUserFromAccessToken(token) : null;
+    try {
+      if (
+        !user ||
+        !socketData.user ||
+        user.id !== socketData.user.id ||
+        !(await this.authService.isUserActive(user))
+      ) {
+        throw new WsException('Unauthorized socket connection.');
+      }
+      await this.authService.assertTermsAccepted?.(user);
+      if (user.role === UserRole.DRIVER)
+        await this.authService.assertDriverApproved(user.id);
+      return user;
+    } catch {
+      client.disconnect(true);
       throw new WsException('Unauthorized socket connection.');
     }
-
-    return user;
   }
 
   private getSocketToken(client: Socket): string | null {

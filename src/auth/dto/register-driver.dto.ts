@@ -1,3 +1,7 @@
+import {
+  IsString as IsTermsString,
+  MaxLength as TermsMaxLength,
+} from 'class-validator';
 import { DriverBusinessDto } from '../../driver/dto/driver-business.dto';
 import {
   ArrayUnique,
@@ -10,6 +14,11 @@ import {
 } from 'class-validator';
 
 export class RegisterDriverDto extends DriverBusinessDto {
+  @IsOptional()
+  @IsTermsString()
+  @TermsMaxLength(80)
+  acceptedTermsVersion?: string;
+
   @IsOptional()
   @IsString()
   firstName!: string;

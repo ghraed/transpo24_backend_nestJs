@@ -847,13 +847,6 @@ const CANCELLABLE_COLLECTED_PAYMENT_STATUSES = new Set<PaymentStatus>([
   PaymentStatus.PAYMENT_CAPTURED,
 ]);
 
-const HOLD_DELETABLE_REQUEST_STATUSES: TransportRequestStatus[] = [
-  TransportRequestStatus.DRAFT,
-  TransportRequestStatus.PENDING_QUOTES,
-  TransportRequestStatus.QUOTED,
-  TransportRequestStatus.CANCELLED,
-];
-
 const DELETABLE_REQUEST_STATUSES: TransportRequestStatus[] = [
   TransportRequestStatus.DRAFT,
   TransportRequestStatus.PENDING_QUOTES,
@@ -2050,7 +2043,7 @@ export class CustomerRequestsService {
 
   async getRequestForEdit(customerId: string, requestId: string) {
     const request = await this.prisma.transportRequest.findUnique({
-      where: { id: requestId },
+      where: { id: requestId, deletedByCustomerAt: null },
       include: { photos: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!request) throw new NotFoundException('Transport request not found.');
@@ -2397,7 +2390,7 @@ export class CustomerRequestsService {
     }
 
     const request = await this.prisma.transportRequest.findUnique({
-      where: { id: input.requestId },
+      where: { id: input.requestId, deletedByCustomerAt: null },
       select: REQUEST_STATUS_SELECT,
     });
 
@@ -2461,7 +2454,7 @@ export class CustomerRequestsService {
     }
 
     const request = await this.prisma.transportRequest.findUnique({
-      where: { id: input.requestId },
+      where: { id: input.requestId, deletedByCustomerAt: null },
       select: {
         id: true,
         customerId: true,
@@ -2565,7 +2558,7 @@ export class CustomerRequestsService {
     }
 
     const request = await this.prisma.transportRequest.findUnique({
-      where: { id: input.requestId },
+      where: { id: input.requestId, deletedByCustomerAt: null },
       select: {
         id: true,
         customerId: true,
@@ -3529,6 +3522,7 @@ export class CustomerRequestsService {
       this.prisma.transportRequest.findFirst({
         where: {
           customerId: input.customerId,
+          deletedByCustomerAt: null,
           status: { in: ACTIVE_REQUEST_STATUSES },
         },
         orderBy: { createdAt: 'desc' },
@@ -3551,7 +3545,11 @@ export class CustomerRequestsService {
         },
       }),
       this.prisma.transportRequest.findMany({
-        where: { customerId: input.customerId, status: { not: 'RESERVED' } },
+        where: {
+          customerId: input.customerId,
+          deletedByCustomerAt: null,
+          status: { not: 'RESERVED' },
+        },
         orderBy: { createdAt: 'desc' },
         take: 5,
         select: {
@@ -3578,24 +3576,28 @@ export class CustomerRequestsService {
       this.prisma.transportRequest.count({
         where: {
           customerId: input.customerId,
+          deletedByCustomerAt: null,
           status: { in: ACTIVE_REQUEST_STATUSES },
         },
       }),
       this.prisma.transportRequest.count({
         where: {
           customerId: input.customerId,
+          deletedByCustomerAt: null,
           status: TransportRequestStatus.DELIVERED,
         },
       }),
       this.prisma.transportRequest.count({
         where: {
           customerId: input.customerId,
+          deletedByCustomerAt: null,
           status: TransportRequestStatus.CANCELLED,
         },
       }),
       this.prisma.transportRequest.count({
         where: {
           customerId: input.customerId,
+          deletedByCustomerAt: null,
           status: TransportRequestStatus.PENDING_QUOTES,
         },
       }),
@@ -3697,31 +3699,46 @@ export class CustomerRequestsService {
       throw new ConflictException('Only unassigned requests can be deleted.');
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      if (tx.$queryRaw)
-        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${request.id} FOR UPDATE`;
-      const active = await tx.paymentHold.findUnique({
-        where: { requestId: request.id },
-      });
-      if (
-        active?.confirmationStartedAt &&
-        active.confirmationState !== 'CANCELLED'
-      )
-        throw new ConflictException('Cancel the booking before deleting it.');
-      if (request.paymentHold?.id) {
-        if (!HOLD_DELETABLE_REQUEST_STATUSES.includes(request.status)) {
-          throw new ConflictException(
-            'Requests with active payment holds cannot be deleted.',
-          );
-        }
-
-        await this.paymentsService.cancelRequestPaymentTx(tx, request.id);
-      }
-
-      await tx.transportRequest.delete({
+    const changed = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${request.id} FOR UPDATE`;
+      const current = await tx.transportRequest.findUnique({
         where: { id: request.id },
+        include: { paymentHold: true },
       });
+      if (!current || current.customerId !== input.customerId)
+        throw new ForbiddenException('This request is not available.');
+      if (current.deletedByCustomerAt) return false;
+      if (!DELETABLE_REQUEST_STATUSES.includes(current.status))
+        throw new ConflictException('Only unassigned requests can be deleted.');
+      const active = current.paymentHold;
+      if (
+        active &&
+        ((active.confirmationStartedAt &&
+          active.confirmationState !== 'CANCELLED') ||
+          ![
+            'PAYMENT_CANCELLED',
+            'PAYMENT_REFUNDED',
+            'PAYMENT_CAPTURED',
+            'PAYMENT_PARTIALLY_REFUNDED',
+            'PAYMENT_FAILED',
+          ].includes(active.status))
+      )
+        throw new ConflictException(
+          'Cancel or reconcile the booking before deleting it.',
+        );
+      // Customer deletion hides the request. Financial rows and provider/ledger links are retained.
+      await tx.transportRequest.update({
+        where: { id: request.id },
+        data: {
+          deletedByCustomerAt: new Date(),
+          status: ['CANCELLED', 'EXPIRED'].includes(current.status)
+            ? current.status
+            : 'CANCELLED',
+        },
+      });
+      return true;
     });
+    if (!changed) return;
 
     const uniqueDriverIds = [
       ...new Set(request.driverAlerts.map((alert) => alert.driverId)),

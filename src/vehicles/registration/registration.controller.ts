@@ -54,7 +54,7 @@ export class RegistrationController {
     try {
       if (Object.keys(body ?? {}).length)
         throw scanError('REGISTRATION_INVALID_UPLOAD', 400);
-      return await this.service.extract(files, abort.signal);
+      return await this.service.extract(files, abort.signal, req.user.id);
     } finally {
       res.removeListener('close', onClose);
       for (const file of files ?? []) {
