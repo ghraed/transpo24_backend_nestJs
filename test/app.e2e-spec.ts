@@ -28,6 +28,7 @@ import { PaymentsController } from '../src/payments/payments.controller';
 import { PaymentsService } from '../src/payments/payments.service';
 import { TripsGateway } from '../src/trips/trips.gateway';
 import { CustomerRequestsService } from '../src/customer-requests/customer-requests.service';
+import { BookingConfirmationQueueService } from '../src/customer-requests/booking-confirmation-queue.service';
 import { ServicesController } from '../src/services/services.controller';
 import { ServicesService } from '../src/services/services.service';
 
@@ -111,6 +112,7 @@ describe('API HTTP contract (e2e)', () => {
         { provide: PaymentsService, useValue: paymentsService },
         { provide: TripsGateway, useValue: {} },
         { provide: CustomerRequestsService, useValue: {} },
+        { provide: BookingConfirmationQueueService, useValue: {} },
         { provide: PrismaService, useValue: { $queryRaw: jest.fn() } },
       ],
     }).compile();
