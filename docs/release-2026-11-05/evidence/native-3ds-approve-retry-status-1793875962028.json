@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-11-05T10:52:41.339Z",
+  "purpose": "native-3ds-approve-retry",
+  "requestId": "cmw3fd2s4000068fvml9uxya2",
+  "requestStatus": "QUOTED",
+  "assigned": false,
+  "paymentHoldPresent": true,
+  "confirmationState": "ACTION_REQUIRED",
+  "appPaymentStatus": "PAYMENT_HOLD_PENDING",
+  "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+  "stripePaymentIntentId": "pi_3UYOHVClGb3s3rvz02WE9QDk",
+  "authorizedAt": null,
+  "approvalDeadlineAt": "2026-11-05T10:57:34.399Z",
+  "providerStatus": "requires_action",
+  "providerAmount": 1050,
+  "providerAmountCapturable": 0,
+  "providerAmountReceived": 0,
+  "providerLivemode": false
+}

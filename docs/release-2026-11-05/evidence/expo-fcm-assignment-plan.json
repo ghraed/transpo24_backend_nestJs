@@ -1,0 +1,63 @@
+{
+  "preparedAt": "2026-11-05T13:04:44.963Z",
+  "metadataOnly": true,
+  "mutationsPerformed": false,
+  "serviceAccountProjectId": "transpo24",
+  "targetFirebaseProjectId": "transpo24-staging",
+  "publicKeySha256": "cbd91c7f5b2d631c914e1255c01303c44828c62fec4a7bff0380bac0f835aea9",
+  "existingExpoKey": null,
+  "wouldUploadExistingPrivateKey": true,
+  "existingKeyPermissionsMayExceedTestMessaging": true,
+  "crossProjectSender": true,
+  "expoDeliveryProven": false,
+  "applications": [
+    {
+      "repository": "client_mobile",
+      "expoProject": "@raed.gh/transpo24",
+      "expoProjectId": "d3e62d2e-cc21-4c2a-afb8-9b05f492c725",
+      "applicationIdentifier": "com.transpo24.app.staging",
+      "currentRecords": []
+    },
+    {
+      "repository": "driver_mobile",
+      "expoProject": "@raed.gh/driver_mobile",
+      "expoProjectId": "9adb6313-42fb-4399-b3ea-6e040805a8a4",
+      "applicationIdentifier": "com.transpo24.driver.staging",
+      "currentRecords": []
+    }
+  ],
+  "productionAssignmentSnapshot": [
+    {
+      "expoProjectId": "d3e62d2e-cc21-4c2a-afb8-9b05f492c725",
+      "records": [
+        {
+          "id": "26b38033-b452-4943-a9f8-cd6ef0c862db",
+          "applicationIdentifier": "com.transpo24.app",
+          "googleServiceAccountKeyForFcmV1": {
+            "id": "40ae9635-adc4-4e61-814b-e265e3f9a096",
+            "projectIdentifier": "transpo-24",
+            "__typename": "GoogleServiceAccountKey"
+          },
+          "__typename": "AndroidAppCredentials"
+        }
+      ]
+    },
+    {
+      "expoProjectId": "9adb6313-42fb-4399-b3ea-6e040805a8a4",
+      "records": [
+        {
+          "id": "cc248101-586e-48b1-b532-0ae641b0fbce",
+          "applicationIdentifier": "com.transpo24.driver",
+          "googleServiceAccountKeyForFcmV1": {
+            "id": "40ae9635-adc4-4e61-814b-e265e3f9a096",
+            "projectIdentifier": "transpo-24",
+            "__typename": "GoogleServiceAccountKey"
+          },
+          "__typename": "AndroidAppCredentials"
+        }
+      ]
+    }
+  ],
+  "productionAssignmentSnapshotHash": "5151feaefd124b95b5eba2c27c6b489ac42bfadf6907dc92f72710638b34ae0b",
+  "accountId": "b40aed70-ed6f-4fa7-9b66-3823ba9fd199"
+}

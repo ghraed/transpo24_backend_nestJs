@@ -1,0 +1,8 @@
+{
+  "sentAt": "2026-11-05T14:36:42.146Z",
+  "caseId": "0c1c3dfa-adde-4147-b1cd-f7b2c4ae633f",
+  "scenario": "driver-background",
+  "accepted": true,
+  "ingress": "Genuine authenticated POST /push-tokens/test; same real NotificationsService/Expo provider as native button",
+  "directProviderOrFixture": false
+}

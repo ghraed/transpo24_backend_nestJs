@@ -1,0 +1,62 @@
+{
+  "checkedAt": "2026-11-05T11:38:19.453Z",
+  "financialCases": [
+    {
+      "purpose": "native-3ds-approve",
+      "requestStatus": "CANCELLED",
+      "confirmationState": "CANCELLED",
+      "paymentStatus": "PAYMENT_RELEASED"
+    },
+    {
+      "purpose": "native-3ds-cancel",
+      "requestStatus": "CANCELLED",
+      "confirmationState": "CANCELLED",
+      "paymentStatus": "PAYMENT_RELEASED"
+    },
+    {
+      "purpose": "native-kill-before-provider",
+      "requestStatus": "CANCELLED",
+      "confirmationState": "CANCELLED",
+      "paymentStatus": "PAYMENT_RELEASED"
+    },
+    {
+      "purpose": "native-kill-after-provider",
+      "requestStatus": "CANCELLED",
+      "confirmationState": "CANCELLED",
+      "paymentStatus": "PAYMENT_RELEASED"
+    },
+    {
+      "purpose": "native-3ds-approve-retry",
+      "requestStatus": "CANCELLED",
+      "confirmationState": "CANCELLED",
+      "paymentStatus": "PAYMENT_RELEASED"
+    },
+    {
+      "purpose": "native-3ds-cancel-retry",
+      "requestStatus": "CANCELLED",
+      "confirmationState": "CANCELLED",
+      "paymentStatus": "PAYMENT_RELEASED"
+    }
+  ],
+  "diagnosticIntents": [
+    {
+      "id": "pi_3UYOF7ClGb3s3rvz0othLw49",
+      "status": "canceled",
+      "livemode": false,
+      "amountReceived": 0
+    },
+    {
+      "id": "pi_3UYOD7ClGb3s3rvz1Byijip9",
+      "status": "canceled",
+      "livemode": false,
+      "amountReceived": 0
+    },
+    {
+      "id": "pi_3UYOCmClGb3s3rvz0ghTihFT",
+      "status": "canceled",
+      "livemode": false,
+      "amountReceived": 0
+    }
+  ],
+  "activeSyntheticSessions": 0
+}

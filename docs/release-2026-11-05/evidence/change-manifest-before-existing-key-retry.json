@@ -1,0 +1,391 @@
+{
+  "checkedAt": "2026-11-05T14:13:55.936926+00:00",
+  "baselineReportsUnchanged": {
+    "/home/raed/Downloads/transpo24_clinet_test/PRODUCTION_READINESS_REPORT.md": true,
+    "/home/raed/Downloads/transpo24_clinet_test/TEST_MATRIX.md": true,
+    "/home/raed/Downloads/transpo24_clinet_test/DEVICE_RELEASE_CHECKLIST.md": true
+  },
+  "artifactSourceInputs": {
+    "client_mobile": {
+      "inputCount": 272,
+      "allCurrentInputsMatch": true,
+      "mismatches": []
+    },
+    "driver_mobile": {
+      "inputCount": 241,
+      "allCurrentInputsMatch": true,
+      "mismatches": []
+    }
+  },
+  "repositories": {
+    "api": {
+      "baseline": "cfbeb1a594faf9806963df5690ea54b03348e33f",
+      "currentHead": "cfbeb1a594faf9806963df5690ea54b03348e33f",
+      "sourceChanges": [
+        {
+          "file": ".gitignore",
+          "sha256": "fe721fb43d1d68616cc15f3a76e0676e99d70b6b277689e55af08db9fc5bd2f2"
+        },
+        {
+          "file": "scripts/staging/README.md",
+          "sha256": "64493cef5b737b28134d511441c480350115069c018a0a11175d8218df9d5f1d"
+        },
+        {
+          "file": "scripts/staging/ack-loss-proxy.cjs",
+          "sha256": "3c34e0088f8c9c5eca8778305fa198324d88956ba7b3c7d1758d709cdd9c4d56"
+        },
+        {
+          "file": "scripts/staging/apply-expo-fcm-plan.cjs",
+          "sha256": "975b14e7b1e37e7cf1ac40fbd187d6c34d7ccaaf1c418f271065f8135e04e682"
+        },
+        {
+          "file": "scripts/staging/apply-expo-fcm-plan.test.cjs",
+          "sha256": "0b84fac68f7ed7e220eb7023ebc7004c4215f4804d42ba1b51cd184078849dc0"
+        },
+        {
+          "file": "scripts/staging/cleanup-native-payments.cjs",
+          "sha256": "ed0560b1c7e11243e7180ae0ed071c8121175c39fb74cb385acff17a1b6d0238"
+        },
+        {
+          "file": "scripts/staging/compose.yaml",
+          "sha256": "7d0239b36fb1320c972a53ac1c138a7cf658fa8263e4fa9449e6b6492c0a8559"
+        },
+        {
+          "file": "scripts/staging/enable-stripe-test.cjs",
+          "sha256": "37bb379f1aa2a2039ab43811204d407901b3e767bdafecb49cac8e3bb401fad7"
+        },
+        {
+          "file": "scripts/staging/environment.cjs",
+          "sha256": "6d06ce7deecf2670c3eb102d7e16157c2a3e811f403b1fdc43312357944e74d3"
+        },
+        {
+          "file": "scripts/staging/inspect-expo-credentials.cjs",
+          "sha256": "fef7fb504b1b5a33562b2b19b5e7bf7d377195b22c11ecdb34f4f948c514bb95"
+        },
+        {
+          "file": "scripts/staging/inspect-prerequisites.cjs",
+          "sha256": "2fb4788b3cdcd183b0b9b5bb82ce1ed17c73293084a602c4b858d11645e69c32"
+        },
+        {
+          "file": "scripts/staging/native-payment-status.cjs",
+          "sha256": "5b5c22a6260379f9c614f2c2c8e14c20366dc6dd5289f4dba701ae1c286c26c8"
+        },
+        {
+          "file": "scripts/staging/observe-push.cjs",
+          "sha256": "e0644be2d55b44b93d780696a17e0f39014c630031f9e553006c3cee3d0e7e5d"
+        },
+        {
+          "file": "scripts/staging/observe-push.test.cjs",
+          "sha256": "58a957e363929ff818fb0c98e70dfb4021915a2e8bce95c63e9b3bb5d90c8414"
+        },
+        {
+          "file": "scripts/staging/prepare-expo-fcm-plan.cjs",
+          "sha256": "bd1db297e272a5b36f70002a69a521baf500eec23b3407bc0cec1f9e59e5cacf"
+        },
+        {
+          "file": "scripts/staging/probe-existing-fcm-key.cjs",
+          "sha256": "5cdf48295c878b6c7668f9cd6628a731d1d92c9f25e0b128f1d433fc66759fca"
+        },
+        {
+          "file": "scripts/staging/push-receipts.cjs",
+          "sha256": "99d2beddb3631a5834c02386e9369a9f1eddda7b9aabf09878392a93608ff8f6"
+        },
+        {
+          "file": "scripts/staging/run.cjs",
+          "sha256": "87ba29b6542f4fa0a5fb876728b2a6e4617ed6d28c66651766da2d4394a0f352"
+        },
+        {
+          "file": "scripts/staging/run.test.cjs",
+          "sha256": "0421d981216afb1f4ee14baa7d9c0a36c99f79192f7bdde8658a2694eabf600a"
+        },
+        {
+          "file": "scripts/staging/seed-catalog.cjs",
+          "sha256": "1a8eb5ab23d8a0b0af7b289dfc176054f3179e4e6af128accc41102bbf279089"
+        },
+        {
+          "file": "scripts/staging/seed-chat.cjs",
+          "sha256": "81759ef24691847b04c56ec348962c229070ffdcde6c82209754debdc77e6053"
+        },
+        {
+          "file": "scripts/staging/seed-native-payments.cjs",
+          "sha256": "cc776ba6e0a44af85bcd8a70afacb8fc3f647efa6824b4e19c8d3b91999f08a9"
+        },
+        {
+          "file": "scripts/staging/serve.cjs",
+          "sha256": "c1a47b56da971584e23dc9b19de942830f0a7142b6e6e5da4cec3e549c11c4ba"
+        },
+        {
+          "file": "scripts/staging/smoke.cjs",
+          "sha256": "bca02a8d2e732348b195473b12ba6049bbc176b208c31fbf8cfd5f900970f129"
+        },
+        {
+          "file": "scripts/staging/stripe-forward.cjs",
+          "sha256": "fe0cd84e1a7724a1622f0790566e3b564037b3aa91671554535583f0e2d0bd6f"
+        },
+        {
+          "file": "scripts/staging/stripe-forward.test.cjs",
+          "sha256": "fdf86d4d98c944e4d0c58c23bd64db158f95bab8e54833457f1761969e427e2d"
+        },
+        {
+          "file": "scripts/staging/stripe-preflight.cjs",
+          "sha256": "40dbc433f02ed34eff883d1c31db6c49e5b31e45365215b4ff62abeac64ef795"
+        },
+        {
+          "file": "scripts/staging/verify-chat.cjs",
+          "sha256": "06fcbf40bc64162a4f01551965dab8c7d96599dfee4e24c6154abe42532b17e8"
+        },
+        {
+          "file": "src/notifications/notifications.service.spec.ts",
+          "sha256": "28cf958a3a7e18cf70a1f98727c33b7e59c94a2577a2c36f9fd547838385a6d3"
+        },
+        {
+          "file": "src/notifications/notifications.service.ts",
+          "sha256": "8dde5caa0dfad4bcf4acbfc4ab9ba9d38cde8b8722006889ab450378d22f0d3d"
+        },
+        {
+          "file": "src/notifications/push-environment.spec.ts",
+          "sha256": "f4737d0a6c1b216f3160d092b8f8c2c7855b514fe01de3fffe2db3a8e7a7afc0"
+        },
+        {
+          "file": "src/notifications/push-environment.ts",
+          "sha256": "a4a8d568fec7b22c4aece3062599023776d9e8f3d7b6abc7ec51cfdab337fc4c"
+        },
+        {
+          "file": "src/payments/delayed-booking-payments.service.spec.ts",
+          "sha256": "b4af1b08cbdb1455de17cb7f5f240be4d0b9bd30ce3cf184866f13423bd89340"
+        },
+        {
+          "file": "src/payments/delayed-booking-payments.service.ts",
+          "sha256": "03ba8dad9afa4de304a9e6900b72a30e0cb5cfbdb22045fb2946592db5378991"
+        },
+        {
+          "file": "src/payments/direct-charges.spec.ts",
+          "sha256": "ec4890fcc792e2bd649b71d4fe9d2b1fe19e81308a655c3db25960c2d3db5fe4"
+        },
+        {
+          "file": "src/payments/stripe.service.spec.ts",
+          "sha256": "b922317dedc6b8083c61c112299c2df1705ed72fedd22ee1b03b06b43e25cb93"
+        },
+        {
+          "file": "src/payments/stripe.service.ts",
+          "sha256": "59e77d2b6491897edae03e242255577b4a7db87c9a1f7d8616dbe71eae22fcea"
+        }
+      ],
+      "cleanRequired": false
+    },
+    "client_mobile": {
+      "baseline": "c3bb33540ca67e013998990867f0bb5b3131572e",
+      "currentHead": "c3bb33540ca67e013998990867f0bb5b3131572e",
+      "sourceChanges": [
+        {
+          "file": ".gitignore",
+          "sha256": "9a36f818eddb4bed75f706268a5780431639a7804863cfb7ae8ea185ac6efd22"
+        },
+        {
+          "file": "app.config.ts",
+          "sha256": "52b2ac8ffa6b748a94763db92495d73113f9dacf634300dc65d30ba7c4964760"
+        },
+        {
+          "file": "package-lock.json",
+          "sha256": "ffa23595b3f5bd621e5a13ebd8d49c7a93ea09b4871214e5b42faa1a598eb517"
+        },
+        {
+          "file": "package.json",
+          "sha256": "7a400ccd904a99d25c9ce35cf3438c048230d969fb32893398aba11724744437"
+        },
+        {
+          "file": "scripts/build-controlled-staging.cjs",
+          "sha256": "345a651a397276fcaeea2b0289b6811cb5aea38000c8a066c5b85dc89b1e8cc6"
+        },
+        {
+          "file": "scripts/security/README.md",
+          "sha256": "c8dcb9a821a643937aefb11dd287935d16b7980ff71dec8d6fcd37081b1636f1"
+        },
+        {
+          "file": "scripts/security/apply-backports.cjs",
+          "sha256": "555ee4a2e373c7c95978c63e196db88581e79ef2d264ab77fa7eba800053c8b0"
+        },
+        {
+          "file": "scripts/security/backports.json",
+          "sha256": "521b16377581947741787400e044bf042badb6b2b9f07ca43f030130a2c67e33"
+        },
+        {
+          "file": "scripts/security/verify-backports.cjs",
+          "sha256": "47d9b4be50a271b346e0090d9f8c1b5c2515135af85e0fd6ec15d0a9bb866942"
+        },
+        {
+          "file": "scripts/staging-config.test.js",
+          "sha256": "2502eaee3a29b4608a7159b7729519a252a14ca3815c7371bafc32c4c99a854b"
+        },
+        {
+          "file": "scripts/staging-firebase-config.cjs",
+          "sha256": "12035f9d2f2c3508f5b703a147abf38cf3e213038e6968ff506eae97d4790b54"
+        },
+        {
+          "file": "scripts/staging-firebase-config.test.js",
+          "sha256": "e628ad2a81868ca368296d09a11cb4f6a8acc553c19f858371395d590edcf157"
+        },
+        {
+          "file": "src/app/_layout.tsx",
+          "sha256": "971ef3f34adaf9015d8bc19e285a1057d8b4cd3177598068ca560bf0d8d3a085"
+        },
+        {
+          "file": "src/app/chat.tsx",
+          "sha256": "98c7cb5d069167e95a60f1faaa22d8b361478eb6e55eea7b7bcf207e409f13ae"
+        },
+        {
+          "file": "src/app/request-payment.tsx",
+          "sha256": "da021ed4bd1b677707cc4455c4074020b7d4292cb9e66264709fc1dbea47c0e9"
+        },
+        {
+          "file": "src/lib/chat-outbox-native.test.ts",
+          "sha256": "30144d7d6b9ba11f37c258e10c29e6abbb3291d6a0b9838a267e2df8613147cf"
+        },
+        {
+          "file": "src/lib/chat-outbox.ts",
+          "sha256": "5b5daf4a0288daf9377d63df9e68e05f690035b14b1ea4043a86327b18bbd5ae"
+        },
+        {
+          "file": "src/lib/request-payment.test.js",
+          "sha256": "97c45df4f3ae6b2b62c5ce798ce86e4648fe5f73c63acd2f923e0e0f7c689568"
+        },
+        {
+          "file": "src/lib/stripe-account.ts",
+          "sha256": "3e616518d9cf4fda1ab89a24f6f70493d534b756630facff1d07f3ef95673089"
+        },
+        {
+          "file": "src/lib/stripe-url-scheme.test.ts",
+          "sha256": "99ec4655b77a463df7c2802a9ceeaa5d811a24ccf31900a509c79ed1b5dbbefb"
+        },
+        {
+          "file": "src/lib/stripe-url-scheme.ts",
+          "sha256": "aa459aa5926c3f43b1294e671b624342abe486f477675fd1bcb557024068fc0b"
+        },
+        {
+          "file": "src/notifications/assertPushBackend.test.js",
+          "sha256": "557c4c38b9eafe6e8b9420f8434a59e77a568a97faad8731a1995db6b7a0ddaf"
+        },
+        {
+          "file": "src/notifications/assertPushBackend.ts",
+          "sha256": "cafbbae8ce077cd11ce7c94871b36d84576b2eefac132b35f1420dda91be2cfa"
+        }
+      ],
+      "cleanRequired": false
+    },
+    "driver_mobile": {
+      "baseline": "0fbe4c9679a85f07b9d4da57196de2a5d303b391",
+      "currentHead": "0fbe4c9679a85f07b9d4da57196de2a5d303b391",
+      "sourceChanges": [
+        {
+          "file": ".gitignore",
+          "sha256": "616a24981510f1495958d9c9e9380f51053148a001eacba35e1a37082bce93a6"
+        },
+        {
+          "file": "app.config.ts",
+          "sha256": "45e60cae9dd1de23de6c92ce1d47f6e19781831b02ddd5ddfc4a61dfb62d27c2"
+        },
+        {
+          "file": "package-lock.json",
+          "sha256": "b9ee4fb4e6cce67f0c1a0fd906df259c66526510790b5e5c5a25b860a9930d27"
+        },
+        {
+          "file": "package.json",
+          "sha256": "d1c7c0248e38aa043d96cc8c4d832fceeb17900ba1734fe989f0a927f0206088"
+        },
+        {
+          "file": "scripts/build-controlled-staging.cjs",
+          "sha256": "345a651a397276fcaeea2b0289b6811cb5aea38000c8a066c5b85dc89b1e8cc6"
+        },
+        {
+          "file": "scripts/check-catalog-parity.cjs",
+          "sha256": "5c30f4e8ab5ff6a90c2789c3f32b172c095b564957585e43e7b4446ad8c13419"
+        },
+        {
+          "file": "scripts/security/README.md",
+          "sha256": "c8dcb9a821a643937aefb11dd287935d16b7980ff71dec8d6fcd37081b1636f1"
+        },
+        {
+          "file": "scripts/security/apply-backports.cjs",
+          "sha256": "555ee4a2e373c7c95978c63e196db88581e79ef2d264ab77fa7eba800053c8b0"
+        },
+        {
+          "file": "scripts/security/backports.json",
+          "sha256": "521b16377581947741787400e044bf042badb6b2b9f07ca43f030130a2c67e33"
+        },
+        {
+          "file": "scripts/security/verify-backports.cjs",
+          "sha256": "47d9b4be50a271b346e0090d9f8c1b5c2515135af85e0fd6ec15d0a9bb866942"
+        },
+        {
+          "file": "scripts/staging-config.test.js",
+          "sha256": "0b83a738e4ff219d9091dc7f3ac61ee6b039e3d2cc34266cf480f54797b2fb1b"
+        },
+        {
+          "file": "scripts/staging-firebase-config.cjs",
+          "sha256": "12035f9d2f2c3508f5b703a147abf38cf3e213038e6968ff506eae97d4790b54"
+        },
+        {
+          "file": "scripts/staging-firebase-config.test.js",
+          "sha256": "e628ad2a81868ca368296d09a11cb4f6a8acc553c19f858371395d590edcf157"
+        },
+        {
+          "file": "src/app/chat.tsx",
+          "sha256": "508d1610f9689ed46cb324b9945926ebd709949e5adfc848827bb25d77cf8e50"
+        },
+        {
+          "file": "src/lib/chat-outbox-native.test.ts",
+          "sha256": "0c8285c1b0e403390f562e4b18476be03efb68564a802ed84ebb15480621a552"
+        },
+        {
+          "file": "src/lib/chat-outbox.ts",
+          "sha256": "1f81b0a1c090c2fcc44dbd331aa983b064297d0d12f79eb0c90dc2970bb479c0"
+        },
+        {
+          "file": "src/localization/locales/ar.json",
+          "sha256": "bb8ac88cc9281aaac85cfa704a9174f1181ba477262af06588e68f6984f66ad6"
+        },
+        {
+          "file": "src/localization/locales/de.json",
+          "sha256": "21a3a45f73b5658f9184e095e3c05056c2e0937db02d91e8a31863d2ebd4af66"
+        },
+        {
+          "file": "src/localization/locales/en.json",
+          "sha256": "61a3f327cbb298c15c9d73276310560d82e34fa94c10c960cb15820e7170c197"
+        },
+        {
+          "file": "src/localization/locales/es.json",
+          "sha256": "55ef0b4a46995f33b31e3922b4ebb84b4df84f83d96c66163a86b17606303036"
+        },
+        {
+          "file": "src/localization/locales/fr.json",
+          "sha256": "401c655bca7f831f235994066951baf5b44a42e24dce66dc5e9c215bfba091bb"
+        },
+        {
+          "file": "src/localization/locales/it.json",
+          "sha256": "06d31ed98564de216f5cc211ecfed10c5c012d953365339f9bfbace1a535c805"
+        },
+        {
+          "file": "src/notifications/assertPushBackend.test.js",
+          "sha256": "557c4c38b9eafe6e8b9420f8434a59e77a568a97faad8731a1995db6b7a0ddaf"
+        },
+        {
+          "file": "src/notifications/assertPushBackend.ts",
+          "sha256": "cafbbae8ce077cd11ce7c94871b36d84576b2eefac132b35f1420dda91be2cfa"
+        }
+      ],
+      "cleanRequired": false
+    },
+    "admin": {
+      "baseline": "750f560b05480cb9e3e52649d2d291e06d469f3c",
+      "currentHead": "750f560b05480cb9e3e52649d2d291e06d469f3c",
+      "sourceChanges": [],
+      "cleanRequired": true
+    },
+    "transpo24-public-site": {
+      "baseline": "6032feba15a7655bbcaf215eb22cc8076d8f33dd",
+      "currentHead": "6032feba15a7655bbcaf215eb22cc8076d8f33dd",
+      "sourceChanges": [],
+      "cleanRequired": true
+    }
+  }
+}

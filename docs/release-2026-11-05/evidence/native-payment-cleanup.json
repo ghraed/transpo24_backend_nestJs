@@ -1,0 +1,68 @@
+{
+  "cleanedAt": "2026-11-05T11:31:43.046Z",
+  "run": "673f389c-ce0c-4ca7-ab96-2271361a6f61",
+  "results": [
+    {
+      "purpose": "native-3ds-approve",
+      "paymentIntentId": "pi_3UYOARClGb3s3rvz1Pdv0NBi",
+      "accountId": "acct_1UXdDLClGb3s3rvz",
+      "providerLivemode": false,
+      "action": "already_canceled",
+      "providerStatus": "canceled",
+      "amountCapturable": 0,
+      "amountReceived": 0
+    },
+    {
+      "purpose": "native-3ds-cancel",
+      "paymentIntentId": "pi_3UYOKqClGb3s3rvz15zHaIFk",
+      "accountId": "acct_1UXdDLClGb3s3rvz",
+      "providerLivemode": false,
+      "action": "already_canceled",
+      "providerStatus": "canceled",
+      "amountCapturable": 0,
+      "amountReceived": 0
+    },
+    {
+      "purpose": "native-kill-before-provider",
+      "paymentIntentId": "pi_3UYOcqClGb3s3rvz0UfQgn4n",
+      "accountId": "acct_1UXdDLClGb3s3rvz",
+      "providerLivemode": false,
+      "action": "canceled_test_authorization",
+      "providerStatus": "canceled",
+      "amountCapturable": 0,
+      "amountReceived": 0
+    },
+    {
+      "purpose": "native-kill-after-provider",
+      "paymentIntentId": "pi_3UYOlfClGb3s3rvz0mvFf8X5",
+      "accountId": "acct_1UXdDLClGb3s3rvz",
+      "providerLivemode": false,
+      "action": "canceled_test_authorization",
+      "providerStatus": "canceled",
+      "amountCapturable": 0,
+      "amountReceived": 0
+    },
+    {
+      "purpose": "native-3ds-approve-retry",
+      "paymentIntentId": "pi_3UYOHVClGb3s3rvz02WE9QDk",
+      "accountId": "acct_1UXdDLClGb3s3rvz",
+      "providerLivemode": false,
+      "action": "canceled_test_authorization",
+      "providerStatus": "canceled",
+      "amountCapturable": 0,
+      "amountReceived": 0
+    },
+    {
+      "purpose": "native-3ds-cancel-retry",
+      "paymentIntentId": "pi_3UYOUUClGb3s3rvz0sVWump0",
+      "accountId": "acct_1UXdDLClGb3s3rvz",
+      "providerLivemode": false,
+      "action": "already_canceled",
+      "providerStatus": "canceled",
+      "amountCapturable": 0,
+      "amountReceived": 0
+    }
+  ],
+  "syntheticProviderCustomerRetained": true,
+  "reason": "Preserve TEST-only replay evidence. No live account or financial history deleted."
+}

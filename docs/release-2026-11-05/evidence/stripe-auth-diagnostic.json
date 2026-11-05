@@ -1,0 +1,31 @@
+[
+  {
+    "phase": "created",
+    "status": "requires_confirmation",
+    "methodPresent": true,
+    "errorMethodPresent": false
+  },
+  {
+    "phase": "offsession-error",
+    "errorCode": "authentication_required",
+    "intentProperty": true,
+    "rawIntentProperty": true
+  },
+  {
+    "phase": "canonical",
+    "status": "requires_payment_method",
+    "methodPresent": false,
+    "errorMethodPresent": true,
+    "errorCode": "authentication_required",
+    "declineCode": "authentication_required"
+  },
+  {
+    "phase": "error",
+    "type": "StripeInvalidRequestError",
+    "message": "The provided PaymentMethod was previously used with a PaymentIntent without Customer attachment, shared with a connected account without Customer attachment, or was detached from a Customer. It may not be used again. To use a PaymentMethod multiple times, you must attach it to a Customer first."
+  },
+  {
+    "phase": "cleanup",
+    "canceled": true
+  }
+]

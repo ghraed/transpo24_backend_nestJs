@@ -1,0 +1,1 @@
+{"step":"availability cleanup","result":"Failed: helper used nonexistent Prisma driver model after synthetic session/token cleanup; corrected to driverAvailability relation and rerun. No unrelated rows or financial history affected."}

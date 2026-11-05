@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-11-05T13:01:44.894Z",
+  "credentialProjectId": "transpo24",
+  "targetProjectId": "transpo24-staging",
+  "validateOnly": true,
+  "notificationSent": false,
+  "keyUploaded": false,
+  "authenticated": true,
+  "httpStatus": 200,
+  "stagingSendValidated": true
+}

@@ -1,0 +1,76 @@
+name: transpo24-acceptance-20261105
+services:
+  api:
+    image: node:22-bookworm-slim@sha256:2f0e17f8955e766e776ae16d3ac47519ca3edf47c07e5c1423527926fdd5d568
+    init: true
+    user: "${STAGING_UID:?Generate staging runtime identity}:${STAGING_GID:?Generate staging runtime identity}"
+    working_dir: /workspace
+    network_mode: host
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    command: ["node", "scripts/staging/run.cjs", "serve"]
+    volumes:
+      - ../../dist:/workspace/dist:ro
+      - ../../node_modules:/workspace/node_modules:ro
+      - .:/workspace/scripts/staging:ro
+      - ../../.staging-local:/workspace/.staging-local
+      - ../../docs/release-2026-11-05/evidence:/workspace/docs/release-2026-11-05/evidence
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:57430/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  proxy:
+    image: node:22-bookworm-slim@sha256:2f0e17f8955e766e776ae16d3ac47519ca3edf47c07e5c1423527926fdd5d568
+    init: true
+    user: "${STAGING_UID:?Generate staging runtime identity}:${STAGING_GID:?Generate staging runtime identity}"
+    working_dir: /workspace
+    network_mode: host
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    command: ["node", "scripts/staging/run.cjs", "proxy"]
+    volumes:
+      - .:/workspace/scripts/staging:ro
+      - ../../.staging-local:/workspace/.staging-local
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:57431/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: transpo24_staging
+      POSTGRES_DB: transpo24_staging_20261105
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?Generate the isolated staging environment first}
+    ports: ["127.0.0.1:57432:5432"]
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transpo24_staging -d transpo24_staging_20261105"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  redis:
+    image: redis:7.4.7-alpine
+    environment:
+      REDISCLI_AUTH: ${STAGING_REDIS_PASSWORD:?Generate the isolated staging environment first}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${STAGING_REDIS_PASSWORD:?Generate the isolated staging environment first}"]
+    ports: ["127.0.0.1:57433:6379"]
+    volumes: ["redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+volumes:
+  postgres:
+  redis:

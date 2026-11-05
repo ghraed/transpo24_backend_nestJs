@@ -6,15 +6,25 @@ export function pushScope(app: PushApp): {
   applicationId: string;
 } {
   const environment = process.env.PUSH_ENVIRONMENT;
-  if (environment !== 'DEVELOPMENT' && environment !== 'PRODUCTION') {
+  if (
+    environment !== 'DEVELOPMENT' &&
+    environment !== 'STAGING' &&
+    environment !== 'PRODUCTION'
+  ) {
     throw new Error(
-      'Set PUSH_ENVIRONMENT to DEVELOPMENT or PRODUCTION before using mobile push.',
+      'Set PUSH_ENVIRONMENT to DEVELOPMENT, STAGING or PRODUCTION before using mobile push.',
     );
   }
   const packageName =
     app === PushApp.CUSTOMER ? 'com.transpo24.app' : 'com.transpo24.driver';
   return {
     environment,
-    applicationId: packageName + (environment === 'DEVELOPMENT' ? '.dev' : ''),
+    applicationId:
+      packageName +
+      (environment === 'DEVELOPMENT'
+        ? '.dev'
+        : environment === 'STAGING'
+          ? '.staging'
+          : ''),
   };
 }

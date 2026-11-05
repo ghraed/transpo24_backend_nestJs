@@ -1,0 +1,1961 @@
+{
+  "generatedAt": "2026-11-05T14:14:54.194243+00:00",
+  "scope": "All continuation reports/evidence across API/customer/driver; excludes this manifest. APK hashes are separately recorded in artifact metadata.",
+  "files": [
+    {
+      "file": "api/docs/release-2026-11-05/DEPLOYMENT_AND_ROLLBACK.md",
+      "bytes": 8582,
+      "sha256": "30808d8ce473fc7207e72021ef23dbe1250a590dc478b4b176dc76902ec52ebb"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/DEVICE_RELEASE_CHECKLIST.md",
+      "bytes": 14360,
+      "sha256": "fa9f029f87dbc62418bb4bd213cd593377dad198ae604a7a3af3b5a3699a1968"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/EVIDENCE_INDEX.md",
+      "bytes": 8844,
+      "sha256": "ac8834f9950f3ea0767aefd03b9af69e8f2f3ed9eca3aa31dfcdb64f15db918f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/OWNER_ACTIONS.md",
+      "bytes": 4619,
+      "sha256": "032203e14c7257968f4492dad477abe7f314852038fae93439673269953c3b50"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/PRODUCTION_READINESS_REPORT.md",
+      "bytes": 16647,
+      "sha256": "8d4c30a6c4d51f46523695182474be5ba7c0dcd69e6a0ccb35cf323bd2e33d70"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/TEST_MATRIX.md",
+      "bytes": 5401,
+      "sha256": "1329113a7349cfff5b999a0811863dd5af8b167f8bb8b70de70617f3825e38e3"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-audit-after.json",
+      "bytes": 2589,
+      "sha256": "1f781fda4341ad2e2ce644c18f6eb57df4c5171fc25cd07d2cd592498243f390"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-build-final.log",
+      "bytes": 33,
+      "sha256": "d49a33be470b0a22718acdf9050f47b1bf3b9fbf1e428b3dde15d1f99c06a3fc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-build-payment-auth-final.log",
+      "bytes": 33,
+      "sha256": "d49a33be470b0a22718acdf9050f47b1bf3b9fbf1e428b3dde15d1f99c06a3fc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-build-payment-auth.log",
+      "bytes": 323,
+      "sha256": "d2b9fff30db843eba64ca2daab9ff1cf6e82373e4e14eaf0b3fa583086ac340c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-build-push-final.log",
+      "bytes": 33,
+      "sha256": "d49a33be470b0a22718acdf9050f47b1bf3b9fbf1e428b3dde15d1f99c06a3fc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-build.log",
+      "bytes": 33,
+      "sha256": "d49a33be470b0a22718acdf9050f47b1bf3b9fbf1e428b3dde15d1f99c06a3fc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-e2e.log",
+      "bytes": 215,
+      "sha256": "a4fb6120cbb3627c87ec61eea780c188b30dbe9e74fab63003807e907cffb7fd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-http-payment-auth-final.log",
+      "bytes": 215,
+      "sha256": "20ff38fc2511b2efd1f6e0a226e9e73d50574b8853be5e6ed536920bca69852e"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-http-push-final.log",
+      "bytes": 215,
+      "sha256": "5897212ef601ae18506e449de13b929df82701358ec6066a130aae1c863199dc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-lint-final.log",
+      "bytes": 2972,
+      "sha256": "fde729941cb1718f666a88b438b9f3cf1d74a6583532da6add860943cb49b967"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-lint-payment-auth-final.log",
+      "bytes": 4585,
+      "sha256": "fb0824852f8ad3e2bdd90f875afa14d877ef73b8faaab886430ad02e66f5bcc0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-lint-push-final.log",
+      "bytes": 4817,
+      "sha256": "4814e647103300d06554d98fb5af7b64438759bbd32e8a8c6a44a70e60b35372"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-lint.log",
+      "bytes": 3840,
+      "sha256": "939d7e0362aeffaafa49f68d253be25460cd26f7ced5113f64a07c79053b9c91"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-push-final.log",
+      "bytes": 1002,
+      "sha256": "626e863fdbbfc47ea7faea11d886b14386c9cea225af3382636b15204447a28d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-tests-payment-auth-complete.log",
+      "bytes": 8406,
+      "sha256": "9c9fa17a7f55ff2a5eaedcfe9ce4f647f972f2fdb418144a29f3f73379981d1f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-tests-payment-auth-final.log",
+      "bytes": 194951,
+      "sha256": "16a9f082994a85ff96208cde0d823051469c63cf46550e476f23cd83e5ddb9bd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-tests-payment-auth-unsandboxed.log",
+      "bytes": 10144,
+      "sha256": "8f0d07ea3ba44bafba79f648968f8c8a6e7f51eeb93301c1c9ed586c8f94bf81"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-tests-push-final.log",
+      "bytes": 8360,
+      "sha256": "9c39c6b26a77b418370bae310dd90c6505495d28675414ce5720528fde28784c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-tests.log",
+      "bytes": 8346,
+      "sha256": "cb656de95e810524f4f4b36727ac056739e865cdd4405e04c1d67a718122fc8a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-typecheck-payment-auth-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-typecheck-push-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/api-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/baseline-inputs.json",
+      "bytes": 909,
+      "sha256": "208fcd29806fd256a3e60270cce3806350c3898b97c15a7e7e1c2e8f0a79c336"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/change-manifest.json",
+      "bytes": 15260,
+      "sha256": "e82d029b26dd2e38737499d5d9177bf5bcededd13c9e821e383e36eabea959f5"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/cleanup-final-verification.json",
+      "bytes": 1584,
+      "sha256": "304ebc75f2d5b23b72309068df791bca10ab717af89c814d9e35da6aa86bec66"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/customer-push-foreground-active-keys.json",
+      "bytes": 35,
+      "sha256": "9e9964085794c7aee76593689b91a8870e516fdefa78ae0b334303ddb4b452b3"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-after-code.xml",
+      "bytes": 4903,
+      "sha256": "1b7fe85a5bdae4a1543a031988da828b0234f77730c1358afad936538ea74979"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-3ds-challenge.xml",
+      "bytes": 2175,
+      "sha256": "256d4b058b622f742ce140b01d292747d281446ce1924c89541003e8502fb143"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-3ds-loaded.xml",
+      "bytes": 9608,
+      "sha256": "90990d535eefb2cf6b39a0f73707a63f604ecf04b1b22370d747b2f9a9d06d36"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-bank-pending.xml",
+      "bytes": 12582,
+      "sha256": "4530e2fde4b9344b4c1c748174faf815a6cb03fda7afb01bae6ca2cb1a24479c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-countdown.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-offer-final.xml",
+      "bytes": 12024,
+      "sha256": "b2acbb58ab9f1c4917a22e2d83a77541b8bfe4b464e97308f6c6d2f27ac53b00"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-quote-final.xml",
+      "bytes": 13217,
+      "sha256": "0379a95bedc47ff11e6b47af725e8d43bfa45b1360e7458b0b13a90fad089e1a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-retry-dialog.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-retry-methods.xml",
+      "bytes": 11493,
+      "sha256": "ff84059de50f88975d0829f3c0f9902786ac28fc018d362773f460cf8b28b6fc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-retry-offer.xml",
+      "bytes": 12008,
+      "sha256": "eb1f20de0ff896b18bdd3632a48f1e9afe45526e355ff333e993c6cda72ce92f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-retry-payment-top.xml",
+      "bytes": 9895,
+      "sha256": "394abc6d0033fca2ac24e54cae2a13b62377784b74ff2a0802d3db08b164bc59"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-approve-retry-review.xml",
+      "bytes": 9877,
+      "sha256": "e50be6bb46eee35aca1aaf09c9627270805ccb82eaa02aea1164938d00a99172"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-auth-consent-checked.xml",
+      "bytes": 9050,
+      "sha256": "1ad7b56df5604cb036d461e457715199f6c0db23e33f90a2717d0f042f38bde0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-auth-country-chosen.xml",
+      "bytes": 8708,
+      "sha256": "5791f798cbace28c05bc16f42abbbf2030e6d73b47d93cf3dbaa72f2b66ca0e0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-auth-country-current.xml",
+      "bytes": 2065,
+      "sha256": "49d914846c9d36b3f84108c060a491c9b278cfc5dd64a072a8c78c80bda66485"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-auth-country-filtered.xml",
+      "bytes": 3451,
+      "sha256": "4360a573d1c8aca5052cbe73c0cbc715aac59d726ec3040ed51d7f2b75d7f1e4"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-auth-phone-filled.xml",
+      "bytes": 8690,
+      "sha256": "369503cbdb4a20ec38f82fce4106e31b97cbe9b078021ef53569c9d04feb979f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-auth-phone-ready.xml",
+      "bytes": 8707,
+      "sha256": "05f71900c4758371c49091d52796c9ed909409f0f24d3e9f5511a7dea41c0a78"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-challenge-loaded.xml",
+      "bytes": 11257,
+      "sha256": "f5ff93e042ed2d39dbcbb9a26e36380dff8d44d1154e4098d7c576872f62c6eb"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-challenge-open.xml",
+      "bytes": 367,
+      "sha256": "2379b57752ba612be8d303a68495ad735894298d64aa511de01c3ad49f22f4ed"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-challenge.xml",
+      "bytes": 1799,
+      "sha256": "4cbac7792eb55b30fcd095a7e08ecd2b21c5614437b5581040551df617dfd3d7"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-connected-dialog.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-connected-methods.xml",
+      "bytes": 11493,
+      "sha256": "514712c776833519122f68566d93400dbbc8eab2e5de111bb974f25ae9346c88"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-connected-offer.xml",
+      "bytes": 12007,
+      "sha256": "befc6fe47b987e79fbd9dc1b0e5119cafeb535243545a2daac573950b79ee2e0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-connected-payment-top.xml",
+      "bytes": 9895,
+      "sha256": "84b7c6f21f5863f830dbe5df1fbc9bf0f591eeb302ad0e30208e320cbe793a2f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-connected-review.xml",
+      "bytes": 9877,
+      "sha256": "e50be6bb46eee35aca1aaf09c9627270805ccb82eaa02aea1164938d00a99172"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-current.xml",
+      "bytes": 10217,
+      "sha256": "945268058361018f7c8f1c108ad8ce71b3c4985805885f0b2d8d0fc3690f239d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-loaded.xml",
+      "bytes": 11257,
+      "sha256": "f5ff93e042ed2d39dbcbb9a26e36380dff8d44d1154e4098d7c576872f62c6eb"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-offer.xml",
+      "bytes": 10217,
+      "sha256": "945268058361018f7c8f1c108ad8ce71b3c4985805885f0b2d8d0fc3690f239d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-clean-result.xml",
+      "bytes": 12585,
+      "sha256": "8b0dd6538e27a2d6099964b4c9aa2bb2df88d9121dfb38fd936e393a0d910332"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-final-challenge.xml",
+      "bytes": 9608,
+      "sha256": "90990d535eefb2cf6b39a0f73707a63f604ecf04b1b22370d747b2f9a9d06d36"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-last-retry.xml",
+      "bytes": 1799,
+      "sha256": "4cbac7792eb55b30fcd095a7e08ecd2b21c5614437b5581040551df617dfd3d7"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-offer.xml",
+      "bytes": 11639,
+      "sha256": "70a0067214862601929172bb72746ce2de27e026ae9443b5ae5c1ea1f6a3049b"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-payment-ready.xml",
+      "bytes": 12023,
+      "sha256": "9ab958f6c12ac3e8c495cbcb3f6ec45a268585631f86f2f90616c7c91748dde9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-payment-top.xml",
+      "bytes": 12001,
+      "sha256": "5d46f424d806cacb49df94937b7d9c1603809d2e4c94b19c15cc80748c9b684d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-retry-connected.xml",
+      "bytes": 13217,
+      "sha256": "02e57a5a17716344872b18e4f7db6c225ea9574fa07fce426d294219a7657b8e"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-retry-dialog.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-retry-methods.xml",
+      "bytes": 11494,
+      "sha256": "7cc6bb58e5bdc4a817ac23883d37b7f40806767d94b883249ad0e99032ecde13"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-retry-offer.xml",
+      "bytes": 12001,
+      "sha256": "5d46f424d806cacb49df94937b7d9c1603809d2e4c94b19c15cc80748c9b684d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-retry-payment-top.xml",
+      "bytes": 9895,
+      "sha256": "fc858e0bf18261e2be45c1452c5a23f90535067fa1429ba3f47be2c93bce01d1"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-cancel-retry-review.xml",
+      "bytes": 9877,
+      "sha256": "e50be6bb46eee35aca1aaf09c9627270805ccb82eaa02aea1164938d00a99172"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-code-entry.xml",
+      "bytes": 13759,
+      "sha256": "5386e37e9d28f108f00442355f26fdc3c7246d48be3be2db7f2187abf8138aa9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-code-fresh.xml",
+      "bytes": 7473,
+      "sha256": "545c66f30f9c47fb82c2a72b5caedcadd900e34bdd9730ef8a1b64d06571df0e"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-country-again.xml",
+      "bytes": 18776,
+      "sha256": "979c357bcc49087b39cd50bf382225386bc0a758c2fb2f3592f4ea80d3da501a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-country-select.xml",
+      "bytes": 18776,
+      "sha256": "979c357bcc49087b39cd50bf382225386bc0a758c2fb2f3592f4ea80d3da501a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-country-us.xml",
+      "bytes": 3451,
+      "sha256": "4360a573d1c8aca5052cbe73c0cbc715aac59d726ec3040ed51d7f2b75d7f1e4"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-firebase-authenticated.xml",
+      "bytes": 22213,
+      "sha256": "425dd07942d701bdf97c9356ee0e641db9a76ce80eb08ed4686e4018dcb44dc5"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-firebase-code-form.xml",
+      "bytes": 7473,
+      "sha256": "545c66f30f9c47fb82c2a72b5caedcadd900e34bdd9730ef8a1b64d06571df0e"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-firebase-country-search.xml",
+      "bytes": 18776,
+      "sha256": "2e6bccb476f1e6acbd78896bf9bde8bbf8ea4816a263afe41548a5973b5d077a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-firebase-first-launch.xml",
+      "bytes": 4942,
+      "sha256": "c61de9e55fb89321014bb6da9ceed9b2242bc3607b1ca124f9da5d5021297bd9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-firebase-profile-bottom.xml",
+      "bytes": 15551,
+      "sha256": "c0c5611738dcc4fe0548297dd67ff3c402a976fa4d5382decb14273d8b68c24d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-firebase-profile.xml",
+      "bytes": 16929,
+      "sha256": "f4bb63ef4ce9b7d7515d56d4bd342363a343191e511fe1686ea412a39f7a13c8"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-firebase-review-login.xml",
+      "bytes": 9092,
+      "sha256": "025717159f2b6e6ab84fc6528ed2f11c7ca8ada205bdb6675611a103ce74cf8a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-home-after-policy.xml",
+      "bytes": 22311,
+      "sha256": "462f9cbb2926109c9426619d92a6c3cb77a986f131d1c69abe4e8426d460fb7f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-challenge.xml",
+      "bytes": 1799,
+      "sha256": "4cbac7792eb55b30fcd095a7e08ecd2b21c5614437b5581040551df617dfd3d7"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-container-ready.xml",
+      "bytes": 8659,
+      "sha256": "089599c3546ff1e50780021a9f10b6ecdaa44b2badf9e060f742572d9cc2e0e4"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-dialog.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-final-dialog.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-loaded.xml",
+      "bytes": 11257,
+      "sha256": "f5ff93e042ed2d39dbcbb9a26e36380dff8d44d1154e4098d7c576872f62c6eb"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-methods.xml",
+      "bytes": 11493,
+      "sha256": "63d77fbf1e08706b86aee3108cd729335c3c26b33a390e1fee628e2e73975b15"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-offer-scroll-0.xml",
+      "bytes": 12010,
+      "sha256": "e04a3b99dddf1047ae09f3f7dd0171495c1c5a14f9fbdf1077a0669425a9363f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-offer.xml",
+      "bytes": 13107,
+      "sha256": "1571d818cba2507fb8eaa1253502b00821fe66b5c022327fe3621b93c3fe1637"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-payment-top.xml",
+      "bytes": 9895,
+      "sha256": "a18313ec0819fde46d0986c3abfaa1804d5d37a7f6a3a5e64906b980727f4fb0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-recovered.xml",
+      "bytes": 12902,
+      "sha256": "453eaca329b25283d9ef095a7724f3385a887c863b65366c69edc6de7371d60a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-restarted.xml",
+      "bytes": 22342,
+      "sha256": "c50d1a5fe425b3656947e2f630007d8f6587f7bb169e3e23dcd2011fdf1c115a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-after-review.xml",
+      "bytes": 9877,
+      "sha256": "e50be6bb46eee35aca1aaf09c9627270805ccb82eaa02aea1164938d00a99172"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-current.xml",
+      "bytes": 3921,
+      "sha256": "35b47f1ac49c437329b1757fd379099d63b4d4eb586f43b4def1be4467359327"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-dialog.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-methods.xml",
+      "bytes": 11494,
+      "sha256": "dae81a2dfe93920a2765138b911752deb2894c72e09423e247c116769d754c91"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-offer-scroll-0.xml",
+      "bytes": 12011,
+      "sha256": "f1c7722e51729f24e361e0bb89bf312fb2afbd5f34afe89f12cdcc616cffb3e6"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-offer.xml",
+      "bytes": 13107,
+      "sha256": "1571d818cba2507fb8eaa1253502b00821fe66b5c022327fe3621b93c3fe1637"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-payment-top.xml",
+      "bytes": 9895,
+      "sha256": "fc858e0bf18261e2be45c1452c5a23f90535067fa1429ba3f47be2c93bce01d1"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-refreshed-offer-scroll-0.xml",
+      "bytes": 3921,
+      "sha256": "35b47f1ac49c437329b1757fd379099d63b4d4eb586f43b4def1be4467359327"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-refreshed-offer-scroll-1.xml",
+      "bytes": 3921,
+      "sha256": "35b47f1ac49c437329b1757fd379099d63b4d4eb586f43b4def1be4467359327"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-refreshed-offer-scroll-2.xml",
+      "bytes": 3921,
+      "sha256": "35b47f1ac49c437329b1757fd379099d63b4d4eb586f43b4def1be4467359327"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-refreshed-offer.xml",
+      "bytes": 3921,
+      "sha256": "35b47f1ac49c437329b1757fd379099d63b4d4eb586f43b4def1be4467359327"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-restarted.xml",
+      "bytes": 22321,
+      "sha256": "b69e701579270e8c421c7f94790657431cca9ab1542c9a51477448df9ea4b5f0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-restored-state.xml",
+      "bytes": 24157,
+      "sha256": "183968f3c66bb38e6805d9afda8a44beb166519292aabb5e8d09dcd2e09bc2cd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-resumed-loaded.xml",
+      "bytes": 11257,
+      "sha256": "f5ff93e042ed2d39dbcbb9a26e36380dff8d44d1154e4098d7c576872f62c6eb"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-review.xml",
+      "bytes": 9877,
+      "sha256": "e50be6bb46eee35aca1aaf09c9627270805ccb82eaa02aea1164938d00a99172"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-runtime-restored-offer-scroll-0.xml",
+      "bytes": 24157,
+      "sha256": "183968f3c66bb38e6805d9afda8a44beb166519292aabb5e8d09dcd2e09bc2cd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-runtime-restored-offer-scroll-1.xml",
+      "bytes": 24157,
+      "sha256": "183968f3c66bb38e6805d9afda8a44beb166519292aabb5e8d09dcd2e09bc2cd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-runtime-restored-offer-scroll-2.xml",
+      "bytes": 24157,
+      "sha256": "183968f3c66bb38e6805d9afda8a44beb166519292aabb5e8d09dcd2e09bc2cd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-runtime-restored-offer.xml",
+      "bytes": 22321,
+      "sha256": "b69e701579270e8c421c7f94790657431cca9ab1542c9a51477448df9ea4b5f0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-warm-dialog.xml",
+      "bytes": 5617,
+      "sha256": "0283abd85a9c8218d61a006023860f7a21f2de2aba713744b5c7a405c7e19cab"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-warm-methods.xml",
+      "bytes": 12206,
+      "sha256": "33a7f01e9fc39ff7b19b65126954ddfe08ccc2dfbe8fe512cd7e4983618e4a92"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-warm-offer-scroll-0.xml",
+      "bytes": 12013,
+      "sha256": "4f17148422ae8695bd66f25bf12bca1d1fde2f558a2764e322973c7614fb5388"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-warm-offer.xml",
+      "bytes": 13107,
+      "sha256": "1571d818cba2507fb8eaa1253502b00821fe66b5c022327fe3621b93c3fe1637"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-warm-payment-top.xml",
+      "bytes": 9895,
+      "sha256": "a18313ec0819fde46d0986c3abfaa1804d5d37a7f6a3a5e64906b980727f4fb0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-kill-before-warm-review.xml",
+      "bytes": 9877,
+      "sha256": "e50be6bb46eee35aca1aaf09c9627270805ccb82eaa02aea1164938d00a99172"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-login-resumed.xml",
+      "bytes": 8709,
+      "sha256": "9d6b8baf052026c56fa7c7209ea5e2b62586b8304798385c34450d13c1e87d41"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-login-staging.xml",
+      "bytes": 8710,
+      "sha256": "eb2af2a1eb3ae327a54b675bf50aa4fd19e59e1e745a2be33988763018128336"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-native-approval-offer.xml",
+      "bytes": 12024,
+      "sha256": "397c2db4ec2309d95487d04b46c0d727b2f2211e73bf8960bcf4081fb5e05d8d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-native-approval-request.xml",
+      "bytes": 13217,
+      "sha256": "0379a95bedc47ff11e6b47af725e8d43bfa45b1360e7458b0b13a90fad089e1a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-native-offer-final.xml",
+      "bytes": 12025,
+      "sha256": "2e65efdadc34f616f9d6561195840d4864d7230b3ec4b8d982898c32b686af06"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-native-payment-method.xml",
+      "bytes": 10292,
+      "sha256": "f04174077a933a9e39fb0f1178b1a6b42f70dc3f8515693c2b07f25eb5c01734"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-native-request-fixed-scheme.xml",
+      "bytes": 13217,
+      "sha256": "0379a95bedc47ff11e6b47af725e8d43bfa45b1360e7458b0b13a90fad089e1a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-payment-final-confirm.xml",
+      "bytes": 9877,
+      "sha256": "e50be6bb46eee35aca1aaf09c9627270805ccb82eaa02aea1164938d00a99172"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-payment-final-method.xml",
+      "bytes": 11493,
+      "sha256": "355e0f798dd76ce568489d3e788f89a2f42a0026628bcc7ab9fbaec1aa5dca85"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-payment-final-top.xml",
+      "bytes": 9895,
+      "sha256": "fc858e0bf18261e2be45c1452c5a23f90535067fa1429ba3f47be2c93bce01d1"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-payment-rules-end.xml",
+      "bytes": 6041,
+      "sha256": "efb7065fcb49d934f1b1efda00137b620dc57b9f1579ab3fef948fbcc0bd252b"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-payment-rules-more.xml",
+      "bytes": 4932,
+      "sha256": "97ddb6a86a450a1e19dad7afa4a63e73d30395b1cac6f0cf6170d56e43399cb0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-payment-rules-scroll.xml",
+      "bytes": 5275,
+      "sha256": "6eb56fdf9893e96cb0f20040ee54ef87961905bee641839b9b2a04eae36ac27f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-post-copy-install.xml",
+      "bytes": 22311,
+      "sha256": "462f9cbb2926109c9426619d92a6c3cb77a986f131d1c69abe4e8426d460fb7f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-push-foreground-result.xml",
+      "bytes": 15950,
+      "sha256": "3b76fcb811d7906646aad23c85c8059c6cbd91f77b529e339cf694287ffa7708"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-push-receipt-ready-2.xml",
+      "bytes": 15950,
+      "sha256": "3b76fcb811d7906646aad23c85c8059c6cbd91f77b529e339cf694287ffa7708"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-push-receipt-result.xml",
+      "bytes": 15950,
+      "sha256": "3b76fcb811d7906646aad23c85c8059c6cbd91f77b529e339cf694287ffa7708"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-push-retry-ready.xml",
+      "bytes": 14928,
+      "sha256": "006df2240c1a58c7e1af1dc5f4175514698af7ca5ad55f25d434df8592eddbac"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/customer-retry-offer.xml",
+      "bytes": 12030,
+      "sha256": "92cda57516540da92ede9855e9510abba656a1be3d73b640f7b04305571cb8be"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-after-login.xml",
+      "bytes": 12847,
+      "sha256": "67cc639fe173aa7eef404219b34094bc7b3bc5934cac932d40f7adcf2583e219"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-arabic-after-restart.xml",
+      "bytes": 14949,
+      "sha256": "ec6c23c1d2d76e7a8c4766f65542282a18c3974be4b43416596c869e8e8d469c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-ack-dropped.xml",
+      "bytes": 8386,
+      "sha256": "3882afbd8e8c87c963b02a4edcfae88aad049eb0c4d5049a050e2dbf8f3c231d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-empty.xml",
+      "bytes": 7359,
+      "sha256": "67b802f096949e410aab54d08bf8a4fee62921ea96e662344a02b1a371295579"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-list-after-restart.xml",
+      "bytes": 9727,
+      "sha256": "691aa1a3c3e87bf9a50bdd7eaf92665446162438867c3b2381696237cb7021cd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-list-resumed.xml",
+      "bytes": 9727,
+      "sha256": "1eb7b0ede6a7e6d23765faff72a7ef24556986e82778170d3cab317ebecd785b"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-list.xml",
+      "bytes": 9727,
+      "sha256": "1eb7b0ede6a7e6d23765faff72a7ef24556986e82778170d3cab317ebecd785b"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-ready-to-send.xml",
+      "bytes": 7708,
+      "sha256": "d59ec4ffa93595970ffa9a887c7e38fd599f19b8b975c701a2f4386b29b844e0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-restarted-pending.xml",
+      "bytes": 12848,
+      "sha256": "2465ea8bac3143870ada0dda40243df92f8c12c2b7a1385359e9b00ebb697525"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-restored-draft.xml",
+      "bytes": 7714,
+      "sha256": "35919ede6618d686634ae14b3ebccee87e02b26484a0f590517813e68f27defd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-chat-retry-success.xml",
+      "bytes": 8027,
+      "sha256": "a20c2ca3415b79cfeed30062d38541b7eac10781cfe986f9d34d84c911b6e79d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-code-entry.xml",
+      "bytes": 14944,
+      "sha256": "dcdc29f09ae553c45df74165b07aa596440859f7e422512e91ec07e118b44e60"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-country-search.xml",
+      "bytes": 9383,
+      "sha256": "a4adc4c5573cdfac35180f44e59191118b52ecec74643c3c25b05c2aa36b6074"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-country.xml",
+      "bytes": 22009,
+      "sha256": "fc5703081535b22dff7753865f3218d3f779270a7f80a25706a649f8878dd20f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-current-fresh.xml",
+      "bytes": 8213,
+      "sha256": "0c91ab6321627b9cd79b3af7e60caa798acc19e285a5c9d6f99e7feef11284bd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-final-arabic-settings.xml",
+      "bytes": 14549,
+      "sha256": "42d6887f41fc6ac3a4d877fdef0cb64fb1fb5f9571d42b26b9ed4a08106ec884"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-final-arabic-switch.xml",
+      "bytes": 2658,
+      "sha256": "b6dca4c1c604275ba0054f3cb97422a8f78c6284348e0d637542604c703daa67"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-final-catalog-started.xml",
+      "bytes": 13321,
+      "sha256": "727d6b919d113155ae9466bebe0458722bb8c27e38858ae8e099efab1d774aae"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-final-italian-settings.xml",
+      "bytes": 13758,
+      "sha256": "58f7b26b2412b28d162b34260b97171c9f2642eeee2cb18887bb713815bc4345"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-final-profile.xml",
+      "bytes": 18379,
+      "sha256": "0daa99da8db8a03a9f75cfde4c5c344e1ca00248544ff138792991be5c9e913a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-firebase-authenticated.xml",
+      "bytes": 14948,
+      "sha256": "c97d45647bd9f865c26c2d01a5d672ecbe078cac25c6afd38858fdd28bb61448"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-firebase-country-search.xml",
+      "bytes": 19141,
+      "sha256": "4b908fd2100953d8d8ba61469b4196935e991f263670699407e48a1b32bae48c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-firebase-first-launch.xml",
+      "bytes": 10505,
+      "sha256": "633d2235ada593a989aea6cddecc1082ecc65d64cd0e1ce5bff0095896bae95f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-firebase-review-state.xml",
+      "bytes": 9755,
+      "sha256": "8631371f348ce9034e55f35812cc0c5ccee9015431871a9b3701f2cb3784ff70"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-italian-settings.xml",
+      "bytes": 13759,
+      "sha256": "5386e37e9d28f108f00442355f26fdc3c7246d48be3be2db7f2187abf8138aa9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-login.xml",
+      "bytes": 14942,
+      "sha256": "9c61c24c1132138af42dd45958eb3451358a6b49addbf517b7f9c9cba497db81"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-profile-language.xml",
+      "bytes": 18316,
+      "sha256": "3a7422df158b49c044c053e229488276a7bf7afe60b1c30b8610c5fdf887a661"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-push-first-result.xml",
+      "bytes": 15158,
+      "sha256": "25a035dc7c45e86c684a0a5a8247da73bbb05a1ee17357ef7a39667b6ffa0e58"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-push-login-current.xml",
+      "bytes": 14949,
+      "sha256": "ec6c23c1d2d76e7a8c4766f65542282a18c3974be4b43416596c869e8e8d469c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-push-profile.xml",
+      "bytes": 19901,
+      "sha256": "a8945d64e36999785bb9ce608eb8e7869d390d035cb9ee52a69a28f3ceae20d0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-push-settings.xml",
+      "bytes": 14577,
+      "sha256": "f91658e6dbde0e13978b4e261f2af5e4367f164e326e6f91c3bc2f3c70dd378d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-settings-language.xml",
+      "bytes": 13705,
+      "sha256": "6d37fff3617d1b05c12f0b87b0f8b4318b2fd62b0b8eeaa00d4b5c0129933a02"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/driver-us-login.xml",
+      "bytes": 14944,
+      "sha256": "dcdc29f09ae553c45df74165b07aa596440859f7e422512e91ec07e118b44e60"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-customer-auth-consent-checked.xml",
+      "bytes": 9050,
+      "sha256": "1ad7b56df5604cb036d461e457715199f6c0db23e33f90a2717d0f042f38bde0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-customer-auth-country-chosen.xml",
+      "bytes": 9090,
+      "sha256": "dbd26c956eb67041d0b6bc9db45cd2d436c5dc58818d5a3f202601f6b482dc5d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-customer-auth-country-current.xml",
+      "bytes": 18776,
+      "sha256": "2e6bccb476f1e6acbd78896bf9bde8bbf8ea4816a263afe41548a5973b5d077a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-customer-auth-country-filtered.xml",
+      "bytes": 3451,
+      "sha256": "631acf77859f208ef9f314d8c97347512d7fe556df22b63f021045a0bdf54c74"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-customer-auth-phone-filled.xml",
+      "bytes": 9078,
+      "sha256": "89149193465e5c0e42235311cf1ad8b045c096b8422cda224b76452466676b5c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-customer-auth-phone-ready.xml",
+      "bytes": 9089,
+      "sha256": "72a1ad4114c916f13492ef26881045664d4a515708d5f65e25ae24565cfd0036"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-driver-customer-auth-consent-checked.xml",
+      "bytes": 10749,
+      "sha256": "bae31bbcffef886203e02e79eed0a3069da2df5f386857a6f5a89c2c93efdc8f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-driver-customer-auth-country-chosen.xml",
+      "bytes": 10507,
+      "sha256": "d0dcb5ef20692210642283f0a958ec18e1fab205c34933a805c4456a15dec5c6"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-driver-customer-auth-country-current.xml",
+      "bytes": 19141,
+      "sha256": "4b908fd2100953d8d8ba61469b4196935e991f263670699407e48a1b32bae48c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-driver-customer-auth-country-filtered.xml",
+      "bytes": 3634,
+      "sha256": "dd9383682389141c930908ac1aa929770d8211e55e0288297b7a8fd9dbcff312"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-driver-customer-auth-phone-filled.xml",
+      "bytes": 10397,
+      "sha256": "f45573e356baa09e12ff67e5914de91b6513595fab73989f2eff896ed4f7c17d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/device/firebase-driver-customer-auth-phone-ready.xml",
+      "bytes": 10402,
+      "sha256": "458a471a171e543f66ae9a6cd182b83fea47b0ccfcda979c112c56c027790999"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/existing-google-key-staging-fcm-after-role-immediate.json",
+      "bytes": 371,
+      "sha256": "3c12182deb7eafff9de5557cfeb184d3fee160dab79eadb0c258acca09944038"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/existing-google-key-staging-fcm-before-role.json",
+      "bytes": 371,
+      "sha256": "a71b78731a51f43a7f939113ab293196970c7d942f7232d5e505269340da0dad"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/existing-google-key-staging-fcm-preflight.json",
+      "bytes": 281,
+      "sha256": "2cd18c5c95c9a875d6824e84e2494e103fab628fbad6dfbf9094604903cd02d7"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/expo-assignment-scope-tests.log",
+      "bytes": 205,
+      "sha256": "fdddfad1a95ab41c25f1aba40261a0d258e4fc63c320a70d8a2fe9bbb40f2989"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/expo-fcm-assignment-plan.json",
+      "bytes": 2189,
+      "sha256": "bad3ea3db68743f286e676bef3e6dca9a346ef2e10202a252928808509e4c9b3"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/expo-fcm-assignment-result.json",
+      "bytes": 965,
+      "sha256": "16807e78c0e7a317f0139653d0a7e4b60b5210e1573aa61f613a592dd90d70da"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/expo-push-observation-errors.jsonl",
+      "bytes": 190,
+      "sha256": "c33f839de571ead774974c106765eac4d6d0cc3a14c40115e6b253c7b51f1c91"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/expo-staging-push-credentials-readonly.json",
+      "bytes": 724,
+      "sha256": "c0a8b6bfc543bda487bc60f2a992b32202f5e4911c44b682de814cb0b4d9b7c4"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/firebase-device-artifacts-and-notifications.json",
+      "bytes": 619,
+      "sha256": "4dc9bfcb7440a7662246de271d4d67567e1ef744593b0b023b924e99f9b62dbd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/installed-apks-before-driver-final.json",
+      "bytes": 203,
+      "sha256": "a79e818dbd37a9d9b61dc83c453980669772b5b6d9d35051dd0b23818f8fc2e5"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/installed-apks-final.json",
+      "bytes": 203,
+      "sha256": "cee66b15353e9e999ece935ba8f2847565bc48c90d93ad56d738886620421c47"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/local-fcm-credential-metadata.json",
+      "bytes": 486,
+      "sha256": "a25b917796ea3d565f312e8b77e1060490fbe112ba96e22763d4646106709b68"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-approve-retry-status-1793875962028.json",
+      "bytes": 638,
+      "sha256": "7991a1005bcb8e982abb6974dad4b5db9a7b298b1b09537857255ee8b551935b"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-approve-retry-status-1793876006350.json",
+      "bytes": 642,
+      "sha256": "aa1bfea0cf43d2800595d366fda131350eb94484386e2ff821a79aa439992926"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-approve-retry-status-1793876027279.json",
+      "bytes": 643,
+      "sha256": "1bacfd8f4420b6e11464bd03cd7eb441dfb15d0d4e837acd2e986a469f26a9b8"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-approve-status-1793875392902.json",
+      "bytes": 207,
+      "sha256": "0bc5ffb10959fa6a2ad3a621c8e400154eb59c04f706ad800fd5b66a1608a0dc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-approve-status-1793875479512.json",
+      "bytes": 424,
+      "sha256": "428a8cb53ba2b111e3664c351529e0c0a2167e7db971e798625408cadfe8a52c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-approve-status-1793875526822.json",
+      "bytes": 596,
+      "sha256": "633856f4368bb2a2a749d50dec7afacf1a79cd8d26bdb7b7c735d5d34d813a6f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-retry-status-1793876767896.json",
+      "bytes": 637,
+      "sha256": "1d90c14881fc87b2d26e31214b923c4e60f3356d6b9e195b4f233514186be3a8"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-retry-status-1793876830804.json",
+      "bytes": 637,
+      "sha256": "6a9efe146ac8ff16aa4f1f79ab94c73953cc818da995ca9a9067c7b0472dac9b"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-retry-status-1793876857265.json",
+      "bytes": 623,
+      "sha256": "e9c599416f612a9599df7fc4845a4b89cddd4d9b4bce26199e065735286fee09"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876097502.json",
+      "bytes": 206,
+      "sha256": "fbc6a6365264cd64ecb6a7a32158bfd767671c6f93f754d2c7ba49bcaff7c663"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876169395.json",
+      "bytes": 631,
+      "sha256": "d17be013337ee34297e43e6b3117c555189f2e50faf276e485c51beab1f42faf"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876218830.json",
+      "bytes": 631,
+      "sha256": "d6985824f2bcfba0964d070e8b25dacbce331a113cdec30a82deb437741f51c9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876361171.json",
+      "bytes": 631,
+      "sha256": "d9970e3a0edab2b2e40d4c05a2d3d001d7b8b37b09399c41ccf8753323f13acb"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876419795.json",
+      "bytes": 631,
+      "sha256": "cd3984f8c2aca0385a6ce30480f197dfc267c5da6c234674679d3148251dc1e4"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876421066.json",
+      "bytes": 631,
+      "sha256": "04b00bbef78c8a32d75157babe6f3582753f5d876da739082f2a5ae8b7f9c2e8"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876470408.json",
+      "bytes": 631,
+      "sha256": "87394e84e9bb9be2a6aaa952f8380b5d5aa70d8d52eef9a3f881786eb01c7b5d"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-cancel-status-1793876512509.json",
+      "bytes": 617,
+      "sha256": "9695a25f1a0b8046f64277c700043c03230204cf2b5261c523eb0ccc541f97e8"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-3ds-first-failure.json",
+      "bytes": 116,
+      "sha256": "1d402ccb942996815510dba4fa501f42feb1ea621c7b5a2079a42f3f9f786042"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-after-provider-status-1793877437295.json",
+      "bytes": 215,
+      "sha256": "3c219a51190b3d3d0726c4f96f11ef5abba153970c335bcfe2b02b78b9b00bac"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-after-provider-status-1793877808442.json",
+      "bytes": 432,
+      "sha256": "f86254cc6d7b951c4819bbe5ff01b51a017cab3b1c8a23d4c5da58e61bf739db"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-after-provider-status-1793877850256.json",
+      "bytes": 640,
+      "sha256": "4c1decc32cecf5086d34966adfb0800b1076079fe863815fe1a2324033b538be"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-after-provider-status-1793877954977.json",
+      "bytes": 645,
+      "sha256": "e91b570be6fdb4c483e63011898c208f3a7b3b39a909f5cbbdf58db7d45c8a9a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-after-provider-watch-kill-after.json",
+      "bytes": 758,
+      "sha256": "f158ba1b72bc01c425b107b100ec1c08a4b2b370da971db2e7d75efc8f84e8b2"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-after-watch.log",
+      "bytes": 770,
+      "sha256": "b34a247985cc0f59a69a181439507260ff416a493ea324dab474e228204e4af3"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-before-provider-kill-before.json",
+      "bytes": 741,
+      "sha256": "8e79a241f8990ff6f4941bd04fdd4994e2991d1648eb8a1544adaef158d0cbdc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-before-provider-status-1793876996951.json",
+      "bytes": 216,
+      "sha256": "87adb4c04be371bdd61de8693a8232b3053f7edd4022489272e9bb5db0b4d48a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-before-provider-status-1793877260669.json",
+      "bytes": 433,
+      "sha256": "d489dfcceb044db9109560f52283e9e4ae99e27c02056d5c7fbbd56fd3e7e9c3"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-kill-before-provider-status-1793877381683.json",
+      "bytes": 646,
+      "sha256": "57a2161e1ea609f5c87b0bf3b766c7e62cc0840673ecc29b66ae3326c3694dc5"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-payment-cleanup.json",
+      "bytes": 2188,
+      "sha256": "519ada6d1606e26a181d8afbf328a247839e73add7ba82e80afca33753205db7"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-payment-final-proof.json",
+      "bytes": 3075,
+      "sha256": "dc4aec22a2a993ee7ddce9457e8d3db3693e1d7d0b492fe073d07c51ec48fe6a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/native-payments-seed.log",
+      "bytes": 237,
+      "sha256": "4832e5309bc47ee0ffd3bcd40b6cb2b71cc606c50e5103978af81b2fb55ceb59"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/payment-auth-direct-test-format.log",
+      "bytes": 42,
+      "sha256": "2f52b97e07d696c3967c7f6ecff30eda6b8e9e01f8a451d9666c8c3837041780"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/payment-auth-format.log",
+      "bytes": 92,
+      "sha256": "acbbfe5b79f19c516036de2c1f9b6278f644b755d6c9e082d36768616c8feb3e"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/payment-auth-targeted-final.log",
+      "bytes": 3143,
+      "sha256": "215166318d1476d3660d8f31b012f1c8a3ae782ae8e97850cfbe6f64fa70bec2"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/payment-auth-targeted.log",
+      "bytes": 4028,
+      "sha256": "ad1806993691e51e7361f900db5c091b3e9646774512fbc3fcb31c615f3b3d9f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/payment-auth-test-format.log",
+      "bytes": 102,
+      "sha256": "848f8fa9d3df612a7958970534773a159d7f4f3c0f5347b1071c742db391e590"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/payment-auth-type-format.log",
+      "bytes": 37,
+      "sha256": "a93050b60eec15449ee5ff6739f269486ee5a9a1b1d03dc4c63ee5e9114fa24a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/provider-prerequisites-final.log",
+      "bytes": 6108,
+      "sha256": "407ed8598fb4c941d0b3051b6d70f8ea30eb3ebf010469f6b6950c1d4dc1637a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/provider-prerequisites.json",
+      "bytes": 9321,
+      "sha256": "37a1611e184f4105029699f202309cfdc217dd4ade2a5289f758bf6fb3b7bec7"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/public-evidence-private-value-scan.json",
+      "bytes": 296,
+      "sha256": "57250fa300ad0c6b0473ae6b8b0345c9c84d16e74a1f250d64994d09a14a09b0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-customer-foreground-3a1325c7-2d18-4941-92ec-4e850c63e026.json",
+      "bytes": 2461,
+      "sha256": "d6559c5d482ba219dae5ef64f173fd37b3a3effeb180975c8bb70bdd067f5be4"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-driver-foreground-a9e460be-b68d-4218-86b8-f214f0b96d4a.json",
+      "bytes": 2462,
+      "sha256": "4341976e12c79c651602bdf0f1a30f2b8adf3c526a4793220a6a87d374af3aa3"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-observation-tests-final.log",
+      "bytes": 206,
+      "sha256": "b72040a022cdd6128c873ba95cc7cc9497b0fec2aea0f241d747d27a66c32d1f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-observation-tests.log",
+      "bytes": 206,
+      "sha256": "b72040a022cdd6128c873ba95cc7cc9497b0fec2aea0f241d747d27a66c32d1f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-phase-cleanup-initial-failure.json",
+      "bytes": 235,
+      "sha256": "1f3c0ea9d13ab27878f9b6e7c2da8a46b3a18b8328f2b6d90800d04e3f4ee695"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-phase-final-runtime-state.json",
+      "bytes": 818,
+      "sha256": "65d8de6e0a2cfe480b2ac575ee9ca1e54ee0ab4de06ca251f1183210f7c4bdf9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-phase-synthetic-cleanup.json",
+      "bytes": 433,
+      "sha256": "70317368bf978989a3d9fe228c93efd8328d211a6ea84800cbd5dbf35654d813"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-receipt-diagnostics-tests.log",
+      "bytes": 137,
+      "sha256": "e81909b19b78e3b966baaa850b27fa3cc28fae61be5043a6b09d3d39d55d7c24"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-registration-customer.json",
+      "bytes": 276,
+      "sha256": "ef8839953cda691dd5c2c371221caa44ba676a71236d76999900bdfecbf272b9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/push-registration-driver.json",
+      "bytes": 277,
+      "sha256": "6d40be35fcb92f55c9523856b6d9588040c501fef6f242c8c224475192c5feb6"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-ack-proxy-final.log",
+      "bytes": 373,
+      "sha256": "a4f1df68a8ae58f3055f84b56c5b881bfd37b6ca2680fbd9c00717059a297aeb"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-ack-proxy.log",
+      "bytes": 203,
+      "sha256": "a96d8fc039ce93c0fd06ef5ff3982adfed59379e6503528a3808b930769b23e0"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-catalog.log",
+      "bytes": 126,
+      "sha256": "dda258c0ba5a3fa122f4535063d6049996e1e3eb2ce6e4337caed2dccc1f897c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-chat-after-commit.json",
+      "bytes": 589,
+      "sha256": "48b5a5f0eff1993950954487504ac9af674172246ef53850cf653545887fe586"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-chat-after-native-retry.json",
+      "bytes": 718,
+      "sha256": "cf69d6874c01095d7a1ada23ca411bf8a0099321169af834b8c5d4c43977f9dc"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-chat-after-restart.json",
+      "bytes": 651,
+      "sha256": "7a0d7f66cdb604edf132efc4b6b47706354f07e3e007465ab58142cea78ec791"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-chat-seed.log",
+      "bytes": 124,
+      "sha256": "c225ee1e8db804a84b35a0705c9273cab37cec82b7be24d534ea50bbfa6346ee"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-cjs-syntax-final.log",
+      "bytes": 43,
+      "sha256": "ad0b5d93324fc1a53f50e02c3dd97fa03a06b3350df1eede66ded55083ddb179"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-api.log",
+      "bytes": 102126,
+      "sha256": "0eb5bbca2522da85cbe2797a6c7aad7f96914c67508d423d0e5c0cf605df2fde"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-final-snapshot.json",
+      "bytes": 1412,
+      "sha256": "0b6c1822b6367adcc0bc4e5d4e27fbb3514657b78859beac4023885e6c697c85"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-health-before-cleanup.log",
+      "bytes": 1158,
+      "sha256": "ae2fe592b26529c17a904c17746e53ac218f8b5a144ee8406817fda48f44cb54"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-node-version.log",
+      "bytes": 9,
+      "sha256": "2266957ed9a639bd7264d714bfa798a961510bf2e50695c668ab8fc0c3f4e906"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-proxy.log",
+      "bytes": 232,
+      "sha256": "9431ed21b1ba36c84f0e3cff75d8f3c57363ee9e7466a00a86eaa037bce1ba29"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-restart-smoke.log",
+      "bytes": 872,
+      "sha256": "a3dcac4c016a174f84b031b48223f277d6a83c86d47d1f844a619a0b8c402438"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-restart.log",
+      "bytes": 1283,
+      "sha256": "80bcd4d6061655377657b3ded930fbd08ccccf82b9966cf0ad07ba82f6cbf7fa"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-shutdown.log",
+      "bytes": 470,
+      "sha256": "e91d8865ba6e5c55642d0830108690905e395c41c550ed9956744f63af3387b1"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-smoke.log",
+      "bytes": 872,
+      "sha256": "a3dcac4c016a174f84b031b48223f277d6a83c86d47d1f844a619a0b8c402438"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-start.log",
+      "bytes": 1395,
+      "sha256": "e3a7ed92a7bb9d57134df1d02282a2310e87a59dfe49b353ba3e641dfbad3a92"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-stopped-status-before-launcher-fix.log",
+      "bytes": 1158,
+      "sha256": "9dbc978d685cce143c2bddac13bc412e3ba1806bb901affb628a60e29f94189f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-container-stopped-status.log",
+      "bytes": 1158,
+      "sha256": "6fe8856b82ba68d8c3de4f9e484953fa3ffc18603ff1bb3d2a3d3a33bd792d33"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-firebase-configs.json",
+      "bytes": 618,
+      "sha256": "3815e83d6f2be03c1e129427a5843d3f0ea95e6284cd42044dc21c23cfe555e6"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-launcher-exit-tests-final.log",
+      "bytes": 210,
+      "sha256": "4f13b43860678a27d9aa58ae4e52662638a05919bec3fa1e23dd34f48bc0f743"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-launcher-exit-tests.log",
+      "bytes": 210,
+      "sha256": "4f13b43860678a27d9aa58ae4e52662638a05919bec3fa1e23dd34f48bc0f743"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-launcher-final-container-smoke.log",
+      "bytes": 872,
+      "sha256": "a3dcac4c016a174f84b031b48223f277d6a83c86d47d1f844a619a0b8c402438"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-launcher-final-container-start.log",
+      "bytes": 1286,
+      "sha256": "e3f30389f43cdf122ed7a1c2236e9d5017930c4aadc09df486675d5e1e4eb648"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-launcher-final-container-stop.log",
+      "bytes": 470,
+      "sha256": "52813907f410b90d73923e2b3e763a9dfbad417253dfa44bb66f86f8a3bade33"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-launcher-safety.log",
+      "bytes": 90,
+      "sha256": "d0853dbe181910b5d23a50266484ad0fdf9b04ab917dea8a0a3c0f3cb87869c4"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-migrations.log",
+      "bytes": 12168,
+      "sha256": "a40a620a656f8854fd4c2fb7f2b0f5ac85e4cca64670d94f9f9062146a152b47"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-node-image-pull.log",
+      "bytes": 740,
+      "sha256": "0f6999f0045b94f54010d13beb91f5badb80e5bb400c5d977be0b380b1e6f89e"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-proxy.log",
+      "bytes": 232,
+      "sha256": "9431ed21b1ba36c84f0e3cff75d8f3c57363ee9e7466a00a86eaa037bce1ba29"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-push-observer-restart-2.log",
+      "bytes": 878,
+      "sha256": "5c639f5afdc7806dd78f62e2f697337bdf0bd4fae63e968367d333d3156ee71c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-push-observer-restart.log",
+      "bytes": 878,
+      "sha256": "975677fd13bebc8d78b8edc0656257e418c789a995549404918e24f5eb96b873"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-push-phase-start.log",
+      "bytes": 1286,
+      "sha256": "bd76944f0f7db09a27aef0fbcd5b5908d391707659342360c928809fb78cfe5c"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-push-phase-stop.log",
+      "bytes": 470,
+      "sha256": "e91d8865ba6e5c55642d0830108690905e395c41c550ed9956744f63af3387b1"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-push-receipt-logging-restart.log",
+      "bytes": 878,
+      "sha256": "b35ca9b11ac168625d83a56f6f05284ad8f4f267a72605180bfd79c5076bb5bd"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-receipt-log-format.log",
+      "bytes": 102,
+      "sha256": "c55512b25b343c18cfcc10a945ff4ed4e277231054324ba4be953c30ce191fe5"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-server-auth-fixed.log",
+      "bytes": 156718,
+      "sha256": "56989fc7463b57ed2b3a05280f5b92529c9c4aa4a68237dd71d80fc8a178091a"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-server-native-payments.log",
+      "bytes": 52866,
+      "sha256": "b8200b285ea724fc582c1ed901321d7020dcacb73901774b88038b042592eea7"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-server-proxy-mode.log",
+      "bytes": 63619,
+      "sha256": "9bf4ea185c11138b1a3c6d61a9494b5c87fdfae76b719d733d9110d3b6551466"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-server-stripe-test.log",
+      "bytes": 52257,
+      "sha256": "502855a694380b32bad3fee1696a05114c49a2efcf76e5ac5a623f76a5761274"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-server.log",
+      "bytes": 51892,
+      "sha256": "38f01b2c0cbcccc0fd0ccb55d2785e538789a1098ed85453f279d0831e63d0ac"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-smoke-after-redis-restart.log",
+      "bytes": 741,
+      "sha256": "8feb72efa3db6b872840b59cbe72f068c25fc601fb03513931ec98e8deff5f47"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-smoke-payment-auth-final.log",
+      "bytes": 872,
+      "sha256": "a3dcac4c016a174f84b031b48223f277d6a83c86d47d1f844a619a0b8c402438"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-smoke-stripe-mode.log",
+      "bytes": 872,
+      "sha256": "a3dcac4c016a174f84b031b48223f277d6a83c86d47d1f844a619a0b8c402438"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/staging-smoke.log",
+      "bytes": 741,
+      "sha256": "8feb72efa3db6b872840b59cbe72f068c25fc601fb03513931ec98e8deff5f47"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-auth-diagnostic.json",
+      "bytes": 941,
+      "sha256": "d340ca90dae7e7e609aaf6a0922ae9f0d5a71f839f7a8a1081bedcbe5090eefa"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-auth-reclone-real-service.json",
+      "bytes": 112,
+      "sha256": "23c639b6b1db9c93206a13d4bbaadcfc9c676167589fa2fe595ab2fb7fb886f9"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-forward-wrapper-tests-direct.log",
+      "bytes": 282,
+      "sha256": "1d16b6f49ee6da0d33e27a11daa31b7f6190f0f419ea6633645558e09c54232f"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-forward-wrapper-tests.log",
+      "bytes": 268,
+      "sha256": "b1159cd9cc3ae393c004a45e61d779173ca9d426adc46e6f7010ad797973c592"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-forward.log",
+      "bytes": 2478,
+      "sha256": "77367ecd2fbab262520ae36ecdfc30acde3d2f1ea2788c005c6f838767f35830"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-origin-event-verification-final.json",
+      "bytes": 2907,
+      "sha256": "d1a9aaeaa29bb92aaa3e1cd1af20ee1d83295ac7e40c694f1142be0571445055"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-origin-event-verification.json",
+      "bytes": 607,
+      "sha256": "3760d651df4d7577a2700320c409e1fb1c4732b9f24ee5c4533de76cb7991441"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-preflight.log",
+      "bytes": 195,
+      "sha256": "966bb646655a5e4f9f8a3ef8d5689cb7189634f18aa36f32586b8597f8c52b44"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-provider-webhooks.jsonl",
+      "bytes": 3990,
+      "sha256": "13308de73fc216103bd6226a4fd1d28ae2747e6d2115479bf3e7c1c1a2cbac06"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/stripe-staging-preflight.json",
+      "bytes": 329,
+      "sha256": "66120829ca13fa24272dd9721d773760060160d34e4569b382bd8d4190133aa6"
+    },
+    {
+      "file": "api/docs/release-2026-11-05/evidence/synthetic-session-cleanup.json",
+      "bytes": 290,
+      "sha256": "ac31485d44480ec491a0775e2b9a5bc60c584982afa034473ad7061edc777a2a"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/apk-scan.json",
+      "bytes": 220,
+      "sha256": "54b076d8a6da38b9fcd6aa0139b9a62cdad8cdde6032f74d5c92ba90b81cf849"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/artifact-callback-fixed.json",
+      "bytes": 513,
+      "sha256": "c90e9680dec2f1d5f455bccc3782333c94cb0c8b9f6c898d8f4132b68064d765"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/artifact-login-tested.json",
+      "bytes": 513,
+      "sha256": "9dac0a0dcd5e13b40cd2daeb07698d04d1f75c0237b9fbac3408b94b3134513c"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/artifact-payment-tested.json",
+      "bytes": 513,
+      "sha256": "f87b4c7716cd5786a420e1ef29bcb8520e4497e31c94fb16c404526bd0221d7f"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/artifact.json",
+      "bytes": 650,
+      "sha256": "ca0e90ea0052998343e8643d33804afe5b61940e665a1fb7fa11f5e1ed1f4af4"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-apk-metadata.log",
+      "bytes": 11697,
+      "sha256": "7f8c097cda2bf813bf55eb45dc96c7808c00983d7130db14a4e24ec984d2dffb"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-apk-signature-final.log",
+      "bytes": 990,
+      "sha256": "779b75b032a8f23d45d558b304ab6276bf5894001fa1fafb79c17eaf8f89a272"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-apk-signature.log",
+      "bytes": 990,
+      "sha256": "779b75b032a8f23d45d558b304ab6276bf5894001fa1fafb79c17eaf8f89a272"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-audit-after.json",
+      "bytes": 11662,
+      "sha256": "4322a89ce65acc71681a76968cd710c916c47f0b5b62d26d17da36541134b46d"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-audit-before.json",
+      "bytes": 11662,
+      "sha256": "31362cc94408ecec827f42a1b0719037f71ef6cf99bb51403b4973e8a9548d21"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-backports-final.log",
+      "bytes": 319,
+      "sha256": "c56e0d30ef6440ce3034d822459b4aa61bfe2d6587fed54e0c75cbbca08d726a"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-backports.log",
+      "bytes": 226,
+      "sha256": "450703142f62b4044f1aed71b0a1be3a3eabb8f3cca9971bf46cd8bd4b83294b"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-final-asset-scan.json",
+      "bytes": 244,
+      "sha256": "35b7cbd81399e13949960d5b15404ec32a0fb3ef902e115494ce88a891fb4daf"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-final-signature.txt",
+      "bytes": 342,
+      "sha256": "a355997bae3e4812f3506ebb9f734b38d7fa78d5faaaaad4f038ab00c2f76ab6"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-firebase-apk-scan.json",
+      "bytes": 404,
+      "sha256": "3ce9674735ef0d70a87469e21c29be9d9a9c7c7f9b889f4a599f7ebed478b72c"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-firebase-manifest.xml",
+      "bytes": 37726,
+      "sha256": "71e7a3987d9c7c79c7f886c5ac97463dc53141b27f334745490c4d7677983d3c"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-firebase-signature.log",
+      "bytes": 342,
+      "sha256": "a355997bae3e4812f3506ebb9f734b38d7fa78d5faaaaad4f038ab00c2f76ab6"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-install-final.log",
+      "bytes": 36,
+      "sha256": "781a31c82430c97897af612ece5e0ca2205e301cb5ff121ce2660541ea5182c7"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-install-payment-final.log",
+      "bytes": 36,
+      "sha256": "781a31c82430c97897af612ece5e0ca2205e301cb5ff121ce2660541ea5182c7"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-install.log",
+      "bytes": 36,
+      "sha256": "781a31c82430c97897af612ece5e0ca2205e301cb5ff121ce2660541ea5182c7"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-lint-final.log",
+      "bytes": 3409,
+      "sha256": "4eefb1a3c9e26f67d0a3aaeca9de4b8da88232a227b597bdd9c349c05f47f08e"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-lint.log",
+      "bytes": 3562,
+      "sha256": "0360885af57487825c573c597f0cf8c1214613467ade780a9472979504ffa5df"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-manifest.log",
+      "bytes": 78459,
+      "sha256": "a53ff0da83e9b7197dc3a8dd11bf8494273127c9f6f6906ad6b60cfcdad32f2b"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-staging-build-final.log",
+      "bytes": 117109,
+      "sha256": "46aac41983af652a20b71eed887dd699deda997d55cc7c91ac02e0e36b9f3783"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-staging-build-firebase.log",
+      "bytes": 117521,
+      "sha256": "d08d180b14c44c618a1a324f081320e0f15a414642370237d46b52761c6a994d"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-staging-build-payment-final.log",
+      "bytes": 76831,
+      "sha256": "067ea2b1285c1d284752198020223004ab2f6d46eaabae4dfda0e904efdbd6be"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-staging-build-stripe-final.log",
+      "bytes": 76858,
+      "sha256": "26503ae04e200240b86c041af16d093f3a73a051742e4278187d00e7b4d019cb"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-staging-config.log",
+      "bytes": 388,
+      "sha256": "54d1e836368dad00a4c9599e48e0b47cce1b7a4c1d26e31aa46645f578f7367b"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-stripe-scheme-targeted.log",
+      "bytes": 299,
+      "sha256": "c6eb179da44ea64f0d3f646e9da036827e7745e5032697165695353bb7e1e9c6"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-tests-chat-final.log",
+      "bytes": 12713,
+      "sha256": "ca5ba93c0705d6cb0421690338656b9cf96aafb1a9dcfd683d330842c7e7b203"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-tests-final-payment-copy.log",
+      "bytes": 12803,
+      "sha256": "c1f5ebbd9f110bc0ede8c627b15cea929cd83b607f7423d4640ebcfb11422a02"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-tests-final-stripe-scheme.log",
+      "bytes": 12803,
+      "sha256": "6db6dd23596b153b5ce6d6ee7286e796067bf19d059adf5d56fa9acf1146dfef"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-tests-final.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-tests-final.log",
+      "bytes": 12712,
+      "sha256": "b3a672da3df83752125e2b49c0ebac837361fa1e1477c556d250d74ca2cb68f0"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-tests.log",
+      "bytes": 16062,
+      "sha256": "03c5ac88801dbaebacf6fb3c987ea4a373108d2ff703ba3c7dbc2ab62e80316a"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-typecheck-final.log",
+      "bytes": 260,
+      "sha256": "52c6dfc8f1321f35a9915d061d5ae8aee43a06d5916519dad41f08f50466f914"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/customer-typecheck.log",
+      "bytes": 260,
+      "sha256": "52c6dfc8f1321f35a9915d061d5ae8aee43a06d5916519dad41f08f50466f914"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/firebase-build-helper-lint-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/firebase-build-helper-lint.log",
+      "bytes": 245,
+      "sha256": "b148ad8526898f6080bf9cb545dfb330fef1fd1f00d9717608ea5959fd1ac6ed"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/firebase-config-guards-final.log",
+      "bytes": 513,
+      "sha256": "576d34996dad1e84173fa731500095dcfe7c34755c7b98f8855172d5b001da98"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/pre-final-payment-artifact.json",
+      "bytes": 513,
+      "sha256": "7836d0a3cc3b16f465c7c473b424047f681645fd8555ce4aa0fe940a70206c5e"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/pre-final-payment-source-manifest.json",
+      "bytes": 37227,
+      "sha256": "5de83179339ab3adb054adceed6a6247b53b3648916f41883f6ef0d7bceb7039"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/source-manifest-login-tested.json",
+      "bytes": 36954,
+      "sha256": "a592654979164f73ce7e185dbfe3a345a12229bcf95ddd5378fdc707e282a8bd"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/source-manifest-payment-tested.json",
+      "bytes": 37227,
+      "sha256": "e2bf66d55a18af91a6344f80bea16197225e5cd1b7b1740a17830ebbcd562ef7"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/source-manifest.json",
+      "bytes": 37510,
+      "sha256": "a94c7b20f0e0b47c9ad86e481bd6643f3d1d29ce5e38ad4743f61f7dbe877753"
+    },
+    {
+      "file": "client_mobile/docs/release-2026-11-05/evidence/tests-firebase-config-final.log",
+      "bytes": 12818,
+      "sha256": "87dc3e4a492c23bd0d9b4980c6946528c671f7391fa0b63709aad73de6d2682a"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/ITALIAN_REVIEW.md",
+      "bytes": 2253,
+      "sha256": "4900d0adb020b7d53b01307ddeefd4488a7cbc433245c4a7b2ce3204629ca1c8"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/apk-scan-final.json",
+      "bytes": 220,
+      "sha256": "8cde2fc9732826e8c8b6510200f672de4ba9c292d1197a685fe42c1e639bb2ec"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/apk-scan.json",
+      "bytes": 220,
+      "sha256": "47ab0cb278359c49963316e9c394cfa0baab19d66167e928bc673774f7be2298"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/artifact-catalog-tested.json",
+      "bytes": 513,
+      "sha256": "680f5224081f8ae96acf556bb66726b3d2e693b1c8f506749999f3a9be04d72d"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/artifact-chat-tested.json",
+      "bytes": 513,
+      "sha256": "5a1592b19d370a7ac34c5a2da5062110598e6f1309b6d596293d658364362d42"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/artifact.json",
+      "bytes": 650,
+      "sha256": "6c23d6ad356a1db3868477fcb94b984f7eff28477af07ccb92fa19b0818847ab"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/catalog-parity-final.log",
+      "bytes": 970,
+      "sha256": "85fcda5ff012324b592ebb86f15ecfddfa84055a31f3f376235d0b3f0ea7bf0c"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/catalog-parity.log",
+      "bytes": 924,
+      "sha256": "7810adeedddcae09632f79d7f19c1d633a67c38801b4fa49eaa95e8a8af965d8"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-apk-metadata-final.log",
+      "bytes": 9134,
+      "sha256": "3cff83bc41b82002eb1b3ec2865d798069ee1b43d8370ec5a0281263cd4274ad"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-apk-metadata.log",
+      "bytes": 9134,
+      "sha256": "3cff83bc41b82002eb1b3ec2865d798069ee1b43d8370ec5a0281263cd4274ad"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-apk-signature-final.log",
+      "bytes": 990,
+      "sha256": "779b75b032a8f23d45d558b304ab6276bf5894001fa1fafb79c17eaf8f89a272"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-apk-signature.log",
+      "bytes": 990,
+      "sha256": "779b75b032a8f23d45d558b304ab6276bf5894001fa1fafb79c17eaf8f89a272"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-audit-after.json",
+      "bytes": 11625,
+      "sha256": "947cbfc70e702031d0de302916dfbaf3dc34bb2bbc2a01abb8bce858f74833aa"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-backports-final.log",
+      "bytes": 319,
+      "sha256": "c56e0d30ef6440ce3034d822459b4aa61bfe2d6587fed54e0c75cbbca08d726a"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-firebase-apk-scan.json",
+      "bytes": 404,
+      "sha256": "16ffe3b87d190b6ca8ad0aa09fac2e86140d74153b53b892a0345fbd255fccf3"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-firebase-manifest.xml",
+      "bytes": 26088,
+      "sha256": "f432e062375d06d89443456a1e09d5f6ecc4d6e0a613bbeee4d145c2270db3be"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-firebase-signature.log",
+      "bytes": 342,
+      "sha256": "a355997bae3e4812f3506ebb9f734b38d7fa78d5faaaaad4f038ab00c2f76ab6"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-install.log",
+      "bytes": 36,
+      "sha256": "781a31c82430c97897af612ece5e0ca2205e301cb5ff121ce2660541ea5182c7"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-lint-final.log",
+      "bytes": 2569,
+      "sha256": "9792be127cd545db90f794baba28f08e1b9c990b10e117aef1773cd4a7f1a15a"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-lint.log",
+      "bytes": 2569,
+      "sha256": "9792be127cd545db90f794baba28f08e1b9c990b10e117aef1773cd4a7f1a15a"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-manifest.log",
+      "bytes": 53784,
+      "sha256": "ff45db8cc37aa0ee590fb93c22a900cea90c2795960fd6bfee194b22d4297be6"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-staging-build-catalog-final.log",
+      "bytes": 73500,
+      "sha256": "f558e5ecedc1c40826c749c04e07b25f8723636c079cffc49c5bd1e7c8b5ec5a"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-staging-build-final.log",
+      "bytes": 73500,
+      "sha256": "c84988dbbfff034b611dc8e20ff901ca302fd30cbe977fc6b5a09948ba682100"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-staging-build-firebase.log",
+      "bytes": 183601,
+      "sha256": "7360a7e3072fb52c84f81ca2b767d85eae15287f86a7ca262eb9d5f5b576f264"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-staging-build.log",
+      "bytes": 182157,
+      "sha256": "90257bf090a9c34474e9188d71f00ca0f17252fd5f0d5c1fe776ba77303f1330"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-staging-config.log",
+      "bytes": 390,
+      "sha256": "695be10932a48ceba300b8ace1e84cf83d7818aac34893b48c8842016f1f2999"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-tests-chat-final.log",
+      "bytes": 10371,
+      "sha256": "b5dc5aa8d30fecca86b4e12262336ba69e8d32400c5fec04bd0dabd56f784c7d"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-tests-final-catalog.log",
+      "bytes": 10422,
+      "sha256": "482015779eca72022f07b335a7f36dd5604d13b20bf31e6ccae56ce5587dba40"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-tests-final.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-tests-final.log",
+      "bytes": 10387,
+      "sha256": "80eb374a2d20aa3ac2f56a125908e6e6acc7f0c1d704aabc046b56207097d7f1"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-tests.log",
+      "bytes": 13721,
+      "sha256": "69766d11d55788aa74569c1339f45588adc8f658e608762fdb2d4d2c41343d85"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-typecheck-final.log",
+      "bytes": 281,
+      "sha256": "ae97388ab5ff6108ad66dc17e9d926fd72dd3102c5f430519d4d0474379ed721"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/driver-typecheck.log",
+      "bytes": 281,
+      "sha256": "ae97388ab5ff6108ad66dc17e9d926fd72dd3102c5f430519d4d0474379ed721"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/firebase-build-helper-lint-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/firebase-build-helper-lint.log",
+      "bytes": 245,
+      "sha256": "880710f032989475ace8f6e0481621f3455d1b27ecc7ec2bd857f6dddd032e1f"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/firebase-config-guards-final.log",
+      "bytes": 513,
+      "sha256": "069a31913a2c74741a8ad67d665fc8d9e5d221f3344d735e441874ad0b4fee6d"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/post-chat-artifact-delta.json",
+      "bytes": 491,
+      "sha256": "581fa48281b9c9bc60799e22e7c9225fca9b3a6f50d0df0dd75825cba13a7918"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/source-manifest-catalog-tested.json",
+      "bytes": 32940,
+      "sha256": "244197f8fe24b944a89ead85a577212a3e3151f292db06685069f686b061e2e6"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/source-manifest-chat-tested.json",
+      "bytes": 32940,
+      "sha256": "cc604172b5a48cb15cb76eb5d4040995c87deeb77d09da8b80c0ed920c096d23"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/source-manifest.json",
+      "bytes": 33223,
+      "sha256": "24c343b5ba03b43c98d0b80b2758dacc82ba53e89b01002ec1c7c679ce1c2a53"
+    },
+    {
+      "file": "driver_mobile/docs/release-2026-11-05/evidence/tests-firebase-config-final.log",
+      "bytes": 10438,
+      "sha256": "e04061cd7964bd1d8d3068f4175be830149ee673e5a0ffe0789719c295e9a419"
+    }
+  ]
+}

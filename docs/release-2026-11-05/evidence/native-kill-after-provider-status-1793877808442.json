@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-11-05T11:23:28.441Z",
+  "purpose": "native-kill-after-provider",
+  "requestId": "cmw3ctk5o000fjefv7jhcvq1k",
+  "requestStatus": "QUOTED",
+  "assigned": false,
+  "paymentHoldPresent": true,
+  "confirmationState": "GRACE_PERIOD",
+  "appPaymentStatus": "PAYMENT_HOLD_PENDING",
+  "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+  "stripePaymentIntentId": null,
+  "authorizedAt": null,
+  "approvalDeadlineAt": null
+}

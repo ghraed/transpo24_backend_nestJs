@@ -235,7 +235,11 @@ describe('Direct Stripe charges', () => {
 
   it('keeps confirmation, recovery, capture, cancellation and refunds on the original connected account', async () => {
     const { service, api } = stripeFixture();
-    await service.confirmManualAuthorization('pi_direct', 'confirm', account);
+    api.paymentMethods.create.mockResolvedValueOnce({ id: 'pm_fresh_clone' });
+    await service.confirmManualAuthorization('pi_direct', 'confirm', account, {
+      customerId: 'cus_platform',
+      paymentMethodId: 'pm_saved',
+    });
     await service.inspectAuthorization('pi_direct', account);
     await service.captureAuthorization(
       'pi_direct',
@@ -296,14 +300,22 @@ describe('Direct Stripe charges', () => {
         payment_method: { id: 'pm_cloned' },
       },
     });
-    await service.confirmManualAuthorization('pi_direct', 'confirm', account);
+    api.paymentMethods.create.mockResolvedValueOnce({ id: 'pm_fresh_clone' });
+    await service.confirmManualAuthorization('pi_direct', 'confirm', account, {
+      customerId: 'cus_platform',
+      paymentMethodId: 'pm_saved',
+    });
     expect(api.paymentIntents.confirm).toHaveBeenLastCalledWith(
       'pi_direct',
       expect.objectContaining({
-        payment_method: 'pm_cloned',
+        payment_method: 'pm_fresh_clone',
         use_stripe_sdk: true,
       }),
       { stripeAccount: account, idempotencyKey: 'confirm_authentication' },
+    );
+    expect(api.paymentMethods.create).toHaveBeenCalledWith(
+      { customer: 'cus_platform', payment_method: 'pm_saved' },
+      { stripeAccount: account, idempotencyKey: 'confirm_authentication_card' },
     );
     expect(api.paymentIntents.create).not.toHaveBeenCalled();
   });

@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-11-05T11:24:09.652Z",
+  "purpose": "native-kill-after-provider",
+  "requestId": "cmw3ctk5o000fjefv7jhcvq1k",
+  "requestStatus": "QUOTED",
+  "assigned": false,
+  "paymentHoldPresent": true,
+  "confirmationState": "ACTION_REQUIRED",
+  "appPaymentStatus": "PAYMENT_HOLD_PENDING",
+  "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+  "stripePaymentIntentId": "pi_3UYOlfClGb3s3rvz0mvFf8X5",
+  "authorizedAt": null,
+  "approvalDeadlineAt": "2026-11-05T11:28:44.248Z",
+  "providerStatus": "requires_action",
+  "providerAmount": 1050,
+  "providerAmountCapturable": 0,
+  "providerAmountReceived": 0,
+  "providerLivemode": false
+}

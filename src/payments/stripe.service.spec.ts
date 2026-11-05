@@ -353,6 +353,74 @@ describe('StripeService', () => {
     expect(retrieve).toHaveBeenCalledTimes(1);
   });
 
+  it('reclones the owned platform card for Connect SCA on the same intent', async () => {
+    const service = new StripeService();
+    const confirm = jest
+      .fn()
+      .mockResolvedValue({ id: 'pi_auth', status: 'requires_action' });
+    const clone = jest.fn().mockResolvedValue({ id: 'pm_fresh_clone' });
+    const owned = jest
+      .spyOn(service as any, 'requireOwnedCard')
+      .mockResolvedValue({});
+    (service as any).getClient = () => ({
+      paymentMethods: { create: clone },
+      paymentIntents: { confirm },
+    });
+    const intent = {
+      id: 'pi_auth',
+      status: 'requires_payment_method',
+      payment_method: null,
+      last_payment_error: {
+        code: 'authentication_required',
+        payment_method: { id: 'pm_consumed_clone' },
+      },
+    };
+    await expect(
+      service.resumeManualAuthentication(
+        intent as any,
+        'same-attempt',
+        'acct_driver',
+        { customerId: 'cus_owner', paymentMethodId: 'pm_original' },
+      ),
+    ).resolves.toMatchObject({ id: 'pi_auth', status: 'requires_action' });
+    expect(owned).toHaveBeenCalledWith('cus_owner', 'pm_original');
+    expect(clone).toHaveBeenCalledWith(
+      { customer: 'cus_owner', payment_method: 'pm_original' },
+      {
+        stripeAccount: 'acct_driver',
+        idempotencyKey: 'same-attempt_authentication_card',
+      },
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      'pi_auth',
+      expect.objectContaining({
+        payment_method: 'pm_fresh_clone',
+        off_session: false,
+      }),
+      {
+        stripeAccount: 'acct_driver',
+        idempotencyKey: 'same-attempt_authentication',
+      },
+    );
+    confirm.mockClear();
+    clone.mockClear();
+    await service.resumeManualAuthentication(
+      { ...intent, last_payment_error: { code: 'card_declined' } } as any,
+      'same-attempt',
+      'acct_driver',
+    );
+    expect(clone).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    await expect(
+      service.resumeManualAuthentication(
+        intent as any,
+        'same-attempt',
+        'acct_driver',
+      ),
+    ).rejects.toThrow('saved card');
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
   it('creates an immediate-capture card intent when a Stripe payment method id is supplied', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'pi_test' });
     const service = new StripeService();

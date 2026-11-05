@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-11-05T10:44:39.512Z",
+  "purpose": "native-3ds-approve",
+  "requestId": "cmw3ctk4r0009jefvts8u28ph",
+  "requestStatus": "QUOTED",
+  "assigned": false,
+  "paymentHoldPresent": true,
+  "confirmationState": "GRACE_PERIOD",
+  "appPaymentStatus": "PAYMENT_HOLD_PENDING",
+  "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+  "stripePaymentIntentId": null,
+  "authorizedAt": null,
+  "approvalDeadlineAt": null
+}

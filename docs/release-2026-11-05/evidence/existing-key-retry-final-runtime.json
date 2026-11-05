@@ -1,0 +1,37 @@
+{
+  "checkedAt": "2026-11-05T14:44:51.060353+00:00",
+  "containers": [
+    {
+      "name": "transpo24-acceptance-20261105-api-1",
+      "status": "exited",
+      "exitCode": 0
+    },
+    {
+      "name": "transpo24-acceptance-20261105-proxy-1",
+      "status": "exited",
+      "exitCode": 0
+    },
+    {
+      "name": "transpo24-acceptance-20261105-postgres-1",
+      "status": "exited",
+      "exitCode": 0
+    },
+    {
+      "name": "transpo24-acceptance-20261105-redis-1",
+      "status": "exited",
+      "exitCode": 0
+    }
+  ],
+  "ownAdbReverse57431Present": false,
+  "stagingPackageStopFlags": {
+    "com.transpo24.app.staging": {
+      "stopped": false
+    },
+    "com.transpo24.driver.staging": {
+      "stopped": true
+    }
+  },
+  "customerStopFlagNote": "Customer app was force-stopped but its flag later became false; it may have been reopened. No repeated stop was issued while the phone was in use.",
+  "ownedEphemeralHttpAuthFilesRemoved": true,
+  "approvedExpoAssignmentsAndExistingKeyRetained": true
+}

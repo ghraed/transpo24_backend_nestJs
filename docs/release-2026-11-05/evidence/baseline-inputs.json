@@ -1,0 +1,15 @@
+{
+  "baselineReports": {
+    "/home/raed/Downloads/transpo24_clinet_test/PRODUCTION_READINESS_REPORT.md": "6da2ae009efd171a8a1f207814841a541f5e83c9cd68fd46d7e532b778c4ab20",
+    "/home/raed/Downloads/transpo24_clinet_test/TEST_MATRIX.md": "37a121d7b9023009868506fc76165a1f7ace2fcde4a45d03b2d06fce128091a4",
+    "/home/raed/Downloads/transpo24_clinet_test/DEVICE_RELEASE_CHECKLIST.md": "21759223a2f08c9017e28d1263221eb57229bbe8e33f32c5443033b387187d26"
+  },
+  "baselineCommittedRevisions": {
+    "api": "cfbeb1a594faf9806963df5690ea54b03348e33f",
+    "client_mobile": "c3bb33540ca67e013998990867f0bb5b3131572e",
+    "driver_mobile": "0fbe4c9679a85f07b9d4da57196de2a5d303b391",
+    "admin": "750f560b05480cb9e3e52649d2d291e06d469f3c",
+    "transpo24-public-site": "6032feba15a7655bbcaf215eb22cc8076d8f33dd"
+  },
+  "status": "Continuation changes remain local and uncommitted; no push/deployment/publication."
+}

@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-05T11:33:31.356Z",
+  "syntheticUsers": 3,
+  "sessionsRevoked": 2,
+  "pushTokensDisabled": 0,
+  "syntheticAvailabilityDisabled": 1,
+  "activeSyntheticSessions": 0,
+  "historyDeleted": false,
+  "scope": "Direct scoped cleanup, not native account-switch/logout acceptance"
+}

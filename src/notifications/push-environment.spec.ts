@@ -18,7 +18,7 @@ it.each([undefined, '', 'production', 'invalid'])(
   },
 );
 
-it.each(['DEVELOPMENT', 'PRODUCTION'])(
+it.each(['DEVELOPMENT', 'STAGING', 'PRODUCTION'])(
   'isolates registration and delivery in %s',
   async (environment) => {
     process.env.PUSH_ENVIRONMENT = environment;
@@ -27,9 +27,11 @@ it.each(['DEVELOPMENT', 'PRODUCTION'])(
       const opposite = {
         environment:
           environment === 'DEVELOPMENT' ? 'PRODUCTION' : 'DEVELOPMENT',
-        applicationId: own.applicationId.endsWith('.dev')
-          ? own.applicationId.slice(0, -4)
-          : own.applicationId + '.dev',
+        applicationId:
+          (app === PushApp.CUSTOMER
+            ? 'com.transpo24.app'
+            : 'com.transpo24.driver') +
+          (environment === 'DEVELOPMENT' ? '' : '.dev'),
       };
       const input = {
         userId: 'user',

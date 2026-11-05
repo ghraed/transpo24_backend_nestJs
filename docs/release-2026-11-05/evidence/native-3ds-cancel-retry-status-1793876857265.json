@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-11-05T11:07:36.678Z",
+  "purpose": "native-3ds-cancel-retry",
+  "requestId": "cmw3frspv0000affv9tvlscw6",
+  "requestStatus": "CANCELLED",
+  "assigned": false,
+  "paymentHoldPresent": true,
+  "confirmationState": "CANCELLED",
+  "appPaymentStatus": "PAYMENT_RELEASED",
+  "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+  "stripePaymentIntentId": "pi_3UYOUUClGb3s3rvz0sVWump0",
+  "authorizedAt": null,
+  "approvalDeadlineAt": "2026-11-05T11:10:59.546Z",
+  "providerStatus": "canceled",
+  "providerAmount": 1050,
+  "providerAmountCapturable": 0,
+  "providerAmountReceived": 0,
+  "providerLivemode": false
+}

@@ -1,0 +1,21 @@
+[
+  {
+    "role": "customer",
+    "projectId": "transpo24-staging",
+    "packages": [
+      "com.transpo24.app.staging"
+    ],
+    "fileSha256": "f5be8230d338b3cb580610f2e87ec9e1f68982c4f034cb290650260a3ed1d943",
+    "privatePath": ".staging-local/firebase/customer-google-services.json"
+  },
+  {
+    "role": "driver",
+    "projectId": "transpo24-staging",
+    "packages": [
+      "com.transpo24.app.staging",
+      "com.transpo24.driver.staging"
+    ],
+    "fileSha256": "b43bdd650b1b4373a20c399f681c724c4c1b8005c1640f577e4955315fdb2fa6",
+    "privatePath": ".staging-local/firebase/driver-google-services.json"
+  }
+]

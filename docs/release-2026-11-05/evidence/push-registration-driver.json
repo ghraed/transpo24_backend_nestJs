@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-11-05T14:36:38.887Z",
+  "role": "driver",
+  "userId": "cmw3ahxz100008bfvq5o5eoee",
+  "applicationId": "com.transpo24.driver.staging",
+  "activeTokenCount": 1,
+  "platforms": [
+    "android"
+  ],
+  "tokenUpdatedAt": [
+    "2026-11-05T14:36:36.203Z"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-11-05T14:44:15.489Z",
+  "mode": "verify",
+  "readOnly": true,
+  "keyMaterialRequested": false,
+  "mutationsPerformed": false,
+  "localConfigFilesChecked": 38,
+  "protectedHostedMetadataHash": "f4237467502c518fc70142c9eb2b96b74c6f2b3c427838895c2a674e7813c77b",
+  "allowedChanges": [
+    {
+      "expoProjectId": "d3e62d2e-cc21-4c2a-afb8-9b05f492c725",
+      "applicationIdentifier": "com.transpo24.app.staging",
+      "field": "googleServiceAccountKeyForFcmV1"
+    },
+    {
+      "expoProjectId": "9adb6313-42fb-4399-b3ea-6e040805a8a4",
+      "applicationIdentifier": "com.transpo24.driver.staging",
+      "field": "googleServiceAccountKeyForFcmV1"
+    }
+  ],
+  "queriedNonlegacyAndroidCredentialRecordsProtected": true,
+  "queriedAndroidSigningAndSubmissionBindingsProtected": true,
+  "coverageNote": "Two Expo projects, nonlegacy Android credential records only; iOS and other Expo projects were not queried.",
+  "existingLocalGoogleKeyProtected": true,
+  "stagingFcm": [
+    {
+      "applicationIdentifier": "com.transpo24.app.staging",
+      "key": {
+        "__typename": "GoogleServiceAccountKey",
+        "id": "970a295b-35a5-4dc4-8f27-0ed6c2b2fbcb",
+        "projectIdentifier": "transpo24"
+      },
+      "projectId": "d3e62d2e-cc21-4c2a-afb8-9b05f492c725"
+    },
+    {
+      "applicationIdentifier": "com.transpo24.driver.staging",
+      "key": {
+        "__typename": "GoogleServiceAccountKey",
+        "id": "970a295b-35a5-4dc4-8f27-0ed6c2b2fbcb",
+        "projectIdentifier": "transpo24"
+      },
+      "projectId": "9adb6313-42fb-4399-b3ea-6e040805a8a4"
+    }
+  ],
+  "localConfigsUnchanged": true,
+  "protectedHostedMetadataUnchanged": true
+}

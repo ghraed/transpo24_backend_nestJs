@@ -1,0 +1,19 @@
+[
+  {
+    "id": "evt_3UYOARClGb3s3rvz1IW0uw5a",
+    "type": "payment_intent.payment_failed",
+    "providerCreated": 1793875517,
+    "status": "requires_payment_method",
+    "code": "authentication_required",
+    "declineCode": "authentication_required",
+    "message": "This payment requires authentication. If the customer is off session, ask them to return to your application and complete the payment.",
+    "livemode": false
+  },
+  {
+    "id": "evt_3UYOARClGb3s3rvz1vnJPHNe",
+    "type": "payment_intent.canceled",
+    "providerCreated": 1793875519,
+    "status": "canceled",
+    "livemode": false
+  }
+]

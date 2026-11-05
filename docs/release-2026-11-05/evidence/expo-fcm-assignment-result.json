@@ -1,0 +1,28 @@
+{
+  "appliedAt": "2026-11-05T13:18:41.029Z",
+  "explicitOwnerApproval": true,
+  "planHash": "bad3ea3db68743f286e676bef3e6dca9a346ef2e10202a252928808509e4c9b3",
+  "keyUploaded": true,
+  "credentialSourceProjectId": "transpo24",
+  "targetFirebaseProjectId": "transpo24-staging",
+  "credentialProjectMetadataUnchanged": true,
+  "productionAssignmentsUnchanged": true,
+  "signingOrPublicationPerformed": false,
+  "deliveryVerified": false,
+  "assignments": [
+    {
+      "applicationIdentifier": "com.transpo24.app.staging",
+      "expoProjectId": "d3e62d2e-cc21-4c2a-afb8-9b05f492c725",
+      "credentialRecordPresent": true,
+      "fcmV1Assigned": true,
+      "credentialSourceProjectId": "transpo24"
+    },
+    {
+      "applicationIdentifier": "com.transpo24.driver.staging",
+      "expoProjectId": "9adb6313-42fb-4399-b3ea-6e040805a8a4",
+      "credentialRecordPresent": true,
+      "fcmV1Assigned": true,
+      "credentialSourceProjectId": "transpo24"
+    }
+  ]
+}

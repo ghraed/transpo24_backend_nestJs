@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-11-05T14:35:57.157Z",
+  "caseId": "403ed250-6d42-47cd-b2d5-a88ac75c5b16",
+  "scenario": "customer-background",
+  "applicationId": "com.transpo24.app.staging",
+  "ticketIds": [
+    "01a1ac23-42ff-7611-8e62-ab08a031f764"
+  ],
+  "receipts": [
+    {
+      "id": "01a1ac23-42ff-7611-8e62-ab08a031f764",
+      "status": "error",
+      "errorCode": "DeveloperError",
+      "errorCategory": null,
+      "providerError": {
+        "httpStatus": 403,
+        "status": "PERMISSION_DENIED",
+        "reason": "IAM_PERMISSION_DENIED",
+        "consumer": null
+      },
+      "providerDiagnostic": {
+        "httpStatus": 403,
+        "status": "PERMISSION_DENIED",
+        "reason": "IAM_PERMISSION_DENIED",
+        "permission": "cloudmessaging.messages.create",
+        "resource": "projects/transpo24",
+        "message": null
+      }
+    }
+  ],
+  "deviceDeliveryProven": false
+}

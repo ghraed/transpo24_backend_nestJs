@@ -1,0 +1,13 @@
+{
+  "reportedAt": "2026-11-05T14:32:09.249729+00:00",
+  "ownerReportedSourceFcmApiEnabled": true,
+  "credentialSourceProject": "transpo24",
+  "targetFirebaseProject": "transpo24-staging",
+  "targetValidateOnlyHttpStatus": 200,
+  "deviceRetest": "Phone UI interrupted by unrelated overlay; two actual HTTP app-module sends attempted with previously native-issued staging tokens, both rejected downstream",
+  "scope": "Owner report of API enabling plus fresh Google validate-only target check; not delivery acceptance",
+  "sourceApiDisabledErrorCleared": true,
+  "newProviderReason": "IAM_PERMISSION_DENIED",
+  "wrongProjectResource": "projects/transpo24",
+  "notificationDelivered": false
+}

@@ -1,0 +1,36 @@
+{
+  "checkedAt": "2026-11-05T14:13:27.513679+00:00",
+  "containers": [
+    {
+      "name": "transpo24-acceptance-20261105-api-1",
+      "status": "exited",
+      "exitCode": 0
+    },
+    {
+      "name": "transpo24-acceptance-20261105-proxy-1",
+      "status": "exited",
+      "exitCode": 0
+    },
+    {
+      "name": "transpo24-acceptance-20261105-postgres-1",
+      "status": "exited",
+      "exitCode": 0
+    },
+    {
+      "name": "transpo24-acceptance-20261105-redis-1",
+      "status": "exited",
+      "exitCode": 0
+    }
+  ],
+  "stagingApps": {
+    "com.transpo24.app.staging": {
+      "stopped": true
+    },
+    "com.transpo24.driver.staging": {
+      "stopped": true
+    }
+  },
+  "volumesAndPrivateConfigurationRetained": true,
+  "approvedExpoAssignmentsRetained": true,
+  "ownAdbReverse57431Present": false
+}

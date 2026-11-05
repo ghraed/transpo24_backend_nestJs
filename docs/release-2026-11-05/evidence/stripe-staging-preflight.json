@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-11-05T10:16:22.891Z",
+  "stripeMode": "test",
+  "authenticated": true,
+  "connectedAccountRetrieved": true,
+  "chargesEnabled": true,
+  "payoutsEnabled": true,
+  "detailsSubmitted": true,
+  "platformPaysProcessingFees": true,
+  "mutationsPerformed": false,
+  "providerWebhookForwardingConfigured": false
+}

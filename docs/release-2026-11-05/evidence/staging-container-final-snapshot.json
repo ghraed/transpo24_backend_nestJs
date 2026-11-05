@@ -1,0 +1,46 @@
+[
+  {
+    "name": "transpo24-acceptance-20261105-api-1",
+    "image": "node:22-bookworm-slim@sha256:2f0e17f8955e766e776ae16d3ac47519ca3edf47c07e5c1423527926fdd5d568",
+    "state": "running",
+    "health": "healthy",
+    "oomKilled": false,
+    "startedAt": "2026-11-05T11:34:09.20606911Z",
+    "restartCount": 0,
+    "readOnlyRootfs": true,
+    "networkMode": "host"
+  },
+  {
+    "name": "transpo24-acceptance-20261105-proxy-1",
+    "image": "node:22-bookworm-slim@sha256:2f0e17f8955e766e776ae16d3ac47519ca3edf47c07e5c1423527926fdd5d568",
+    "state": "running",
+    "health": "healthy",
+    "oomKilled": false,
+    "startedAt": "2026-11-05T11:34:09.157503902Z",
+    "restartCount": 0,
+    "readOnlyRootfs": true,
+    "networkMode": "host"
+  },
+  {
+    "name": "transpo24-acceptance-20261105-postgres-1",
+    "image": "postgres:16-alpine",
+    "state": "running",
+    "health": "healthy",
+    "oomKilled": false,
+    "startedAt": "2026-11-05T08:26:46.442777328Z",
+    "restartCount": 0,
+    "readOnlyRootfs": false,
+    "networkMode": "transpo24-acceptance-20261105_default"
+  },
+  {
+    "name": "transpo24-acceptance-20261105-redis-1",
+    "image": "redis:7.4.7-alpine",
+    "state": "running",
+    "health": "healthy",
+    "oomKilled": false,
+    "startedAt": "2026-11-05T09:01:10.673271324Z",
+    "restartCount": 0,
+    "readOnlyRootfs": false,
+    "networkMode": "transpo24-acceptance-20261105_default"
+  }
+]

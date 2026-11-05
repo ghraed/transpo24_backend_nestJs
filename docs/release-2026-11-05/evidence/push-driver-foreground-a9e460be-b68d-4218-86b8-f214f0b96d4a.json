@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-11-05T14:06:25.050Z",
+  "caseId": "a9e460be-b68d-4218-86b8-f214f0b96d4a",
+  "scenario": "driver-foreground",
+  "applicationId": "com.transpo24.driver.staging",
+  "ticketIds": [
+    "01a1ac08-3b0d-75fc-9023-4e3ba2b219e9"
+  ],
+  "receipts": [
+    {
+      "id": "01a1ac08-3b0d-75fc-9023-4e3ba2b219e9",
+      "status": "error",
+      "errorCode": "DeveloperError",
+      "errorCategory": null,
+      "providerDetails": {
+        "response": "{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Firebase Cloud Messaging API has not been used in project transpo24 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/fcm.googleapis.com/overview?project=transpo24 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"SERVICE_DISABLED\",\n        \"domain\": \"googleapis.com\",\n        \"metadata\": {\n          \"consumer\": \"projects/transpo24\",\n          \"containerInfo\": \"transpo24\",\n          \"service\": \"fcm.googleapis.com\",\n          \"activationUrl\": \"https://console.developers.google.com/apis/api/fcm.googleapis.com/overview?project=transpo24\",\n          \"serviceTitle\": \"Firebase Cloud Messaging API\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.LocalizedMessage\",\n        \"locale\": \"en-US\",\n        \"message\": \"Firebase Cloud Messaging API has not been used in project transpo24 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/fcm.googleapis.com/overview?project=transpo24 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.\"\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Google developers console API activation\",\n            \"url\": \"https://console.developers.google.com/apis/api/fcm.googleapis.com/overview?project=transpo24\"\n          }\n        ]\n      }\n    ]\n  }\n}\n",
+        "httpStatus": 403
+      },
+      "providerMessage": "The request sent to the server was malformed or contained invalid parameters."
+    }
+  ],
+  "deviceDeliveryProven": false
+}

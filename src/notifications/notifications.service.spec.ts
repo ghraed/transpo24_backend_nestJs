@@ -97,6 +97,43 @@ describe('NotificationsService', () => {
       ]);
     });
 
+    it.each(['STAGING', 'PRODUCTION'])(
+      'logs receipt metadata only in %s without logging the device token',
+      async (environment) => {
+        process.env.PUSH_ENVIRONMENT = environment;
+        const service = createService({
+          pushToken: {
+            findFirst: jest.fn().mockResolvedValue({ id: 'record' }),
+          },
+        });
+        const logger = { log: jest.fn() };
+        Object.assign(service, {
+          logger,
+          expo: {
+            sendPushNotificationsAsync: jest
+              .fn()
+              .mockResolvedValue([{ status: 'ok', id: 'receipt-fixture' }]),
+          },
+        });
+        await expect(
+          service.sendTestToDevice(
+            'user-1',
+            PushApp.CUSTOMER,
+            'ExponentPushToken[private-device]',
+          ),
+        ).resolves.toEqual({ accepted: true });
+        if (environment === 'STAGING') {
+          expect(JSON.parse(logger.log.mock.calls[0][0])).toEqual({
+            event: 'STAGING_TEST_PUSH_ACCEPTED',
+            userId: 'user-1',
+            app: 'CUSTOMER',
+            receiptId: 'receipt-fixture',
+          });
+          expect(logger.log.mock.calls[0][0]).not.toContain('private-device');
+        } else expect(logger.log).not.toHaveBeenCalled();
+      },
+    );
+
     it('surfaces rejected tickets and deactivates expired devices', async () => {
       const updateMany = jest.fn();
       const service = createService({

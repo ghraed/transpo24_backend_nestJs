@@ -534,12 +534,36 @@ export class DelayedBookingPaymentsService {
           hold.stripePaymentIntentId,
           hold.stripeAccountId,
         );
-        if (intent.status === 'requires_confirmation')
-          intent = await this.stripe.confirmManualAuthorization(
-            intent.id,
-            `booking_confirm_${hold.id}_${hold.authorizationAttempt}`,
-            hold.stripeAccountId,
-          );
+        if (
+          intent.status === 'requires_confirmation' ||
+          (intent.status === 'requires_payment_method' &&
+            (intent.last_payment_error?.code === 'authentication_required' ||
+              intent.last_payment_error?.decline_code ===
+                'authentication_required'))
+        ) {
+          const user = await tx.user.findUniqueOrThrow({
+            where: { id: hold.customerId },
+          });
+          const sourceCard = {
+            customerId: user.stripeCustomerId!,
+            paymentMethodId: hold.stripePaymentMethodId!,
+          };
+          const key = `booking_confirm_${hold.id}_${hold.authorizationAttempt}`;
+          intent =
+            intent.status === 'requires_confirmation'
+              ? await this.stripe.confirmManualAuthorization(
+                  intent.id,
+                  key,
+                  hold.stripeAccountId,
+                  sourceCard,
+                )
+              : await this.stripe.resumeManualAuthentication(
+                  intent,
+                  key,
+                  hold.stripeAccountId,
+                  sourceCard,
+                );
+        }
         if (
           intent.amount !== minor(hold.amount) ||
           intent.currency.toUpperCase() !== hold.currency.toUpperCase()

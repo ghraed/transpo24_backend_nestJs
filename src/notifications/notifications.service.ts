@@ -91,6 +91,16 @@ export class NotificationsService {
           : 'The push notification service did not accept the test.',
       );
     }
+    if (pushScope(app).environment === 'STAGING') {
+      this.logger.log(
+        JSON.stringify({
+          event: 'STAGING_TEST_PUSH_ACCEPTED',
+          userId,
+          app,
+          receiptId: ticket.id,
+        }),
+      );
+    }
     return { accepted: true };
   }
 

@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-11-05T14:43:15.633Z",
+  "scope": "Only three exact synthetic emails in isolated acceptance database",
+  "revokedSessions": 2,
+  "deactivatedPushTokens": 2,
+  "disabledAvailability": 1,
+  "remainingActiveSessions": 0,
+  "remainingActiveTokens": 0,
+  "financialHistoryRetained": true,
+  "expoAssignmentsRetained": true,
+  "existingGoogleKeyNotRevoked": true
+}

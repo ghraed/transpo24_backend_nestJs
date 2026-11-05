@@ -1,0 +1,20 @@
+{
+  "observedAt": "2026-11-05T09:19:19.548Z",
+  "phase": "after-commit",
+  "roomId": "cmw3ayvgl0005sxfv533tumow",
+  "armed": false,
+  "blocked": true,
+  "operationId": "mw3c3fqu-8tk5fr2kn4nbs77f2pbpj9z8m9btc69r8r3app67x4j9",
+  "messageId": "cmw3c3fmr0001gqfvf9ursdog",
+  "committedResponseStatus": 201,
+  "responseDeliberatelyDropped": true,
+  "operationRowCount": 1,
+  "totalRoomMessages": 1,
+  "rows": [
+    {
+      "id": "cmw3c3fmr0001gqfvf9ursdog",
+      "operationId": "mw3c3fqu-8tk5fr2kn4nbs77f2pbpj9z8m9btc69r8r3app67x4j9",
+      "createdAt": "2026-11-05T09:19:19.011Z"
+    }
+  ]
+}

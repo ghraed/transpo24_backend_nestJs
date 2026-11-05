@@ -364,6 +364,34 @@ describe('delayed booking money lifecycle', () => {
     },
   );
 
+  it('recovers SCA after the off-session response was lost without a second intent or premature cancellation', async () => {
+    const x = setup('CREDIT_CARD');
+    await x.stage();
+    x.due();
+    await x.service.process('request');
+    const id = x.state.hold.stripePaymentIntentId;
+    Object.assign(x.intents.get(id), {
+      status: 'requires_payment_method',
+      last_payment_error: { code: 'authentication_required' },
+    });
+    x.stripe.resumeManualAuthentication = jest.fn(async () => {
+      x.intents.get(id).status = 'requires_action';
+      return x.intents.get(id);
+    });
+    await x.service.process('request');
+    expect(x.state.hold.confirmationState).toBe('ACTION_REQUIRED');
+    expect(x.state.request.status).not.toBe('CANCELLED');
+    expect(x.stripe.createManualAuthorization).toHaveBeenCalledTimes(1);
+    expect(x.stripe.confirmManualAuthorization).not.toHaveBeenCalled();
+    expect(x.stripe.resumeManualAuthentication).toHaveBeenCalledWith(
+      expect.objectContaining({ id }),
+      expect.any(String),
+      x.state.hold.stripeAccountId,
+      { customerId: 'cus_1', paymentMethodId: 'pm_1' },
+    );
+    expect(x.stripe.cancelPaymentIntentIfExists).not.toHaveBeenCalled();
+  });
+
   it('does not send acceptance notifications while awaiting bank approval or after a decline', async () => {
     const x = setup('CREDIT_CARD');
     await x.stage();
@@ -902,6 +930,7 @@ describe('direct booking authorization and release', () => {
       expect.any(String),
       expect.any(String),
       'acct_original',
+      { customerId: 'cus_1', paymentMethodId: 'pm_1' },
     );
     x.db.driverProfile.findUniqueOrThrow.mockResolvedValue({
       stripeAccountId: 'acct_reconnected',

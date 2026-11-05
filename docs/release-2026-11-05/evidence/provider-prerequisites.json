@@ -1,0 +1,326 @@
+{
+  "checkedOn": "2026-11-05",
+  "scope": "local presence inventory plus dated hosted metadata/permission/receipt evidence; billing/Maps restrictions/APNs not verified",
+  "repositories": {
+    "api": {
+      "variables": {
+        "GOOGLE_MAPS_SERVER_API_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "GOOGLE_ROUTES_API_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "TWILIO_ACCOUNT_SID": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "TWILIO_AUTH_TOKEN": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "TWILIO_VERIFY_SERVICE_SID": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "STRIPE_TEST_SECRET_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env.stripe-production.local"
+        },
+        "STRIPE_TEST_WEBHOOK_SECRET": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env.stripe-production.local"
+        },
+        "STRIPE_TEST_CONNECT_WEBHOOK_SECRET": {
+          "state": "MISSING"
+        },
+        "EXPO_ACCESS_TOKEN": {
+          "state": "MISSING"
+        },
+        "GOOGLE_APPLICATION_CREDENTIALS": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        }
+      },
+      "firebaseFiles": [],
+      "easProjectIdInAppConfig": false
+    },
+    "client_mobile": {
+      "variables": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "EXPO_ANDROID_STAGING_GOOGLE_SERVICES_FILE": {
+          "state": "MISSING"
+        },
+        "EXPO_PUBLIC_IOS_GOOGLE_SERVICES_FILE": {
+          "state": "MISSING"
+        },
+        "EXPO_PUBLIC_EAS_PROJECT_ID": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env.stripe-production.local"
+        }
+      },
+      "firebaseFiles": [
+        {
+          "file": "google-services.dev.json",
+          "projectId": "transpo-24",
+          "packages": [
+            "com.transpo24.app",
+            "com.transpo24.app.dev",
+            "com.transpo24.driver"
+          ],
+          "includesStaging": false
+        },
+        {
+          "file": "google-services.json",
+          "projectId": "transpo-24",
+          "packages": [
+            "com.transpo24.app"
+          ],
+          "includesStaging": false
+        }
+      ],
+      "easProjectIdInAppConfig": true
+    },
+    "driver_mobile": {
+      "variables": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env"
+        },
+        "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": {
+          "state": "PRESENT_SCOPE_UNVERIFIED",
+          "source": ".env.local"
+        },
+        "EXPO_ANDROID_STAGING_GOOGLE_SERVICES_FILE": {
+          "state": "MISSING"
+        },
+        "EXPO_PUBLIC_IOS_GOOGLE_SERVICES_FILE": {
+          "state": "MISSING"
+        },
+        "EXPO_PUBLIC_EAS_PROJECT_ID": {
+          "state": "MISSING"
+        },
+        "EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY": {
+          "state": "MISSING"
+        }
+      },
+      "firebaseFiles": [
+        {
+          "file": "google-services.json",
+          "projectId": "transpo-24",
+          "packages": [
+            "com.transpo24.app",
+            "com.transpo24.driver"
+          ],
+          "includesStaging": false
+        }
+      ],
+      "easProjectIdInAppConfig": true
+    }
+  },
+  "notes": [
+    "An EAS projectId may be present in app.json even when its env variable is absent.",
+    "Driver native Stripe publishable configuration is not required: the driver app uses backend Stripe Connect links.",
+    "An iOS Firebase plist is not itself a prerequisite for Expo/APNs notifications; APNs and Apple signing are.",
+    "EXPO_ACCESS_TOKEN is required only if enhanced Expo push security is enabled."
+  ],
+  "prerequisites": {
+    "stagingMaps": "Existing key strings are not proof of Maps SDK/Places/Routes enablement, billing or staging certificate/IP restrictions. Owner confirmation required before using them.",
+    "stagingFirebase": "Checked-in developer files are not staging evidence. Validated private staging files and exact artifact configuration are recorded below when present.",
+    "pushCredentials": "Source API enabled: SERVICE_DISABLED cleared. Both genuine API retries now fail FCM403 IAM_PERMISSION_DENIED / cloudmessaging.messages.create / projects/transpo24; Expo currently targets key source project rather than transpo24-staging. Direct target validate-only200 is separate. Owner explicitly requires the existing key; replacement-key request canceled. A supported target-project route for Expo remains unresolved. No new credential changes in retry phase; APNs/signing/lifecycle delivery remain open.",
+    "sms": "Local Twilio credential strings exist, but staging account/service ownership, trial/geo permissions and a user-controlled test destination have not been supplied. No SMS sent.",
+    "stripe": "Existing explicit TEST key authenticated and copied privately. Official CLI TEST listeners forward platform/Connect events locally. CLI returns the same signing secret for both scopes; independent deployed endpoint credentials remain unverified. Native authorization/3DS/interruption and actual provider delivery outcomes are recorded separately in DEVICE_RELEASE_CHECKLIST.md; configuration presence alone is not acceptance.",
+    "androidSigning": "Fresh local staging APK signatures and fingerprints are recorded in the mobile evidence directories. Restrict approved staging Maps keys to those package/certificate pairs before rebuilding. Store signing not used.",
+    "ios": "Linux host has no Xcode. Apple team, staging bundle IDs/profiles, APNs, registered physical iPhone and signed staging artifacts not available in this session."
+  },
+  "isolatedRuntime": {
+    "stripeMode": "test",
+    "realTestKeyLoaded": true,
+    "platformSigningSecretPresent": true,
+    "connectSigningSecretPresent": true,
+    "independentEndpointSigningSecrets": false,
+    "mapsServerConfigured": false,
+    "syntheticReviewLoginEnabled": true,
+    "smsProviderConfigured": false,
+    "pushEnvironment": "STAGING"
+  },
+  "stagingAndroidFirebase": [
+    {
+      "role": "customer",
+      "projectId": "transpo24-staging",
+      "packages": [
+        "com.transpo24.app.staging"
+      ],
+      "fileSha256": "f5be8230d338b3cb580610f2e87ec9e1f68982c4f034cb290650260a3ed1d943",
+      "privatePath": ".staging-local/firebase/customer-google-services.json"
+    },
+    {
+      "role": "driver",
+      "projectId": "transpo24-staging",
+      "packages": [
+        "com.transpo24.app.staging",
+        "com.transpo24.driver.staging"
+      ],
+      "fileSha256": "b43bdd650b1b4373a20c399f681c724c4c1b8005c1640f577e4955315fdb2fa6",
+      "privatePath": ".staging-local/firebase/driver-google-services.json"
+    }
+  ],
+  "approvedExpoAssignment": {
+    "appliedAt": "2026-11-05T13:18:41.029Z",
+    "explicitOwnerApproval": true,
+    "planHash": "bad3ea3db68743f286e676bef3e6dca9a346ef2e10202a252928808509e4c9b3",
+    "keyUploaded": true,
+    "credentialSourceProjectId": "transpo24",
+    "targetFirebaseProjectId": "transpo24-staging",
+    "credentialProjectMetadataUnchanged": true,
+    "productionAssignmentsUnchanged": true,
+    "signingOrPublicationPerformed": false,
+    "deliveryVerified": false,
+    "assignments": [
+      {
+        "applicationIdentifier": "com.transpo24.app.staging",
+        "expoProjectId": "d3e62d2e-cc21-4c2a-afb8-9b05f492c725",
+        "credentialRecordPresent": true,
+        "fcmV1Assigned": true,
+        "credentialSourceProjectId": "transpo24"
+      },
+      {
+        "applicationIdentifier": "com.transpo24.driver.staging",
+        "expoProjectId": "9adb6313-42fb-4399-b3ea-6e040805a8a4",
+        "credentialRecordPresent": true,
+        "fcmV1Assigned": true,
+        "credentialSourceProjectId": "transpo24"
+      }
+    ]
+  },
+  "existingKeyValidateOnly": {
+    "checkedAt": "2026-11-05T14:31:00.251Z",
+    "credentialProjectId": "transpo24",
+    "targetProjectId": "transpo24-staging",
+    "validateOnly": true,
+    "notificationSent": false,
+    "keyUploaded": false,
+    "authenticated": true,
+    "httpStatus": 200,
+    "stagingSendValidated": true
+  },
+  "stagingTokenRegistration": [
+    {
+      "checkedAt": "2026-11-05T14:35:51.278Z",
+      "role": "customer",
+      "userId": "cmw3ayvff0000sxfv5bmq36zc",
+      "applicationId": "com.transpo24.app.staging",
+      "activeTokenCount": 1,
+      "platforms": [
+        "android"
+      ],
+      "tokenUpdatedAt": [
+        "2026-11-05T14:35:48.374Z"
+      ]
+    },
+    {
+      "checkedAt": "2026-11-05T14:36:38.887Z",
+      "role": "driver",
+      "userId": "cmw3ahxz100008bfvq5o5eoee",
+      "applicationId": "com.transpo24.driver.staging",
+      "activeTokenCount": 1,
+      "platforms": [
+        "android"
+      ],
+      "tokenUpdatedAt": [
+        "2026-11-05T14:36:36.203Z"
+      ]
+    }
+  ],
+  "latestSourceApiProgress": {
+    "reportedAt": "2026-11-05T14:32:09.249729+00:00",
+    "ownerReportedSourceFcmApiEnabled": true,
+    "credentialSourceProject": "transpo24",
+    "targetFirebaseProject": "transpo24-staging",
+    "targetValidateOnlyHttpStatus": 200,
+    "deviceRetest": "Phone UI interrupted by unrelated overlay; two actual HTTP app-module sends attempted with previously native-issued staging tokens, both rejected downstream",
+    "scope": "Owner report of API enabling plus fresh Google validate-only target check; not delivery acceptance",
+    "sourceApiDisabledErrorCleared": true,
+    "newProviderReason": "IAM_PERMISSION_DENIED",
+    "wrongProjectResource": "projects/transpo24",
+    "notificationDelivered": false
+  },
+  "latestApiPushRetries": [
+    {
+      "checkedAt": "2026-11-05T14:35:57.157Z",
+      "caseId": "403ed250-6d42-47cd-b2d5-a88ac75c5b16",
+      "scenario": "customer-background",
+      "applicationId": "com.transpo24.app.staging",
+      "ticketIds": [
+        "01a1ac23-42ff-7611-8e62-ab08a031f764"
+      ],
+      "receipts": [
+        {
+          "id": "01a1ac23-42ff-7611-8e62-ab08a031f764",
+          "status": "error",
+          "errorCode": "DeveloperError",
+          "errorCategory": null,
+          "providerError": {
+            "httpStatus": 403,
+            "status": "PERMISSION_DENIED",
+            "reason": "IAM_PERMISSION_DENIED",
+            "consumer": null
+          },
+          "providerDiagnostic": {
+            "httpStatus": 403,
+            "status": "PERMISSION_DENIED",
+            "reason": "IAM_PERMISSION_DENIED",
+            "permission": "cloudmessaging.messages.create",
+            "resource": "projects/transpo24",
+            "message": null
+          }
+        }
+      ],
+      "deviceDeliveryProven": false
+    },
+    {
+      "checkedAt": "2026-11-05T14:36:45.108Z",
+      "caseId": "0c1c3dfa-adde-4147-b1cd-f7b2c4ae633f",
+      "scenario": "driver-background",
+      "applicationId": "com.transpo24.driver.staging",
+      "ticketIds": [
+        "01a1ac23-fc92-766b-ab27-c6f5c0ad81e8"
+      ],
+      "receipts": [
+        {
+          "id": "01a1ac23-fc92-766b-ab27-c6f5c0ad81e8",
+          "status": "error",
+          "errorCode": "DeveloperError",
+          "errorCategory": null,
+          "providerError": {
+            "httpStatus": 403,
+            "status": "PERMISSION_DENIED",
+            "reason": "IAM_PERMISSION_DENIED",
+            "consumer": null
+          },
+          "providerDiagnostic": {
+            "httpStatus": 403,
+            "status": "PERMISSION_DENIED",
+            "reason": "IAM_PERMISSION_DENIED",
+            "permission": "cloudmessaging.messages.create",
+            "resource": "projects/transpo24",
+            "message": null
+          }
+        }
+      ],
+      "deviceDeliveryProven": false
+    }
+  ]
+}

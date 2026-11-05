@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-11-05T14:35:51.278Z",
+  "role": "customer",
+  "userId": "cmw3ayvff0000sxfv5bmq36zc",
+  "applicationId": "com.transpo24.app.staging",
+  "activeTokenCount": 1,
+  "platforms": [
+    "android"
+  ],
+  "tokenUpdatedAt": [
+    "2026-11-05T14:35:48.374Z"
+  ]
+}

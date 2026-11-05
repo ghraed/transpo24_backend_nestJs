@@ -1,0 +1,8 @@
+{
+  "sentAt": "2026-11-05T14:35:54.687Z",
+  "caseId": "403ed250-6d42-47cd-b2d5-a88ac75c5b16",
+  "scenario": "customer-background",
+  "accepted": true,
+  "ingress": "Genuine authenticated POST /push-tokens/test; same real NotificationsService/Expo provider as native button",
+  "directProviderOrFixture": false
+}

@@ -271,6 +271,7 @@ export class StripeService {
     id: string,
     idempotencyKey: string,
     accountId?: string | null,
+    sourceCard?: { customerId: string; paymentMethodId: string },
   ) {
     return this.runStripe(async () => {
       if (accountId) await this.requirePlatformProcessingFees(accountId);
@@ -291,38 +292,66 @@ export class StripeService {
             { expand: ['latest_charge'] },
             this.accountOptions(accountId),
           );
-          const authenticationRequired =
-            current.last_payment_error?.code === 'authentication_required' ||
-            current.last_payment_error?.decline_code ===
-              'authentication_required';
-          const authenticationMethod =
-            current.payment_method ??
-            current.last_payment_error?.payment_method;
-          if (authenticationRequired && authenticationMethod) {
-            // Off-session authentication failures can return requires_payment_method.
-            // Reconfirm the same intent for SDK authentication, without creating a new payment.
-            return this.getClient().paymentIntents.confirm(
-              current.id,
-              {
-                payment_method:
-                  typeof authenticationMethod === 'string'
-                    ? authenticationMethod
-                    : authenticationMethod.id,
-                off_session: false,
-                use_stripe_sdk: true,
-                expand: ['latest_charge'],
-              },
-              this.accountOptions(
-                accountId,
-                `${idempotencyKey}_authentication`,
-              ),
-            );
-          }
-          return current;
+          return this.resumeManualAuthentication(
+            current,
+            idempotencyKey,
+            accountId,
+            sourceCard,
+          );
         }
         throw error;
       }
     });
+  }
+
+  async resumeManualAuthentication(
+    intent: Awaited<
+      ReturnType<InstanceType<typeof Stripe>['paymentIntents']['retrieve']>
+    >,
+    idempotencyKey: string,
+    accountId?: string | null,
+    sourceCard?: { customerId: string; paymentMethodId: string },
+  ) {
+    const authenticationRequired =
+      intent.last_payment_error?.code === 'authentication_required' ||
+      intent.last_payment_error?.decline_code === 'authentication_required';
+    const method =
+      intent.payment_method ?? intent.last_payment_error?.payment_method;
+    if (
+      intent.status !== 'requires_payment_method' ||
+      !authenticationRequired ||
+      !method
+    )
+      return intent;
+    // A direct-charge clone is consumed by its first attempt, including an SCA
+    // failure. Clone the owned platform card again for the SAME PaymentIntent.
+    // Stable keys make recovery safe after worker/webhook response loss.
+    if (accountId && !sourceCard)
+      throw new BadRequestException(
+        'The saved card is required to resume bank approval.',
+      );
+    const paymentMethodId = accountId
+      ? await this.cloneCard(
+          sourceCard!.customerId,
+          sourceCard!.paymentMethodId,
+          accountId,
+          `${idempotencyKey}_authentication_card`,
+        )
+      : typeof method === 'string'
+        ? method
+        : method.id;
+    return this.runStripe(() =>
+      this.getClient().paymentIntents.confirm(
+        intent.id,
+        {
+          payment_method: paymentMethodId,
+          off_session: false,
+          use_stripe_sdk: true,
+          expand: ['latest_charge'],
+        },
+        this.accountOptions(accountId, `${idempotencyKey}_authentication`),
+      ),
+    );
   }
 
   async inspectAuthorization(id: string, accountId?: string | null) {

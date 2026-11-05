@@ -1,0 +1,17 @@
+{
+  "installed": {
+    "com.transpo24.app.staging": {
+      "sha256": "a5347195f2069587a196716a22696b570f8533204f031ea21aa41004e7576d6c",
+      "matchesLocalArtifact": true
+    },
+    "com.transpo24.driver.staging": {
+      "sha256": "861c2389a3cb7d8951fc70613dea00234fad59c02c72405782522ff87b154d08",
+      "matchesLocalArtifact": true
+    }
+  },
+  "activeStagingNotificationKeys": {
+    "com.transpo24.app.staging": [],
+    "com.transpo24.driver.staging": []
+  },
+  "permissionGrant": "Only driver staging POST_NOTIFICATIONS granted through ADB for this phase; native permission-prompt acceptance not established."
+}

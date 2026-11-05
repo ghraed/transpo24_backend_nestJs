@@ -1,0 +1,15 @@
+{
+  "checkedAt": "2026-11-05T12:47:48.234Z",
+  "credentialProjectId": "transpo24",
+  "targetProjectId": "transpo24-staging",
+  "validateOnly": true,
+  "notificationSent": false,
+  "keyUploaded": false,
+  "authenticated": true,
+  "httpStatus": 403,
+  "providerStatus": "PERMISSION_DENIED",
+  "reasons": [
+    "IAM_PERMISSION_DENIED"
+  ],
+  "stagingSendValidated": false
+}

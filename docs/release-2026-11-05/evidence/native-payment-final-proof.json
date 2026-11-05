@@ -1,0 +1,114 @@
+{
+  "checkedAt": "2026-11-05T11:27:14.992Z",
+  "completeConnectedAccountEnumeration": true,
+  "results": [
+    {
+      "purpose": "native-3ds-approve",
+      "requestId": "cmw3ctk4r0009jefvts8u28ph",
+      "appRequestStatus": "CANCELLED",
+      "assigned": false,
+      "confirmationState": "CANCELLED",
+      "holdCount": 1,
+      "providerIntentCount": 1,
+      "providers": [
+        {
+          "id": "pi_3UYOARClGb3s3rvz1Pdv0NBi",
+          "status": "canceled",
+          "amountCapturable": 0,
+          "amountReceived": 0,
+          "livemode": false
+        }
+      ]
+    },
+    {
+      "purpose": "native-3ds-cancel",
+      "requestId": "cmw3ctk5d000bjefvqtvixxva",
+      "appRequestStatus": "CANCELLED",
+      "assigned": false,
+      "confirmationState": "CANCELLED",
+      "holdCount": 1,
+      "providerIntentCount": 1,
+      "providers": [
+        {
+          "id": "pi_3UYOKqClGb3s3rvz15zHaIFk",
+          "status": "canceled",
+          "amountCapturable": 0,
+          "amountReceived": 0,
+          "livemode": false
+        }
+      ]
+    },
+    {
+      "purpose": "native-kill-before-provider",
+      "requestId": "cmw3ctk5j000djefvzhovdsc9",
+      "appRequestStatus": "DRIVER_GOING_TO_PICKUP",
+      "assigned": true,
+      "confirmationState": "CONFIRMED",
+      "holdCount": 1,
+      "providerIntentCount": 1,
+      "providers": [
+        {
+          "id": "pi_3UYOcqClGb3s3rvz0UfQgn4n",
+          "status": "requires_capture",
+          "amountCapturable": 1050,
+          "amountReceived": 0,
+          "livemode": false
+        }
+      ]
+    },
+    {
+      "purpose": "native-kill-after-provider",
+      "requestId": "cmw3ctk5o000fjefv7jhcvq1k",
+      "appRequestStatus": "DRIVER_GOING_TO_PICKUP",
+      "assigned": true,
+      "confirmationState": "CONFIRMED",
+      "holdCount": 1,
+      "providerIntentCount": 1,
+      "providers": [
+        {
+          "id": "pi_3UYOlfClGb3s3rvz0mvFf8X5",
+          "status": "requires_capture",
+          "amountCapturable": 1050,
+          "amountReceived": 0,
+          "livemode": false
+        }
+      ]
+    },
+    {
+      "purpose": "native-3ds-approve-retry",
+      "requestId": "cmw3fd2s4000068fvml9uxya2",
+      "appRequestStatus": "DRIVER_GOING_TO_PICKUP",
+      "assigned": true,
+      "confirmationState": "CONFIRMED",
+      "holdCount": 1,
+      "providerIntentCount": 1,
+      "providers": [
+        {
+          "id": "pi_3UYOHVClGb3s3rvz02WE9QDk",
+          "status": "requires_capture",
+          "amountCapturable": 1050,
+          "amountReceived": 0,
+          "livemode": false
+        }
+      ]
+    },
+    {
+      "purpose": "native-3ds-cancel-retry",
+      "requestId": "cmw3frspv0000affv9tvlscw6",
+      "appRequestStatus": "CANCELLED",
+      "assigned": false,
+      "confirmationState": "CANCELLED",
+      "holdCount": 1,
+      "providerIntentCount": 1,
+      "providers": [
+        {
+          "id": "pi_3UYOUUClGb3s3rvz0sVWump0",
+          "status": "canceled",
+          "amountCapturable": 0,
+          "amountReceived": 0,
+          "livemode": false
+        }
+      ]
+    }
+  ]
+}
