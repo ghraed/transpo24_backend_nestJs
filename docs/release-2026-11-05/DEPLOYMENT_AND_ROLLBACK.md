@@ -1,5 +1,7 @@
 # Compatibility, deployment order and rollback — 5 November 2026
 
+November 6 refund addition (undeployed): migration `20261106221500_admin_reviewed_trip_refund` adds nullable settlement reviewer/reason/request-time columns. Preserve these fields, `lastStripeRefundId`, and the provider refund history on rollback; do not undo a succeeded refund or drop its review evidence. A compatible API must keep the guarded admin route, stable `admin_trip_full_refund_<requestId>` key, provider refund-list reconciliation, and paid-out direct-charge manual-review flag together. The admin Delivery Operations form may be rolled back independently after disabling new review submissions, while the API continues to reconcile already pending refunds. Local Stripe TEST refund evidence does not authorize deployment.
+
 **NOT READY. This is an undeployed plan. The current changes do not support an arbitrary rolling update with old mobile clients.** No deployment, publication or push is authorized by this document.
 
 | Contract | Current API / workers | Existing client impact | Required handling |

@@ -1,6 +1,8 @@
 # Continuation evidence index
 
-**NOT READY.** Start with PRODUCTION_READINESS_REPORT.md, DEVICE_RELEASE_CHECKLIST.md and DEPLOYMENT_AND_ROLLBACK.md. The original November 4 reports are unchanged; `evidence/baseline-inputs.json` records their SHA-256 values and baseline repository commits. All new changes remain uncommitted.
+Latest November 6 Stripe TEST captured-refund acceptance: `evidence/nov06-admin-reviewed-captured-refund.json` records authenticated admin action, wrong-owner-role rejection, one real provider refund and two unchanged retries; `evidence/nov06-admin-refund-final-reconciliation.json` records the succeeded CHF10.50 refund, refunded CHF2 application fee, genuine Connect webhook201, matched admin reconciliation and retained payout review; `evidence/nov06-refund-source-artifacts.json` pins exact API/admin sources, migration, build and unchanged Dev APKs. Earlier no-refund rows below are historical. Signed-release and full native journeys remain open.
+
+**NOT READY.** Start with PRODUCTION_READINESS_REPORT.md, DEVICE_RELEASE_CHECKLIST.md and DEPLOYMENT_AND_ROLLBACK.md. The original November 4 reports are unchanged; `evidence/baseline-inputs.json` records their SHA-256 values and baseline repository commits. These continuation changes are committed locally; no push or deployment is implied.
 
 | Check / command | Final evidence | Result / limits |
 |---|---|---|

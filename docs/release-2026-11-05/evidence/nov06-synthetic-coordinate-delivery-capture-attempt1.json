@@ -1,0 +1,20 @@
+{
+  "startedAt": "2026-11-06T19:09:00.071Z",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "scope": "Real isolated HTTP/WebSocket AppModule and Stripe TEST; synthetic Basel coordinates and generated proof pixels, not native GPS/photo or full journey",
+  "steps": [
+    "Real driver socket arrival accepted with synthetic Basel coordinate"
+  ],
+  "before": {
+    "requestStatus": "DRIVER_GOING_TO_PICKUP",
+    "paymentStatus": "PAYMENT_HELD",
+    "providerStatus": "requires_capture",
+    "amountCapturable": 1050,
+    "amountReceived": 0,
+    "intentId": "pi_3UYsN0ClGb3s3rvz07exF517"
+  },
+  "status": "INCOMPLETE",
+  "error": "PATCH /driver/trips/cmw3vo3250002iefvd12wjj3a/pickup-item returned HTTP400",
+  "failedAt": "2026-11-06T19:09:02.039Z",
+  "syntheticProbeSessionsRevoked": true
+}

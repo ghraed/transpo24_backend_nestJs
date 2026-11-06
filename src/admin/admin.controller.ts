@@ -34,6 +34,8 @@ import {
 import { AdminDriverReviewResponseDto } from './dto/admin-driver-review-response.dto';
 import { ReviewDriverRequestDto } from './dto/review-driver-request.dto';
 import { RunPaymentReconciliationDto } from './dto/run-payment-reconciliation.dto';
+import { AdminTripRefundDto } from './dto/admin-trip-refund.dto';
+import type { AdminTripRefundResponseDto } from '../payments/dto/request-payment.dto';
 import { createReadStream } from 'node:fs';
 import { AdminDeliveryOperationsQueryDto } from './dto/admin-delivery-operations-query.dto';
 import { AdminDeliveryOperationsListResponseDto } from './dto/admin-delivery-operations-response.dto';
@@ -149,6 +151,20 @@ export class AdminController {
     @Body() dto: RunPaymentReconciliationDto,
   ): Promise<AdminPaymentReconciliationRunResponseDto> {
     return this.adminService.runPaymentReconciliation(dto);
+  }
+
+  @Post('payments/trips/:tripId/refund')
+  refundCapturedTrip(
+    @Param('tripId') tripId: string,
+    @Body() dto: AdminTripRefundDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<AdminTripRefundResponseDto> {
+    return this.adminService.refundCapturedTrip({
+      adminId: user.id,
+      requestId: tripId,
+      expectedAmount: dto.expectedAmount,
+      reason: dto.reason,
+    });
   }
 
   @Post('driver-earnings/:tripId/retry-payout')

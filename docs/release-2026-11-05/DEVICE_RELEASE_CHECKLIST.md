@@ -1,5 +1,38 @@
 # Device continuation — 5 November 2026
 
+## November 6 captured-refund acceptance (latest)
+
+- [x] Actual full refund of an owned synthetic **captured** CHF10.50 Stripe TEST direct charge through the authenticated admin application API. Stripe refund `re_3UYsN0ClGb3s3rvz0INYYwqw` succeeded; connected charge refunded CHF10.50 and platform application fee CHF2.00 refunded. This is separate from the earlier uncaptured CHF8.92 reserve release.
+- [x] Reconcile provider, database, wallet ledger, settlement, payout history, genuine Connect `charge.refunded` webhook201, admin refund reconciliation MATCHED, worker sweep and two duplicate API retries with exactly one provider refund. Customer-role call403. Keep driver PAID_OUT history and settlement manual-review flag for direct-charge/bank-payout follow-up.
+- [x] Add guarded admin review route/form, reason/amount check, stable idempotency, provider retry reconciliation, non-destructive review fields and regression tests. Admin UI optimized build/typecheck passed; an admin browser click was not performed. No deployment or signed-release test.
+- [ ] Complete four native transport journeys, remaining wallet capture/interrupted cases, account/link races, broader draft/language/accessibility and provider prerequisites. Existing accepted WebSocket, RTL and logout checks were not rerun.
+
+Evidence: `nov06-admin-reviewed-captured-refund.json`, `nov06-admin-refund-final-reconciliation.json`, `nov06-refund-source-artifacts.json`. API 95/1185 tests, build, Prisma validate and isolated worker/webhook smoke passed. The phone's original Dev settings, USB mappings and font scale remain restored; backups/volumes retained.
+
+## Earlier November 6 physical TEST delta
+
+- [x] Customer Dev used genuine Google Pay TEST sheet for synthetic CHF10.50 booking authorization; connected Stripe hold remains uncaptured, DB/settlement/ledger reconciled and duplicate countdown calls reused one intent. Full delivery/capture remains open.
+- [x] Fixed saved-card additional-charge SCA: on-session confirmation, same connected PaymentIntent, native Stripe 3DS2, CHF1 captured once. TEST 3184 and two authenticated duplicate retries were physically/provider/API checked; provider-origin webhook delivery for this new payment is still open.
+- [x] Sampled vehicle VIN draft after process restart; broader photo/draft/accessibility cases remain open.
+- [x] Restored original customer and driver Dev preference archives byte-for-byte (`resume-20261106-d.json`); verified USB3001→3001,8081→8081,8082→8082 and font1.0. Synthetic state/backups/volumes retained.
+- [ ] True refund of a captured payment through an eligible supported flow. Normal furniture reservation cancellation releases an uncaptured authorization; post-pickup delivered payment requires manual review. No actual refund acceptance yet.
+- [ ] Provider-origin webhook replay for these new Google Pay/SCA intents, complete interrupted cases, four native transport journeys, remaining links/account races and broader language/accessibility.
+
+See `evidence/nov06-googlepay-additional-sca-dev.json` and `evidence/nov06-additional-sca-retry.json`. API 94/1182 and customer 97/696 tests, API build, customer typecheck and local worker/webhook smoke passed. Installed Dev APK hashes are unchanged; live Metro bundle bytes were not captured. Signed release and iOS acceptance stay separate.
+
+## Later November 6 device attempt and safe restoration
+
+- [x] Verify retained Dev APK identities from `nov06-installed-dev-artifacts.json`; no reinstall or signed-RC run. Source heads: customer `286e0af7d2b5045722e2ce876e74aa8ae94f6a1a`, driver `dc592d52ef58cd9c3fa4fc53aca78cdbc0bec42b`, API `551f62e5a6529b63fe1ee0c1a1a1adfa8149073a`. No contemporaneous Metro bundle hash for this attempt.
+- [x] Archive current original shared preferences before synthetic isolation; after USB reconnection, restore both archives byte-for-byte, original sign-ins and USB3001→3001/8081→8081/8082→8082. Synthetic preferences, original backups, retained volumes and financial history remain intact. Latest private restoration record: `.staging-local/dev-preservation-20261106/resume-20261106-c.json`.
+- [x] Recheck four healthy isolated services, official TEST CLI listener readiness, read-only TEST key/account, real booking/payout worker consumption and locally signed webhook smoke after isolated API restart. Shared CLI signing secret and provider-origin business delivery remain separate gates.
+- [x] Complete synthetic customer and driver Dev review-code login after USB reconnection; earlier dropped-USB/incomplete-code attempt remains historical. Remaining logged-out owned-link consent and wrong-owner combinations are still open.
+- [x] Complete scoped delivered full Stripe TEST capture: real Dev offer acceptance/hold, backend synthetic-coordinate pickup/delivery, Dev customer policy consent/confirmation, CHF10.50 captured once, genuine Connect succeeded webhook201, repeat confirmation same charge. Synthetic GPS/proof means no full native journey PASS. Evidence: `nov06-synthetic-coordinate-delivery-capture.json`.
+- [ ] Complete a true refund of an already captured payment. Existing cancelled fixture received CHF1.58 cancellation fee and released CHF8.92 uncaptured reserve, CHF0 refunded; newly delivered capture also has CHF0 refunded. Do not call either release a refund.
+- [ ] Complete supported wallets, additional SCA, interrupted-payment retries and all four customer→driver offer/booking/pickup/delivery proof/completion/rating journeys; reconcile provider IDs, database, ledger, workers and provider-origin webhooks with no duplicate operation.
+- [ ] Finish remaining account races, logged-out link lifecycle, broader draft/photo/repeat-route and language/accessibility checks when the USB connection is stable. Routing, push and SMS exact boundaries/actions are in `PRODUCTION_READINESS_REPORT.md`.
+
+This attempt exercised Dev Android only. Driver Accepted Job stopped at native GPS unavailable on the synthetic Basel route; generated backend proof does not close it. Customer submitted a synthetic 5-star rating after confirmation. Earlier accepted WebSocket chat, RTL and logout samples were not repeated; signed Android release-candidate and iOS acceptance remain separate. Installed Dev APK hashes are recorded above, while contemporaneous Metro bundle bytes were not captured.
+
 ## November 6 current Dev checklist
 
 Use `nov06-installed-dev-artifacts.json` for current hashes and the November6 source manifest for Metro/backend bytes. Historical staging hashes below are not current Dev acceptance.

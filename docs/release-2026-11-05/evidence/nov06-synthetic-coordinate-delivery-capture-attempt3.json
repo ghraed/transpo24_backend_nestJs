@@ -1,0 +1,22 @@
+{
+  "startedAt": "2026-11-06T19:10:25.722Z",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "scope": "Real isolated HTTP/WebSocket AppModule and Stripe TEST; synthetic Basel coordinates and generated proof pixels, not native GPS/photo or full journey",
+  "steps": [
+    "Real driver HTTP pickup accepted with generated synthetic PNG proof",
+    "Real driver HTTP start-delivery accepted",
+    "Real driver HTTP delivery accepted with generated synthetic PNG proof"
+  ],
+  "before": {
+    "requestStatus": "DRIVER_ARRIVED_PICKUP",
+    "paymentStatus": "PAYMENT_HELD",
+    "providerStatus": "requires_capture",
+    "amountCapturable": 1050,
+    "amountReceived": 0,
+    "intentId": "pi_3UYsN0ClGb3s3rvz07exF517"
+  },
+  "status": "INCOMPLETE",
+  "error": "POST /customer/trips/cmw3vo3250002iefvd12wjj3a/confirm-delivery returned HTTP409: Review the payment rules for this booking before confirming delivery.",
+  "failedAt": "2026-11-06T19:10:27.573Z",
+  "syntheticProbeSessionsRevoked": true
+}

@@ -1,0 +1,37 @@
+{
+  "at": "2026-11-06T20:01:30.165Z",
+  "scope": "Owned synthetic captured Stripe TEST additional expense; duplicate authenticated app API retries; no wallet debit expected for direct card",
+  "chargeId": "cmw5dz3eh000o0ffvgjjp8kv2",
+  "before": {
+    "dbStatus": "CAPTURED",
+    "intentId": "pi_3UYtB9ClGb3s3rvz0bslwJ1u",
+    "dbChargeId": "ch_3UYtB9ClGb3s3rvz0nGJn5Qm",
+    "providerStatus": "succeeded",
+    "providerAmount": 100,
+    "providerReceived": 100,
+    "providerChargeIds": [
+      "ch_3UYtB9ClGb3s3rvz0nGJn5Qm"
+    ],
+    "providerRefunded": 0,
+    "walletLedgerRows": 0,
+    "earningGross": null
+  },
+  "retryHttpStatuses": [
+    409,
+    409
+  ],
+  "after": {
+    "dbStatus": "CAPTURED",
+    "intentId": "pi_3UYtB9ClGb3s3rvz0bslwJ1u",
+    "dbChargeId": "ch_3UYtB9ClGb3s3rvz0nGJn5Qm",
+    "providerStatus": "succeeded",
+    "providerAmount": 100,
+    "providerReceived": 100,
+    "providerChargeIds": [
+      "ch_3UYtB9ClGb3s3rvz0nGJn5Qm"
+    ],
+    "providerRefunded": 0,
+    "walletLedgerRows": 0,
+    "earningGross": null
+  }
+}

@@ -70,12 +70,24 @@ export interface AdditionalChargeResponseDto {
     paymentOption: 'SAVED_CARD' | 'CASH_ON_DELIVERY' | null;
     stripePaymentIntentId: string | null;
     stripeChargeId: string | null;
+    stripeClientSecret?: string | null;
+    stripeAccountId?: string | null;
     savedPaymentMethod: SavedPaymentMethodSummaryDto | null;
     failureReason: string | null;
   };
   status: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdminTripRefundResponseDto {
+  requestId: string;
+  paymentIntentId: string;
+  refundId: string | null;
+  status: 'PENDING' | 'SUCCEEDED';
+  amount: number;
+  currency: string;
+  requiresManualReview: boolean;
 }
 
 export interface CustomerWalletTransactionDto {

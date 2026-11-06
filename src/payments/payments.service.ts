@@ -43,6 +43,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DriverPayoutQueueService } from './driver-payout-queue.service';
 import {
   AdditionalChargeResponseDto,
+  AdminTripRefundResponseDto,
   CancelTripPaymentResponseDto,
   CustomerWalletSummaryDto,
   CustomerWalletTopUpDto,
@@ -709,6 +710,217 @@ export class PaymentsService {
       },
       { timeout: 30000 },
     );
+  }
+
+  async adminRefundCapturedTrip(input: {
+    adminId: string;
+    requestId: string;
+    expectedAmount: number;
+    reason: string;
+  }): Promise<AdminTripRefundResponseDto> {
+    const reason = input.reason.trim();
+    if (reason.length < 10 || reason.length > 300)
+      throw new BadRequestException(
+        'A review reason of 10–300 characters is required.',
+      );
+    if (!Number.isFinite(input.expectedAmount) || input.expectedAmount <= 0)
+      throw new BadRequestException(
+        'The expected full refund amount is required.',
+      );
+
+    const context = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM trip_payment_settlements WHERE "requestId" = ${input.requestId} FOR UPDATE`;
+      const request = await tx.transportRequest.findUnique({
+        where: { id: input.requestId },
+        include: {
+          paymentHold: true,
+          paymentSettlement: true,
+          driverEarning: true,
+        },
+      });
+      if (!request?.paymentHold || !request.paymentSettlement)
+        throw new NotFoundException('Captured trip payment not found.');
+      const hold = request.paymentHold;
+      const settlement = request.paymentSettlement;
+      if (
+        (request.status !== TransportRequestStatus.DELIVERED &&
+          request.status !== TransportRequestStatus.COMPLETED) ||
+        !request.deliveryConfirmedByCustomerAt ||
+        hold.provider !== PaymentProvider.STRIPE ||
+        !hold.stripePaymentIntentId ||
+        !hold.stripeAccountId ||
+        (hold.status !== PaymentStatus.PAYMENT_CAPTURED &&
+          hold.status !== PaymentStatus.PAYMENT_REFUNDED) ||
+        (settlement.status !== TripPaymentSettlementStatus.COLLECTED &&
+          settlement.status !== TripPaymentSettlementStatus.REFUND_PENDING &&
+          settlement.status !== TripPaymentSettlementStatus.REFUNDED) ||
+        (settlement.refundedAmount.gt(0) &&
+          settlement.status !== TripPaymentSettlementStatus.REFUNDED) ||
+        settlement.disputeReportedAt
+      )
+        throw new ConflictException(
+          'This captured trip is not eligible for an admin-reviewed full refund.',
+        );
+      if (
+        !settlement.collectedAmount.eq(
+          this.toMoneyDecimal(input.expectedAmount),
+        )
+      )
+        throw new ConflictException(
+          'The captured amount changed. Refresh the review.',
+        );
+      const extraCount = await tx.additionalCharge.count({
+        where: {
+          requestId: input.requestId,
+          status: AdditionalChargeStatus.CAPTURED,
+        },
+      });
+      if (extraCount)
+        throw new ConflictException(
+          'Captured additional charges require a separate review.',
+        );
+      if (settlement.status === TripPaymentSettlementStatus.COLLECTED) {
+        await tx.tripPaymentSettlement.update({
+          where: { id: settlement.id },
+          data: {
+            status: TripPaymentSettlementStatus.REFUND_PENDING,
+            requiresManualReview: true,
+            refundReviewedByAdminId: input.adminId,
+            refundReviewReason: reason,
+            refundRequestedAt: new Date(),
+            nextPayoutRetryAt: null,
+          },
+        });
+      }
+      return {
+        holdId: hold.id,
+        intentId: hold.stripePaymentIntentId,
+        accountId: hold.stripeAccountId,
+        amount: settlement.collectedAmount,
+        currency: settlement.currency,
+        payoutState: settlement.driverPayoutState,
+        earningId: request.driverEarning?.id ?? null,
+        earningStatus: request.driverEarning?.status ?? null,
+        reviewedBy: settlement.refundReviewedByAdminId ?? input.adminId,
+        reviewReason: settlement.refundReviewReason ?? reason,
+      };
+    });
+
+    const intent = await this.stripeService.retrievePaymentIntent(
+      context.intentId,
+      context.accountId,
+    );
+    if (
+      intent.status !== 'succeeded' ||
+      intent.currency?.toUpperCase() !== context.currency ||
+      intent.amount_received !== this.toStripeMinorUnit(context.amount)
+    )
+      throw new ConflictException(
+        'Stripe capture does not match this reviewed payment.',
+      );
+    const existing = await this.stripeService.listRefundsForPaymentIntent(
+      context.intentId,
+      context.accountId,
+    );
+    const operation = existing.data.find(
+      (refund) =>
+        refund.metadata?.kind === 'admin_trip_full_refund' &&
+        refund.metadata.requestId === input.requestId,
+    );
+    if (
+      existing.data.some(
+        (refund) => refund.id !== operation?.id && refund.status !== 'failed',
+      )
+    )
+      throw new ConflictException(
+        'Another provider refund requires reconciliation first.',
+      );
+    const refund =
+      operation ??
+      (await this.stripeService.createRefund({
+        paymentIntentId: context.intentId,
+        stripeAccountId: context.accountId,
+        amount: this.toStripeMinorUnit(context.amount),
+        metadata: {
+          requestId: input.requestId,
+          kind: 'admin_trip_full_refund',
+          reviewedByAdminId: context.reviewedBy,
+          reviewReason: context.reviewReason,
+        },
+        idempotencyKey: `admin_trip_full_refund_${input.requestId}`,
+      }));
+    if (
+      refund.amount !== this.toStripeMinorUnit(context.amount) ||
+      refund.currency.toUpperCase() !== context.currency
+    )
+      throw new ConflictException(
+        'Provider refund amount or currency does not match the review.',
+      );
+    if (refund.status === 'failed' || refund.status === 'canceled')
+      throw new ConflictException(
+        'Provider refund failed and requires manual review.',
+      );
+    if (refund.status !== 'succeeded') {
+      await this.prisma.tripPaymentSettlement.update({
+        where: { requestId: input.requestId },
+        data: { lastStripeRefundId: refund.id },
+      });
+      return {
+        requestId: input.requestId,
+        paymentIntentId: context.intentId,
+        refundId: refund.id,
+        status: 'PENDING',
+        amount: Number(context.amount),
+        currency: context.currency,
+        requiresManualReview: true,
+      };
+    }
+
+    const paidOut =
+      context.payoutState === DriverPayoutState.PAID_OUT ||
+      context.earningStatus === DriverEarningStatus.PAID_OUT;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM trip_payment_settlements WHERE "requestId" = ${input.requestId} FOR UPDATE`;
+      await tx.paymentHold.update({
+        where: { id: context.holdId },
+        data: { status: PaymentStatus.PAYMENT_REFUNDED },
+      });
+      await tx.transportRequest.update({
+        where: { id: input.requestId },
+        data: { paymentStatus: PaymentStatus.PAYMENT_REFUNDED },
+      });
+      await tx.tripPaymentSettlement.update({
+        where: { requestId: input.requestId },
+        data: {
+          status: TripPaymentSettlementStatus.REFUNDED,
+          refundedAmount: context.amount,
+          refundableAmount: new Prisma.Decimal(0),
+          retainedAmount: new Prisma.Decimal(0),
+          driverShareAmount: new Prisma.Decimal(0),
+          platformShareAmount: new Prisma.Decimal(0),
+          lastStripeRefundId: refund.id,
+          requiresManualReview: paidOut,
+          driverPayoutState: paidOut
+            ? DriverPayoutState.PAID_OUT
+            : DriverPayoutState.NOT_APPLICABLE,
+          nextPayoutRetryAt: null,
+        },
+      });
+      if (!paidOut && context.earningId)
+        await tx.driverEarning.update({
+          where: { id: context.earningId },
+          data: { status: DriverEarningStatus.CANCELLED },
+        });
+    });
+    return {
+      requestId: input.requestId,
+      paymentIntentId: context.intentId,
+      refundId: refund.id,
+      status: 'SUCCEEDED',
+      amount: Number(context.amount),
+      currency: context.currency,
+      requiresManualReview: paidOut,
+    };
   }
 
   private async cancelCollectedTripTx(
@@ -1624,6 +1836,20 @@ export class PaymentsService {
           stripeCustomerId,
         );
       await this.syncStripeAdditionalExpense(intent, chargeAccountId);
+      if (intent.status === 'requires_action') {
+        const pending = await this.prisma.additionalCharge.findUniqueOrThrow({
+          where: { id: charge.id },
+          select: ADDITIONAL_CHARGE_SELECT,
+        });
+        return {
+          ...this.toAdditionalChargeResponseDto(pending),
+          payment: {
+            ...this.toAdditionalChargeResponseDto(pending).payment,
+            stripeClientSecret: intent.client_secret,
+            stripeAccountId: chargeAccountId,
+          },
+        };
+      }
       if (intent.status !== 'succeeded')
         throw new BadRequestException(
           intent.status === 'processing'
@@ -1755,9 +1981,7 @@ export class PaymentsService {
             },
           });
       } else if (
-        ['requires_payment_method', 'canceled', 'requires_action'].includes(
-          intent.status,
-        )
+        ['requires_payment_method', 'canceled'].includes(intent.status)
       ) {
         await tx.additionalCharge.update({
           where: { id: current.id },
@@ -1769,7 +1993,10 @@ export class PaymentsService {
               'Additional payment was not completed.',
           },
         });
-      } else if (intent.status === 'processing') {
+      } else if (
+        intent.status === 'processing' ||
+        intent.status === 'requires_action'
+      ) {
         await tx.additionalCharge.update({
           where: { id: current.id },
           data: { status: 'PENDING', approvalInFlightAt: null },
@@ -2744,6 +2971,7 @@ export class PaymentsService {
           id: string;
           payment_intent: string | null;
           amount_refunded?: number;
+          refunds?: { data?: Array<{ id: string }> };
         };
         if (typeof charge.payment_intent === 'string') {
           await this.markPaymentRefunded(
@@ -2751,6 +2979,9 @@ export class PaymentsService {
             charge.id,
             event.account,
             charge.amount_refunded,
+            charge.refunds?.data?.length === 1
+              ? charge.refunds.data[0].id
+              : undefined,
           );
         }
         break;
@@ -3107,6 +3338,7 @@ export class PaymentsService {
     chargeId: string,
     accountId?: string | null,
     refundedMinor?: number,
+    refundId?: string,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const hold = await tx.paymentHold.findUnique({
@@ -3168,6 +3400,12 @@ export class PaymentsService {
         return;
       }
 
+      const settlement = await tx.tripPaymentSettlement.findUnique({
+        where: { requestId: hold.requestId },
+        select: { driverPayoutState: true },
+      });
+      const paidOut =
+        settlement?.driverPayoutState === DriverPayoutState.PAID_OUT;
       await tx.paymentHold.update({
         where: { id: hold.id },
         data: {
@@ -3192,8 +3430,11 @@ export class PaymentsService {
           retainedAmount: new Prisma.Decimal(0),
           driverShareAmount: new Prisma.Decimal(0),
           platformShareAmount: new Prisma.Decimal(0),
-          lastStripeRefundId: chargeId,
-          requiresManualReview: false,
+          lastStripeRefundId: refundId ?? undefined,
+          requiresManualReview: paidOut,
+          driverPayoutState: paidOut
+            ? DriverPayoutState.PAID_OUT
+            : DriverPayoutState.NOT_APPLICABLE,
           disputeReportedAt: null,
           stripeDisputeId: null,
           disputeStatus: null,

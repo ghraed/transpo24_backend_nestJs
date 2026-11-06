@@ -1,0 +1,49 @@
+{
+  "startedAt": "2026-11-06T19:16:36.551Z",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "scope": "Real isolated HTTP/WebSocket AppModule and Stripe TEST; synthetic Basel coordinates and generated proof pixels, not native GPS/photo or full journey",
+  "steps": [
+    "Native customer delivery confirmation already completed with policy consent"
+  ],
+  "before": {
+    "requestStatus": "DELIVERED",
+    "paymentStatus": "PAYMENT_CAPTURED",
+    "providerStatus": "succeeded",
+    "amountCapturable": 0,
+    "amountReceived": 1050,
+    "intentId": "pi_3UYsN0ClGb3s3rvz07exF517"
+  },
+  "after": {
+    "requestStatus": "DELIVERED",
+    "holdStatus": "PAYMENT_CAPTURED",
+    "providerStatus": "succeeded",
+    "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+    "chargeId": "ch_3UYsN0ClGb3s3rvz0kknQT8o",
+    "amountReceived": 1050,
+    "amountRefunded": 0,
+    "capturedChargeAttempts": 1,
+    "settlement": {
+      "status": "COLLECTED",
+      "collectedAmount": "10.5",
+      "refundedAmount": "0",
+      "retainedAmount": "10.5",
+      "driverPayoutState": "PAID_OUT"
+    },
+    "proofPhotos": [
+      {
+        "type": "PICKUP",
+        "mimeType": "image/png",
+        "sizeBytes": 231
+      },
+      {
+        "type": "DELIVERY",
+        "mimeType": "image/png",
+        "sizeBytes": 231
+      }
+    ],
+    "walletLedger": []
+  },
+  "status": "PASS scoped backend/provider capture and retry; native GPS/full journey still blocked",
+  "completedAt": "2026-11-06T19:16:39.658Z",
+  "syntheticProbeSessionsRevoked": true
+}

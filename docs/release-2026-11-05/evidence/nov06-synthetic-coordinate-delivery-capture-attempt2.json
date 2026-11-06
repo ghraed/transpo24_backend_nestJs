@@ -1,0 +1,18 @@
+{
+  "startedAt": "2026-11-06T19:09:46.623Z",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "scope": "Real isolated HTTP/WebSocket AppModule and Stripe TEST; synthetic Basel coordinates and generated proof pixels, not native GPS/photo or full journey",
+  "steps": [],
+  "before": {
+    "requestStatus": "DRIVER_ARRIVED_PICKUP",
+    "paymentStatus": "PAYMENT_HELD",
+    "providerStatus": "requires_capture",
+    "amountCapturable": 1050,
+    "amountReceived": 0,
+    "intentId": "pi_3UYsN0ClGb3s3rvz07exF517"
+  },
+  "status": "INCOMPLETE",
+  "error": "PATCH /driver/trips/cmw3vo3250002iefvd12wjj3a/pickup-item returned HTTP400: The document is malformed, encrypted, active, or exceeds supported decoding limits.",
+  "failedAt": "2026-11-06T19:09:47.736Z",
+  "syntheticProbeSessionsRevoked": true
+}

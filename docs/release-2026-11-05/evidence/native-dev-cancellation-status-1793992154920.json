@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-11-06T19:09:12.890Z",
+  "purpose": "native-dev-cancellation",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "requestStatus": "DRIVER_ARRIVED_PICKUP",
+  "assigned": true,
+  "paymentHoldPresent": true,
+  "confirmationState": "CONFIRMED",
+  "appPaymentStatus": "PAYMENT_HELD",
+  "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+  "stripePaymentIntentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+  "authorizedAt": "2026-11-06T19:00:14.919Z",
+  "approvalDeadlineAt": null,
+  "providerStatus": "requires_capture",
+  "providerAmount": 1050,
+  "providerAmountCapturable": 1050,
+  "providerAmountReceived": 0,
+  "providerLivemode": false
+}

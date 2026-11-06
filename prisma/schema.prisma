@@ -1180,6 +1180,9 @@ model TripPaymentSettlement {
   driverPayoutState     DriverPayoutState           @default(NOT_EARNED)
   requiresManualReview  Boolean                     @default(false)
   lastStripeRefundId    String?
+  refundReviewedByAdminId String?
+  refundReviewReason    String?
+  refundRequestedAt     DateTime?
   disputeReportedAt     DateTime?
   stripeDisputeId       String?
   disputeStatus         String?

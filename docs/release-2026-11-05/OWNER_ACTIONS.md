@@ -1,5 +1,7 @@
 # What needs a person — staging acceptance
 
+November 6 update: an admin-reviewed refund of the previously captured synthetic CHF10.50 Stripe TEST payment succeeded, with one provider refund, full DB/settlement reconciliation, application-fee refund, genuine Connect webhook201 and duplicate retry checks. The paid-out direct-charge earning remains historical and the settlement stays flagged for manual review of bank-payout/clawback effects. See `nov06-admin-reviewed-captured-refund.json` and `nov06-admin-refund-final-reconciliation.json`. Older OPEN refund statements below describe the earlier state.
+
 The local test system and connected Android phone can be used for synthetic checks. The live apps, real users and real payments are outside this task.
 
 ## Current owner progress
@@ -19,6 +21,8 @@ The owner confirmed: **continue using the existing key**. The previously suggest
 A read-only before/after check verified 38 local configuration/key files and the queried nonlegacy Android credential records, including their signing and submission bindings, in the two Expo projects. Other Expo projects and iOS credentials were not queried. See `production-local-protection.json`; this is a bounded comparison, not a guarantee of all production behavior.
 
 ## Other precise prerequisites
+
+Latest November 6 TEST scope: genuine Google Pay authorization on customer Dev reached an uncaptured CHF10.50 hold; native saved-card additional expense completed TEST 3DS2 and captured CHF1 once on the original intent, with two duplicate approvals rejected and unchanged provider/database state. Neither closes a true captured-payment refund or the four full native journeys. See `nov06-googlepay-additional-sca-dev.json` and `nov06-additional-sca-retry.json`. The private original Dev preferences and USB mappings were restored in `resume-20261106-d.json`.
 
 - **Maps/routing:** confirm staging-only Android Maps SDK keys restricted to these two package names and the local test signing SHA-1 `5e8f16062ea3cd2c4a0d547876baa6f38cabf625` (both APKs; see each `*-firebase-signature.log`); iOS keys restricted to staging bundle IDs; server Routes/Places/Geocoding key restricted to the staging API's outbound IP. Existing local key strings were found, but their project/restrictions/billing/API permissions have not been verified. Supply secure file paths or configure a private staging env file; never paste keys into chat. Real outdoor/locked-screen movement needs you to carry the phone on a safe route and report the timing/conditions.
 - **SMS:** identify one number you control that may receive test messages, and confirm the selected Twilio Verify project/service is for this test and permits that destination. No real SMS has been sent. The synthetic review-code login used for chat proves no SMS delivery.

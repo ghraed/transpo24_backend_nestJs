@@ -186,6 +186,25 @@ describe('Additional expense financial effects', () => {
     expect(x.stripe.confirmAdditionalExpense).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a 3DS expense pending on the same intent until native authentication succeeds', async () => {
+    const x = fixture();
+    x.stripe.confirmAdditionalExpense.mockImplementationOnce(async () => {
+      x.intent.status = 'requires_action';
+      return { ...x.intent, client_secret: 'pi_extra_secret_test' };
+    });
+    const pending = await x.service.approveAdditionalCharge(x.input);
+    expect(pending.status).toBe('PENDING');
+    expect(pending.payment.stripeClientSecret).toBe('pi_extra_secret_test');
+    expect(x.charge.stripePaymentIntentId).toBe('pi_extra');
+    expect(x.earning.grossAmount.toNumber()).toBe(100);
+    x.intent.status = 'succeeded';
+    const captured = await x.service.approveAdditionalCharge(x.input);
+    expect(captured.status).toBe('CAPTURED');
+    expect(x.stripe.prepareAdditionalExpense).toHaveBeenCalledTimes(1);
+    expect(x.stripe.confirmAdditionalExpense).toHaveBeenCalledTimes(1);
+    expect(x.earning.grossAmount.toNumber()).toBe(120);
+  });
+
   it('records cash due without creating or confirming a card payment', async () => {
     const x = fixture();
     const result = await x.service.approveAdditionalCharge({

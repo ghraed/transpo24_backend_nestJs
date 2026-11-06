@@ -599,7 +599,7 @@ export class StripeService {
         intentId,
         {
           ...(selectedMethod ? { payment_method: selectedMethod } : {}),
-          off_session: true,
+          off_session: false,
         },
         this.accountOptions(
           accountId,
@@ -687,6 +687,18 @@ export class StripeService {
           ...(input.metadata ? { metadata: input.metadata } : {}),
         },
         this.accountOptions(input.stripeAccountId, input.idempotencyKey),
+      ),
+    );
+  }
+
+  async listRefundsForPaymentIntent(
+    paymentIntentId: string,
+    stripeAccountId?: string | null,
+  ) {
+    return this.runStripe(() =>
+      this.getClient().refunds.list(
+        { payment_intent: paymentIntentId, limit: 100 },
+        this.accountOptions(stripeAccountId),
       ),
     );
   }

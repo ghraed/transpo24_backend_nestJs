@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { TripsService } from './trips.service';
 import { PaymentsService } from '../payments/payments.service';
 
@@ -59,6 +63,33 @@ describe('Customer delivery confirmation', () => {
       },
       data: { deliveryConfirmedByCustomerAt: expect.any(Date) },
     });
+  });
+  it('requires the held booking policy version and rejects another owner before capture', async () => {
+    const service = new PaymentsService(
+      {
+        paymentHold: {
+          findUnique: jest.fn().mockResolvedValue({
+            customerId: 'payer',
+            confirmationStartedAt: new Date(),
+            policyVersion: 'policy-v1',
+          }),
+        },
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await expect(
+      service.validateDeliveryPolicy('payer', tripId),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.validateDeliveryPolicy('payer', tripId, 'policy-v2'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.validateDeliveryPolicy('other', tripId, 'policy-v1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.validateDeliveryPolicy('payer', tripId, 'policy-v1'),
+    ).resolves.toBeUndefined();
   });
   it.each(['automatic_retry', 'driver_manual_retry', 'admin_manual_retry'])(
     'blocks unconfirmed payout through %s',

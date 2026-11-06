@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-11-06T19:18:00Z",
+  "sourceRevisions": {
+    "customer": "286e0af7d2b5045722e2ce876e74aa8ae94f6a1a",
+    "driver": "dc592d52ef58cd9c3fa4fc53aca78cdbc0bec42b",
+    "api": "551f62e5a6529b63fe1ee0c1a1a1adfa8149073a"
+  },
+  "installedDevApkSha256FromRetainedManifest": {
+    "customer": "2d8e6f43b18273d91cf112bdf1dcee8310c17ebdae3bcea5ee2c0406afed4c4c",
+    "driver": "565dd394a8245805898ee9cdbe3e03d50748d9554d297c89980deb353f75b35d"
+  },
+  "metroBundleHash": null,
+  "uncommittedProbeSha256": "b81848c877847a4bf26e10cd04b6c3aee584aec42877b7293252ea182f26cb68",
+  "uncommittedRegressionTestSha256": "6ea5fe7415a9710ca203a3d5c8ac4a274c0e953828fcd1cdb50a36268e7543ba",
+  "scope": "Dev APKs, retained isolated AppModule, generated synthetic Basel GPS/proof for backend-only delivery, genuine Stripe TEST connected-account payment; no signed release acceptance",
+  "phone": "Both synthetic review-code logins succeeded; customer accepted offer and skipped countdown; driver Accepted Job blocked at native GPS unavailable; customer Alerts delivery proof and current policy consent accepted; customer submitted synthetic five-star rating",
+  "provider": {
+    "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+    "chargeId": "ch_3UYsN0ClGb3s3rvz0kknQT8o",
+    "amountCurrency": "CHF 10.50",
+    "status": "succeeded",
+    "amountReceivedMinor": 1050,
+    "amountCapturableMinor": 0,
+    "amountRefundedMinor": 0,
+    "capturedChargeCount": 1,
+    "connectWebhook": "evt_3UYsN0ClGb3s3rvz0jDv6K69 payment_intent.succeeded, genuine CLI forwarder, HTTP201"
+  },
+  "database": "DELIVERED, payment hold PAYMENT_CAPTURED, settlement COLLECTED CHF10.50, refunded CHF0, two generated PNG proof rows; no card wallet-ledger debit; repeated real confirmation returned same charge",
+  "acceptance": "Scoped booking authorization and full delivery-confirmed capture passed; native pickup/delivery, four full journeys, true captured-payment refund and bank payout reconciliation remain open",
+  "restoration": "Both immediately prior original Dev shared_prefs archives byte-for-byte restored and synthetic preferences retained; .staging-local/dev-preservation-20261106/resume-20261106-c.json; original USB reverse 3001/8081/8082 restored; font scale 1.0",
+  "detail": "nov06-synthetic-coordinate-delivery-capture.json"
+}

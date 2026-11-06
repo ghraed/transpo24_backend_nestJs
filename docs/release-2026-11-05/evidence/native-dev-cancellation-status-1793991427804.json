@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-11-06T18:57:07.804Z",
+  "purpose": "native-dev-cancellation",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "requestStatus": "QUOTED",
+  "assigned": false,
+  "paymentHoldPresent": true,
+  "confirmationState": "GRACE_PERIOD",
+  "appPaymentStatus": "PAYMENT_HOLD_PENDING",
+  "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+  "stripePaymentIntentId": null,
+  "authorizedAt": null,
+  "approvalDeadlineAt": null
+}

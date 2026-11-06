@@ -1,0 +1,188 @@
+{
+  "at": "2026-11-06T20:22:57.123Z",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "scope": "Owned synthetic delivered booking, authenticated admin route, Stripe TEST only; direct-charge payout history retained",
+  "before": {
+    "request": {
+      "id": "cmw3vo3250002iefvd12wjj3a",
+      "status": "DELIVERED",
+      "paymentStatus": "PAYMENT_CAPTURED",
+      "deliveryConfirmed": true
+    },
+    "hold": {
+      "id": "cmw5c4fg500010ffvvrsmlkya",
+      "status": "PAYMENT_CAPTURED",
+      "provider": "STRIPE",
+      "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+      "accountId": "acct_1UXdDLClGb3s3rvz"
+    },
+    "settlement": {
+      "status": "COLLECTED",
+      "collected": "10.5",
+      "refunded": "0",
+      "retained": "10.5",
+      "driverShare": "8.5",
+      "platformShare": "2",
+      "payoutState": "PAID_OUT",
+      "requiresManualReview": false,
+      "refundId": null,
+      "reviewedByAdminId": null,
+      "reviewReason": null
+    },
+    "earning": {
+      "id": "cmw5cnhzd000c0ffvz6jpntou",
+      "status": "PAID_OUT",
+      "gross": "10",
+      "net": "8.5",
+      "transferId": null,
+      "transferStatus": "direct_charge"
+    },
+    "stripe": {
+      "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+      "intentStatus": "succeeded",
+      "received": 1050,
+      "chargeId": "ch_3UYsN0ClGb3s3rvz0kknQT8o",
+      "chargeCaptured": true,
+      "chargeRefunded": 0,
+      "applicationFeeId": "fee_1UYsbzClGb3s3rvz0CFwDTY6",
+      "refunds": []
+    },
+    "walletLedgerRows": 0
+  },
+  "wrongRole": {
+    "httpStatus": 403,
+    "status": null,
+    "refundId": null,
+    "amount": null
+  },
+  "first": {
+    "httpStatus": 201,
+    "status": "SUCCEEDED",
+    "refundId": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+    "amount": 10.5
+  },
+  "afterFirst": {
+    "request": {
+      "id": "cmw3vo3250002iefvd12wjj3a",
+      "status": "DELIVERED",
+      "paymentStatus": "PAYMENT_REFUNDED",
+      "deliveryConfirmed": true
+    },
+    "hold": {
+      "id": "cmw5c4fg500010ffvvrsmlkya",
+      "status": "PAYMENT_REFUNDED",
+      "provider": "STRIPE",
+      "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+      "accountId": "acct_1UXdDLClGb3s3rvz"
+    },
+    "settlement": {
+      "status": "REFUNDED",
+      "collected": "10.5",
+      "refunded": "10.5",
+      "retained": "0",
+      "driverShare": "0",
+      "platformShare": "0",
+      "payoutState": "PAID_OUT",
+      "requiresManualReview": true,
+      "refundId": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+      "reviewedByAdminId": "cmw5f8roy0000pufvgzntd9pp",
+      "reviewReason": "SYNTHETIC customer refund approved after delivered booking review."
+    },
+    "earning": {
+      "id": "cmw5cnhzd000c0ffvz6jpntou",
+      "status": "PAID_OUT",
+      "gross": "10",
+      "net": "8.5",
+      "transferId": null,
+      "transferStatus": "direct_charge"
+    },
+    "stripe": {
+      "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+      "intentStatus": "succeeded",
+      "received": 1050,
+      "chargeId": "ch_3UYsN0ClGb3s3rvz0kknQT8o",
+      "chargeCaptured": true,
+      "chargeRefunded": 1050,
+      "applicationFeeId": "fee_1UYsbzClGb3s3rvz0CFwDTY6",
+      "refunds": [
+        {
+          "id": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+          "status": "succeeded",
+          "amount": 1050,
+          "currency": "chf",
+          "metadataKind": "admin_trip_full_refund"
+        }
+      ]
+    },
+    "walletLedgerRows": 0
+  },
+  "retries": [
+    {
+      "httpStatus": 201,
+      "status": "SUCCEEDED",
+      "refundId": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+      "amount": 10.5
+    },
+    {
+      "httpStatus": 201,
+      "status": "SUCCEEDED",
+      "refundId": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+      "amount": 10.5
+    }
+  ],
+  "afterRetries": {
+    "request": {
+      "id": "cmw3vo3250002iefvd12wjj3a",
+      "status": "DELIVERED",
+      "paymentStatus": "PAYMENT_REFUNDED",
+      "deliveryConfirmed": true
+    },
+    "hold": {
+      "id": "cmw5c4fg500010ffvvrsmlkya",
+      "status": "PAYMENT_REFUNDED",
+      "provider": "STRIPE",
+      "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+      "accountId": "acct_1UXdDLClGb3s3rvz"
+    },
+    "settlement": {
+      "status": "REFUNDED",
+      "collected": "10.5",
+      "refunded": "10.5",
+      "retained": "0",
+      "driverShare": "0",
+      "platformShare": "0",
+      "payoutState": "PAID_OUT",
+      "requiresManualReview": true,
+      "refundId": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+      "reviewedByAdminId": "cmw5f8roy0000pufvgzntd9pp",
+      "reviewReason": "SYNTHETIC customer refund approved after delivered booking review."
+    },
+    "earning": {
+      "id": "cmw5cnhzd000c0ffvz6jpntou",
+      "status": "PAID_OUT",
+      "gross": "10",
+      "net": "8.5",
+      "transferId": null,
+      "transferStatus": "direct_charge"
+    },
+    "stripe": {
+      "intentId": "pi_3UYsN0ClGb3s3rvz07exF517",
+      "intentStatus": "succeeded",
+      "received": 1050,
+      "chargeId": "ch_3UYsN0ClGb3s3rvz0kknQT8o",
+      "chargeCaptured": true,
+      "chargeRefunded": 1050,
+      "applicationFeeId": "fee_1UYsbzClGb3s3rvz0CFwDTY6",
+      "refunds": [
+        {
+          "id": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+          "status": "succeeded",
+          "amount": 1050,
+          "currency": "chf",
+          "metadataKind": "admin_trip_full_refund"
+        }
+      ]
+    },
+    "walletLedgerRows": 0
+  }
+}

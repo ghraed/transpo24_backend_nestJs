@@ -519,7 +519,12 @@ describe('connected account refund events', () => {
         update: jest.fn(),
       },
       transportRequest: { update: jest.fn() },
-      tripPaymentSettlement: { updateMany: jest.fn() },
+      tripPaymentSettlement: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ driverPayoutState: 'PAID_OUT' }),
+        updateMany: jest.fn(),
+      },
       additionalCharge: { findUnique: jest.fn(), update: jest.fn() },
     };
     const stripe = {
@@ -531,6 +536,7 @@ describe('connected account refund events', () => {
             id: 'ch_direct',
             payment_intent: 'pi_direct',
             amount_refunded: refundedMinor,
+            refunds: { data: [{ id: 're_actual' }] },
           },
         },
       }),
@@ -571,6 +577,15 @@ describe('connected account refund events', () => {
     expect(x.db.paymentHold.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: 'PAYMENT_REFUNDED' }),
+      }),
+    );
+    expect(x.db.tripPaymentSettlement.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lastStripeRefundId: 're_actual',
+          requiresManualReview: true,
+          driverPayoutState: 'PAID_OUT',
+        }),
       }),
     );
   });
@@ -616,7 +631,7 @@ it('clones a saved card for direct additional expenses and refunds zero-fee reim
   await service.confirmAdditionalExpense('pi_direct', 'pm_saved', account);
   expect(api.paymentIntents.confirm).toHaveBeenCalledWith(
     'pi_direct',
-    { off_session: true },
+    { off_session: false },
     { stripeAccount: account },
   );
   api.paymentIntents.retrieve.mockResolvedValue({
@@ -697,7 +712,7 @@ it('recovers a direct additional expense missing its consumed clone using the ow
   );
   expect(api.paymentIntents.confirm).toHaveBeenCalledWith(
     'pi_direct',
-    { payment_method: 'pm_fresh', off_session: true },
+    { payment_method: 'pm_fresh', off_session: false },
     {
       stripeAccount: account,
       idempotencyKey:

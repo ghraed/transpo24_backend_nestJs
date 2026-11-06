@@ -1,0 +1,54 @@
+{
+  "at": "2026-11-06T20:32:33.051Z",
+  "requestId": "cmw3vo3250002iefvd12wjj3a",
+  "refundId": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+  "provider": {
+    "livemode": false,
+    "status": "succeeded",
+    "amount": 1050,
+    "currency": "chf",
+    "chargeRefunded": 1050,
+    "applicationFeeAmount": 200,
+    "applicationFeeRefunded": 200
+  },
+  "database": {
+    "holdStatus": "PAYMENT_REFUNDED",
+    "settlementStatus": "REFUNDED",
+    "collected": "10.5",
+    "refunded": "10.5",
+    "retained": "0",
+    "driverShare": "0",
+    "platformShare": "0",
+    "refundId": "re_3UYsN0ClGb3s3rvz0INYYwqw",
+    "reviewedByAdminId": "cmw5f8roy0000pufvgzntd9pp",
+    "reviewReasonPresent": true,
+    "refundRequestedAtPresent": true,
+    "payoutState": "PAID_OUT",
+    "requiresManualReview": true,
+    "earningStatus": "PAID_OUT",
+    "earningTransferStatus": "direct_charge",
+    "walletLedgerRows": 0
+  },
+  "reconciliation": {
+    "runCount": 1,
+    "recordId": "f9ad49a9f3f1406b8a801f69e6697fd2",
+    "status": "MATCHED",
+    "expected": "10.5",
+    "actual": "10.5",
+    "externalReference": "re_3UYsN0ClGb3s3rvz0INYYwqw"
+  },
+  "webhook": {
+    "providerEventId": "evt_3UYsN0ClGb3s3rvz0kgFxzdG",
+    "genuineConnectHttp201Observed": true
+  },
+  "customerPaymentRead": {
+    "httpStatus": 200,
+    "status": "PAYMENT_REFUNDED"
+  },
+  "uncapturedHoldRejection": {
+    "requestId": "cmw5dkgbi00004ffv91k9rxf3",
+    "httpStatus": 409,
+    "providerRefundCountBefore": 0,
+    "providerRefundCountAfter": 0
+  }
+}

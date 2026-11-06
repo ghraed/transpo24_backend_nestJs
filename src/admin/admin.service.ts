@@ -33,6 +33,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
+import type { AdminTripRefundResponseDto } from '../payments/dto/request-payment.dto';
 import { hashPassword } from '../common/security/password.util';
 import { AdminDriverEarningsQueryDto } from './dto/admin-driver-earnings-query.dto';
 import {
@@ -493,6 +494,15 @@ export class AdminService {
     private readonly notificationsService: NotificationsService,
     private readonly paymentsService: PaymentsService,
   ) {}
+
+  refundCapturedTrip(input: {
+    adminId: string;
+    requestId: string;
+    expectedAmount: number;
+    reason: string;
+  }): Promise<AdminTripRefundResponseDto> {
+    return this.paymentsService.adminRefundCapturedTrip(input);
+  }
 
   async findAll(): Promise<AdminUserResponseDto[]> {
     const users = await this.prisma.user.findMany({

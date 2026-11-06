@@ -5,6 +5,7 @@ const { root, runtime, load } = require('./environment.cjs');
 const env = { PATH: process.env.PATH, LANG: 'C.UTF-8', ...load() };
 const action = process.argv[2];
 const actions = {
+  'accept-dev-delivery-capture': [path.join(__dirname, 'accept-dev-delivery-capture.cjs')],
   'seed-dev-private-file': [path.join(__dirname, 'seed-dev-private-file.cjs')],
   'dev-driver-switch': [path.join(__dirname, 'dev-driver-switch.cjs'), ...process.argv.slice(3)],
   'inspect-dev-finance': [path.join(__dirname, 'inspect-dev-finance.cjs'), ...process.argv.slice(3)],

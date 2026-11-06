@@ -1,0 +1,37 @@
+{
+  "scope": "Owned synthetic customer/driver Dev apps, isolated local API and Stripe TEST; no signed release or complete native transport journey",
+  "customerSourceHead": "286e0af7d2b5045722e2ce876e74aa8ae94f6a1a",
+  "driverSourceHead": "dc592d52ef58cd9c3fa4fc53aca78cdbc0bec42b",
+  "apiSourceHead": "551f62e5a6529b63fe1ee0c1a1a1adfa8149073a",
+  "customerTestedPatchSha256": "707c720c5f17cdf3f709eaa6da2e2b7d6174bb60d2b02d57268fad29133e830a",
+  "apiTestedPaymentPatchSha256": "76504146c5dd96d751869aaaf576a9f5295809153496e7a6e831615b8d946273",
+  "apiBuiltPaymentsServiceJsSha256": "89b837c7fa3b133b8b19b30125523010416e259aae45990cd0ed9f04b17cc6a9",
+  "apiBuiltStripeServiceJsSha256": "be69d7534bd986d1b7d4f83655dcbb100682349ac157b31f52b799dd25e0077d",
+  "installedDevApks": {
+    "customerSha256": "2d8e6f43b18273d91cf112bdf1dcee8310c17ebdae3bcea5ee2c0406afed4c4c",
+    "driverSha256": "565dd394a8245805898ee9cdbe3e03d50748d9554d297c89980deb353f75b35d"
+  },
+  "metroBundleHashCaptured": false,
+  "googlePay": {
+    "requestId": "cmw5dkgbi00004ffv91k9rxf3",
+    "paymentIntentId": "pi_3UYszhClGb3s3rvz1kVvpyR5",
+    "native": "Real Google Pay TEST sheet and setup/offer acceptance; no actual charge or delivery",
+    "database": "GOOGLE_PAY, PAYMENT_HELD, CONFIRMED; settlement AUTHORIZED collected CHF0 refunded CHF0; wallet ledger 0",
+    "stripe": "TEST requires_capture CHF10.50, capturable CHF10.50, received CHF0, one uncaptured charge and CHF0 refunded",
+    "duplicateSkipCountdown": "Two authenticated repeat calls returned 201 with the same PaymentIntent and one provider charge",
+    "webhook": "Provider event was retrieved, but provider-origin delivery for this new intent was not observed in the scoped receiver evidence"
+  },
+  "additionalSCA": {
+    "chargeId": "cmw5dz3eh000o0ffvgjjp8kv2",
+    "paymentIntentId": "pi_3UYtB9ClGb3s3rvz0bslwJ1u",
+    "chargeProviderId": "ch_3UYtB9ClGb3s3rvz0nGJn5Qm",
+    "initialFailure": "Off-session TEST 3184 authentication_required, same intent requires_payment_method, expense FAILED, CHF0 received",
+    "patchedNativeFlow": "On-session confirmation returned requires_action; Stripe native Secure Checkout displayed TEST 3DS2 COMPLETE; customer Dev then displayed CAPTURED",
+    "reconciliation": "Same TEST PaymentIntent succeeded CHF1.00 received, one paid/captured charge, refunded CHF0; database expense CAPTURED and same charge ID; no driver earning yet for this in-progress request; direct card wallet ledger 0",
+    "duplicateRetryEvidence": "nov06-additional-sca-retry.json: two authenticated approvals HTTP409; Stripe and database snapshots unchanged, one charge",
+    "webhook": "Stripe succeeded event retrieved, but provider-origin receiver delivery and replay for this new intent were not independently observed; local signed webhook smoke is separate"
+  },
+  "refund": "No actual captured-payment refund occurred. The delivered CHF10.50 booking has no automatic post-pickup refund action. A new unpaid furniture reservation can reach automatic full refund only if a late provider capture exists after cancellation/expiry; the normal delayed authorization creates an uncaptured hold. No eligible captured reservation was manufactured or counted as acceptance.",
+  "draft": "Customer Dev vehicle VIN T24DRAFTNV0600000 persisted after ordinary force-stop/relaunch and re-entry; photos and broader draft scenarios open",
+  "restoration": "Private resume-20261106-d.json records both original Dev preference archives restored byte-for-byte; USB 3001/8081/8082 original mappings and font scale 1.0 verified; data, backups and volumes retained"
+}
