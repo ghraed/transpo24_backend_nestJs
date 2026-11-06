@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import { SwissCarInfoCatalogService } from './swisscarinfo-catalog.service';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -18,9 +19,12 @@ export class VehiclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly vinDecoder: VinDecoderService,
+    @Optional() private readonly swissCatalog?: SwissCarInfoCatalogService,
   ) {}
 
   async listBrands(): Promise<VehicleCatalogBrandDto[]> {
+    if (this.swissCatalog?.isConfigured())
+      return this.swissCatalog.listBrands();
     return this.prisma.vehicleBrand.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
@@ -28,9 +32,21 @@ export class VehiclesService {
     });
   }
 
-  async listModels(brandId: string): Promise<VehicleCatalogModelDto[]> {
+  async listModels(
+    brandId: string,
+    search = '',
+  ): Promise<VehicleCatalogModelDto[]> {
+    if (this.swissCatalog?.isProviderId(brandId))
+      return this.swissCatalog.listModels(brandId, search);
     return this.prisma.vehicleModel.findMany({
-      where: { brandId, isActive: true, brand: { isActive: true } },
+      where: {
+        brandId,
+        isActive: true,
+        brand: { isActive: true },
+        ...(search
+          ? { name: { contains: search, mode: 'insensitive' as const } }
+          : {}),
+      },
       orderBy: { name: 'asc' },
       select: {
         id: true,

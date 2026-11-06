@@ -53,7 +53,10 @@ export class VehiclesController {
   ): Promise<VehicleCatalogModelDto[]> {
     if (!query.brandId?.trim())
       throw new BadRequestException('brandId is required.');
-    return this.vehiclesService.listModels(query.brandId.trim());
+    return this.vehiclesService.listModels(
+      query.brandId.trim(),
+      query.search?.trim(),
+    );
   }
 
   @Get('catalog/series')
