@@ -1,0 +1,1 @@
+PASS text-after-commit: same operation has exactly one committed row and one observed event; 0 chat file row(s).

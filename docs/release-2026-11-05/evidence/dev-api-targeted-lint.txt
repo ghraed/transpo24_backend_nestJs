@@ -1,0 +1,19 @@
+
+/media/raed/Data/from ubuntu/Transpo_24 workspace/api/src/auth/phone-auth-rate-limit.service.spec.ts
+   6:17  error  Replace `·status:·string;·connect:·jest.Mock;·incr:·jest.Mock;·expire:·jest.Mock;·set:·jest.Mock;·quit:·jest.Mock;·disconnect:·jest.Mock·` with `⏎··status:·string;⏎··connect:·jest.Mock;⏎··incr:·jest.Mock;⏎··expire:·jest.Mock;⏎··set:·jest.Mock;⏎··quit:·jest.Mock;⏎··disconnect:·jest.Mock;⏎`  prettier/prettier
+   7:30  error  Replace `·__esModule:·true,·default:·jest.fn(()·=>·mockRedis)·` with `⏎··__esModule:·true,⏎··default:·jest.fn(()·=>·mockRedis),⏎`                                                                                                                                                                  prettier/prettier
+  24:25  error  Replace `.spyOn(Logger.prototype,·'warn')` with `⏎······.spyOn(Logger.prototype,·'warn')⏎······`                                                                                                                                                                                                   prettier/prettier
+  30:34  error  Replace `resolve·=>·{·finish·=·()·=>·{·mockRedis.status·=·'ready';·resolve();·};` with `(resolve)·=>·{⏎··········finish·=·()·=>·{⏎············mockRedis.status·=·'ready';⏎············resolve();⏎··········};⏎·······`                                                                             prettier/prettier
+  33:42  error  Insert `⏎·········`                                                                                                                                                                                                                                                                                prettier/prettier
+  36:38  error  Insert `⏎·····`                                                                                                                                                                                                                                                                                    prettier/prettier
+  37:44  error  Insert `⏎·····`                                                                                                                                                                                                                                                                                    prettier/prettier
+  39:51  error  Replace `new·ConfigService({·REDIS_HOST:·'synthetic-redis',·REDIS_PORT:·'57433'·})` with `⏎······new·ConfigService({·REDIS_HOST:·'synthetic-redis',·REDIS_PORT:·'57433'·}),⏎····`                                                                                                                  prettier/prettier
+  42:31  error  Insert `⏎·····`                                                                                                                                                                                                                                                                                    prettier/prettier
+  51:18  error  Replace `·await·service.onModuleDestroy();` with `⏎······await·service.onModuleDestroy();⏎·····`                                                                                                                                                                                                   prettier/prettier
+
+/media/raed/Data/from ubuntu/Transpo_24 workspace/api/src/auth/phone-auth-rate-limit.service.ts
+  156:23  error  Replace `·this.redisConnection·=·null;` with `⏎········this.redisConnection·=·null;⏎·····`  prettier/prettier
+
+✖ 11 problems (11 errors, 0 warnings)
+  11 errors and 0 warnings potentially fixable with the `--fix` option.
+

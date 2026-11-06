@@ -1,0 +1,26 @@
+Keyboard hidden.
+ERROR: could not get idle state.
+cat: /data/local/tmp/transpo24-acceptance-ui.xml: No such file or directory
+Traceback (most recent call last):
+  File "/tmp/transpo24-dev-device.py", line 16, in <module>
+    own();run('shell','rm','-f','/data/local/tmp/transpo24-acceptance-ui.xml');run('shell','uiautomator','dump','--compressed','/data/local/tmp/transpo24-acceptance-ui.xml');raw=run('shell','cat','/data/local/tmp/transpo24-acceptance-ui.xml');tree=ET.fromstring(raw)
+                                                                                                                                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/transpo24-dev-device.py", line 5, in run
+    def run(*args):return subprocess.check_output(adb+list(args))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 466, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['adb', '-s', '7925f75a', 'shell', 'cat', '/data/local/tmp/transpo24-acceptance-ui.xml']' returned non-zero exit status 1.
+Traceback (most recent call last):
+  File "/tmp/transpo24-customer-review-login.py", line 7, in <module>
+    ui('label','Send verification code');time.sleep(1);ui('state','nov06-customer-before-code');
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/transpo24-customer-review-login.py", line 4, in ui
+    def ui(*a):subprocess.run(['python3','/tmp/transpo24-dev-device.py',*a],check=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/tmp/transpo24-dev-device.py', 'state', 'nov06-customer-before-code']' returned non-zero exit status 1.

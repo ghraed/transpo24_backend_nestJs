@@ -1,0 +1,7 @@
+[Nest] 3463676  - 11/06/2026, 1:28:33 PM   ERROR [PaymentsService] Additional expense notification failed: Error: Push unavailable
+
+Test Suites: 3 passed, 3 total
+Tests:       65 passed, 65 total
+Snapshots:   0 total
+Time:        1.132 s
+Ran all test suites matching src/payments/stripe.service.spec.ts|src/payments/direct-charges.spec.ts|src/payments/additional-expense-payments.spec.ts.

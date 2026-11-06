@@ -1,0 +1,17 @@
+{
+  "at": "2026-11-06T12:17:15.666970+00:00",
+  "actorDriver": "cmw4xrf9300019cfvdnd2qijr",
+  "requestOwnerDriver": "cmw3ahxz300018bfv7uo60jnd",
+  "observation": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "observePath": "/driver/jobs/cmw3vo31v0000iefvzagd7pkf",
+    "observedResponseStatus": 404,
+    "observedResponseAt": "2026-11-06T12:16:41.642Z"
+  },
+  "expected": "Driver service hides an assigned job from another driver using404 Accepted job not found",
+  "actual": "Observed native lookup404; remains Synthetic Driver B profile, no private job screen",
+  "evidence": "device-dev/nov06-driver-b-wrong-owner-rejected.xml",
+  "scope": "Direct link, not push; seeded approval is not onboarding acceptance; DB owner confirmed in finance snapshot"
+}

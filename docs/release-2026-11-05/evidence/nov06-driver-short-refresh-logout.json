@@ -1,0 +1,24 @@
+{
+  "logoutUiAt": "2026-11-06T12:18:24.923128+00:00",
+  "faultAtLogout": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/driver/me",
+    "delayResponseMs": 0,
+    "delayedRequestStartedAt": "2026-11-06T12:18:17.897Z",
+    "delayedUpstreamStatus": 304
+  },
+  "scope": "Native driver B pending refresh followed by normal UI logout; full A-to-B late success separately open",
+  "finalFault": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/driver/me",
+    "delayResponseMs": 0,
+    "delayedRequestStartedAt": "2026-11-06T12:18:17.897Z",
+    "delayedUpstreamStatus": 304,
+    "delayedResponseReleasedAt": "2026-11-06T12:18:27.898Z"
+  },
+  "result": "Login stayed visible after304 response release. Fresh200 successful-response replay is a separate next check."
+}

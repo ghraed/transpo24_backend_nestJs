@@ -61,3 +61,71 @@ The original command-session API/proxy/CLI exited repeatedly during acceptance; 
 Native TEST 3DS approve, clean cancel, force-stop before success/restart/approve, and force-stop after observed success/restart all have scoped evidence. Each of the six owned financial attempts has exactly one DB hold/TEST PaymentIntent and zero captured funds. The failed consumed-clone case and interrupted timeout case are preserved separately. API recovery was fixed to reclone the owned card on the same intent, including canonical recovery after lost worker confirmation responses. Ten actual delivered TEST events were retrieved from Stripe to verify origin; the official CLI still experienced exits, so sustained forwarding/reconnect and independent endpoint credentials remain gates. See the device checklist for exact timestamps/hashes and broader missing journeys.
 
 `native-payment-status <purpose> kill-before` refuses termination unless the provider is awaiting action. `watch-kill-after` observes only the owned intent for at most90 seconds, force-stops on requires_capture and records timestamps; it does not guarantee termination before the SDK callback, only after observed provider success. `cleanup-native-payments` verifies TEST mode and request metadata before cancelling/refunding only these owned objects and retaining provider/ledger history. The synthetic TEST customer/card is retained privately for reproducibility; the prior connected account is never deleted.
+
+## Resume after the current disconnected-device continuation
+
+New request/chat links are retained through authentication and consent, scoped to the consuming identity and checked against the full backend before opening. Driver RTL now uses Expo's release-capable reload. The new local APKs are not yet physically accepted: device7925f75a disconnected after initial identification. Recent `.dev` apps were preserved; their current backend/session configuration remains unverified. Use them only after establishing an isolated synthetic scope. Do not repoint an existing real-user session to this database. Update only the separate staging packages if that cannot be established.
+
+The build helper now permits `--refresh-js` on a prior Firebase-enabled staging source only when its native Firebase bytes match the retained private input and the successful artifact's recorded SHA-256, and app/config/package native inputs are unchanged. A changed native configuration still requires a fresh build. Negative regression cases prove changed input/hash refusal before source copying or Gradle.
+
+The fault proxy supports both text and attachment successful-response loss. `node scripts/staging/run.cjs accept-chat-replay` is an explicitly scoped full-API/DB/socket-observer probe using the existing synthetic chat only: the sender uses HTTP, then a fresh Node process retries. It does not simulate Android process restart or sender WebSocket acknowledgment loss. It requires zero active push tokens for both synthetic participants, preserves/restores the existing fault-control file, revokes its generated sessions, retains the synthetic messages/files and records `resume-chat-http.json`. Do not run a second fault probe concurrently.
+
+To continue safely from the retained environment, run from the API repository:
+
+```sh
+npm run build
+docker compose --env-file .staging-local/compose.env -f scripts/staging/compose.yaml up -d --wait postgres redis api proxy
+node scripts/staging/run.cjs stripe-forward
+```
+
+Wait for both redacted `STRIPE_TEST_FORWARDER_READY` markers. Keep that terminal open; in another terminal:
+
+```sh
+docker compose --env-file .staging-local/compose.env -f scripts/staging/compose.yaml restart api
+node scripts/staging/run.cjs smoke
+adb devices -l
+adb -s 7925f75a reverse tcp:57431 tcp:57431
+```
+
+Retain the already-approved Firebase files and existing Expo key assignments. The source/target push IAM mismatch remains blocked. Maps/routing and SMS require confirmed restricted staging provider setup before physical acceptance. Do not send to unapproved numbers/tokens.
+
+Read each mobile repository's `resume-artifact.json` and verify its APK hash/signing/package before `adb install -r`; this updates only the `.staging` app while retaining its data. Re-login through the existing synthetic review flow when required (private code, no SMS), then retest both known defects before advancing other device gates. Do not clear storage or uninstall production/development apps. ADB `force-stop` is allowed only on the task's staging packages for explicitly labeled interruption cases; a normal lifecycle test needs a normal termination instead.
+
+Stopping remains `docker compose ... stop`, never `down -v`; gracefully stop only the task-owned Stripe wrapper, and remove only reverse57431. Keep `.staging-local`, named volumes and all historical artifacts/evidence. See `PRODUCTION_READINESS_REPORT.md`, `DEVICE_RELEASE_CHECKLIST.md` and `TEST_MATRIX.md` for remaining gates; Android cannot close iOS/APNs/signing requirements.
+
+## November 6 Dev continuation (supersedes the disconnected/staging-only instructions above)
+
+Use only `com.transpo24.app.dev` and `com.transpo24.driver.dev` for this continuation. The user-installed November6 native hashes are recorded in `nov06-installed-dev-artifacts.json`; Metro8081/8082 supplies the separately hashed JS. These are Dev results, not signed RC/iOS acceptance. Never reinstall, clear or repoint an original signed-in account without first isolating its preferences.
+
+The original November6 Dev preferences/sign-ins are privately retained in `.staging-local/dev-preservation-20261106/manifest.json`, host archives and on-device backup directories. November5 backups remain unchanged. A durable copy of the task-specific restoration helper is `.staging-local/dev-preservation-20261106/restore-original.py` (also `/tmp/transpo24-dev-restore-nov06.py`). It force-stops only the two Dev packages, retains synthetic preferences, restores all original preference bytes, verifies the original archive/SecureStore hashes and restores3001→3001. Run it once when this testing session ends; do not reuse it to overwrite changes made after a recorded restoration. Preserve the manifest and both copies of backups. Font/accessibility settings are separately saved in `device-settings.json` and `talkback-before.json`; restore and verify those when the accessibility check ends. No device security setting was disabled.
+
+Resume the existing named stack rather than generating a new environment, seeding everything again or deleting volumes:
+
+```sh
+docker compose --env-file .staging-local/compose.env -f scripts/staging/compose.yaml up -d --wait postgres redis api proxy
+```
+
+If the task's official TEST forwarder is already alive, keep it; do not start duplicate listeners. Otherwise run `node scripts/staging/run.cjs stripe-forward`, wait for both readiness markers, and restart only the isolated API to load the private signing secrets. Both CLI scopes currently share a signing secret; deployed credential isolation and sustained delivery remain open. `node scripts/staging/run.cjs smoke` verifies full-module HTTP, actual worker consumption and locally signed webhook handling; it does not prove provider journeys.
+
+After confirming a fresh preservation/isolation of original Dev credentials and signing in only to synthetic accounts, use:
+
+```sh
+adb -s 7925f75a reverse tcp:3001 tcp:57431
+adb -s 7925f75a reverse tcp:8081 tcp:8081
+adb -s 7925f75a reverse tcp:8082 tcp:8082
+adb -s 7925f75a reverse --list
+```
+
+USB reconnection has repeatedly erased these rules. Recheck after every replug before any retry. Never substitute the original3001 database/Redis for this stack. Removing reverse alone does not prove an existing socket closed.
+
+`ack-loss-proxy.cjs` now passes genuine WebSocket upgrades by default and can fault one exact room/operation or one exact additional-approval route. It records actual socket termination and suppresses the sender event/ACK only for the scoped operation. Native attachments use HTTP upload plus WebSocket events. Successful native replay must be reconciled with database rows and the independent recipient observer. Restore the saved `.staging-local/dev-nov06-fault-before.json` byte-for-byte at the end; its armed/blocked/forceHttp flags are false. Never leave a delay or mutation fault armed.
+
+Bounded exact-path response delays support private files, customer status and driver/me. Driver normal API timeout is12s: the60s refresh attempt timed out and is NOT a late-success race pass. The10s fresh200 driver/logout case and9s customer private-PDF case completed after logout, with Login retained. `bypassConditionalCache` applies only to the explicit driver/me delay to avoid mistaking304 for a fresh response. `observePath` records only status/time for allowlisted owned request/job paths, never auth/body data.
+
+`dev-account-switch` and `dev-driver-switch` retain their own synthetic identity manifests and temporarily associate only the previously authorized review number. Restore both associations to A after a test. DriverB approval is seeded and is not onboarding/provider acceptance. `seed-dev-private-file` creates exactly one separately retained synthetic DRAFT/task-PDF fixture for native read-session testing; it does not establish upload eligibility or a funded journey. Do not rerun fixture preparation over existing records. `inspect-dev-finance <label>` reads owned canonical Stripe TEST and database/settlement/ledger state without secrets or image data.
+
+Current finances: native booking cancellation captured CHF1.58 and released CHF8.92; the extra charge captured CHF1 on its original intent after native TEST4242 selection. All TEST history is retained for subsequent reconciliation; a reserve release is not a refund and settlement PAID_OUT is not bank payout. Do not reuse `cleanup-native-payments` as proof of a native refund journey or assume it covers additional charges. No live funds/provider objects or prior connected account may be altered.
+
+The existing Maps key returned actual403 API_KEY_IP_ADDRESS_BLOCKED; the existing-key Expo path remains blocked by source/target project IAM mismatch; SMS is unconfigured. Do not change restrictions, IAM, credentials or key metadata. The Android device cannot close iOS gates. See the current November6 sections of all three audit documents for exact remaining tests and human/physical requirements.
+
+At testing end restore original preferences, font/accessibility settings and original mappings3001→3001,8081→8081,8082→8082; verify hashes/settings/mappings. Keep all volumes, credentials and evidence. Stopping the isolated stack uses `stop`, never `down -v`; stop only the task-owned TEST wrapper if ending its forwarding session. Never push, deploy, publish or send OTA updates.

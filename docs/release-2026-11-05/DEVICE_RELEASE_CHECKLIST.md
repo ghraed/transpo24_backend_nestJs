@@ -1,5 +1,34 @@
 # Device continuation — 5 November 2026
 
+## November 6 current Dev checklist
+
+Use `nov06-installed-dev-artifacts.json` for current hashes and the November6 source manifest for Metro/backend bytes. Historical staging hashes below are not current Dev acceptance.
+
+- [x] Verify connected Xiaomi7925f75a/Android14; preserve both original Dev sign-ins privately, original preference hashes, existing volumes and old evidence.
+- [x] Resume retained full AppModule/isolated PostgreSQL+Redis, real workers/proxy, TEST forwarder and webhook processing; USB3001→57431 during synthetic testing.
+- [x] Genuine native WebSocket text lost ACK/event + actual connection close; ordinary process restart/retry; one persisted operation/event; identical new operation distinct.
+- [x] Attachment native HTTP upload + active WS event loss/restart/retry; one persisted file/message/event.
+- [x] Fix private-file viewer-after-logout and stale feedback; physical retest in both apps (customer separate seeded read fixture), both-app regressions.
+- [x] Fix deferred driver refresh/profile/storage and customer stale authenticated responses; native customerA→B/consent/wrong-owner403, driverB wrong-owner404, native fresh delayed200 refresh after logout stays Login.
+- [x] Native TEST extra charge capture and lost-success process recovery; clone retry on same PI.
+- [x] Native cancellation partial capture/release and provider/database/settlement reconciliation; preserve captured extra history.
+- [x] Bounded additional dialog; unsupported wallet topup guard; literal-colon labels; vehicle draft SDK56 move/copy fix and sampled native process restore.
+- [x] Current Dev normal Arabic RTL reload both apps; six language selections in both apps at font1.3; saved repeat-route sample.
+- [ ] Remaining precise A→B refresh/navigation/draft/upload races; scoped logout/late-refresh and both private-file samples passed.
+- [ ] Complete direct-link lifecycle/login/consent/wrong-owner matrix both apps; actual push separate.
+- [ ] Delivered capture, true refund, additional SCA, supported wallets, delivery confirmation and remaining interruption recovery.
+- [ ] All four complete transport/proof/completion/rating journeys.
+- [ ] Broader draft/photo restoration, repeat routes, keyboard/large-text screens, TalkBack and human language review.
+- [ ] Routing403/IP restriction decision and configured outdoor/background/locked-screen movement; no key/IAM edits authorized.
+- [ ] Existing-key Expo source/target mismatch resolution; genuine delivered push receipts; approved SMS configuration/destination.
+- [ ] Signed Android release-candidate verification and pending iOS/APNs/signing/device acceptance.
+- [x] Original Nov6 Dev preferences restored byte-for-byte; original encrypted sign-ins retained; font1.0/accessibility and USB3001→3001/8081/8082 verified. Original fault controls restored; volumes/credentials/evidence retained.
+- [x] Network/ownership message classification fixed and physically retested using actual exact-route socket loss/recovery.
+- [x] Owner confirmed sampled customer Login TalkBack speech/announcements and finished tutorial; full navigation/a11y stays open.
+
+
+## Retained November5 record (historical)
+
 **NOT READY.** Only the scoped results below are accepted. Prior November 4 evidence remains unchanged and is not reassigned to the new full integration environment.
 
 ## Artifacts and environment
@@ -74,3 +103,15 @@ The previous push-phase shutdown is recorded in `push-phase-final-runtime-state.
 The owner enabled the source-project FCM API. Fresh target-project validate-only remains HTTP200. Two separately labeled retries through genuine authenticated API ingress now fail with **FCM403 IAM_PERMISSION_DENIED**, permission `cloudmessaging.messages.create`, resource **projects/transpo24**. Thus the earlier SERVICE_DISABLED blocker cleared, but the current Expo route still targets the key's source project instead of **transpo24-staging**. Both failed receipts and zero own active notifications are retained. These retries used previously native-issued tokens and genuine API registration/test endpoints; they are not successful native foreground/background lifecycle acceptance. No direct FCM sender or fixture was substituted.
 
 Google documents cross-project service-account use only when requests target the destination project endpoint. Our direct validate-only target check meets that condition; the observed Expo route does not. Expo's documented setup uses an FCM credential matching the app's Firebase sender. The owner confirmed the existing-key requirement; the previously suggested replacement-key action is canceled. No supported Expo target override was found, so push remains blocked under the existing configuration. Do not broaden messaging permissions in the source project to conceal the wrong target, rewrite the existing key's project metadata, or silently close push gates.
+
+## Current continuation after repository commits
+
+The prior acceptance above remains tied to its original APKs. New RTL/request-link code and regression tests were prepared; physical verification is **BLOCKED** because device7925f75a disappeared from ADB after initial identification (Xiaomi2107113SG, Android14). No new device acceptance PASS is recorded. Recent Transpo24 activities were `.dev`; their backend/session scope could not be established before disconnect, so they were preserved and not used for financial testing.
+
+Full isolated compose/worker/webhook smoke and read-only Stripe TEST preflight pass again. Official TEST forwarding is restored; separate endpoint secrets and sustained delivery remain open. The existing Expo/Firebase wrong-project IAM blocker is unchanged and no credential/permission modification was attempted. SMS and restricted staging Maps remain unconfigured for acceptance. GPS movement is not requested until its prerequisites are ready.
+
+New `resume-chat-http.json` records genuine full-API HTTP acknowledgment loss/replay for text and attachment, a fresh Node replay process, one row/event/file as applicable, separate identical-text/new-ID behavior,409 conflict, and private file200/403/401 checks. This does not close native process/socket/attachment/file-opening acceptance. Final test counts, exact revisions, dirty-source hashes and local APK hashes are in `resume-summary.json` plus mobile `resume-artifact.json` / `resume-source-manifest.json`. New APKs require installation and affected-flow retests; older physical results do not transfer.
+
+Still required physically: normal in-app Arabic↔LTR switch/reload; cold/warm/logged-out request links through consent; account changes during refresh/navigation/draft/file operations; text/attachment loss+restart; remaining TEST financial reconciliation and four complete service journeys; draft/repeat route/private opening; all six languages, large text, keyboard and TalkBack. iOS remains separately NOT RUN/BLOCKED.
+
+Final validation: customer94 suites/680 tests; driver85 suites/550 tests. Both final typecheck/privacy and focused lint checks pass; corrected test-only type/lint declarations were rechecked with focused tests. Both final APKs assembled and passed package/signature/loopback/OTA checks, with no scanned server-secret/live-publishable patterns. Neither final APK was installed: ADB still reports no device. The customer final packaging attempt initially exhausted a2GiB Gradle heap; the retained failure log is separate from the successful retry using3GiB in the temporary build only. Final artifacts/hashes and source matches are in the mobile `resume-artifact.json`/`resume-apk-scan.json` files. Ignored `.log` outputs have matching `resume-*.txt` copies for durable evidence. All four dedicated containers were healthy at final inspection; the official TEST forwarder remained running. No real funds, non-synthetic user-data edits, deployments, pushes or publications occurred.

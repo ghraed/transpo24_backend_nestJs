@@ -1,0 +1,25 @@
+FAIL src/auth/phone-auth-rate-limit.service.spec.ts
+  ● concurrent Redis initialization › waits for the same first connection before either OTP counter uses Redis
+
+    expect(jest.fn()).not.toHaveBeenCalled()
+
+    Expected number of calls: 0
+    Received number of calls: 1
+
+    1: "otp:send:ip:12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a0"
+
+      41 |       const sending = service.assertCanSend('+12025550111', '127.0.0.1');
+      42 |       await Promise.resolve(); await Promise.resolve();
+    > 43 |       expect(mockRedis.incr).not.toHaveBeenCalled();
+         |                                  ^
+      44 |       finish();
+      45 |       await sending;
+      46 |       expect(mockRedis.connect).toHaveBeenCalledTimes(1);
+
+      at Object.<anonymous> (auth/phone-auth-rate-limit.service.spec.ts:43:34)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 passed, 2 total
+Snapshots:   0 total
+Time:        0.575 s, estimated 1 s
+Ran all test suites matching src/auth/phone-auth-rate-limit.service.spec.ts.

@@ -670,3 +670,39 @@ it('uses the separate Connect webhook secret for connected payment events', () =
     });
   }
 });
+
+it('recovers a direct additional expense missing its consumed clone using the owned newly selected card on the same intent', async () => {
+  const { service, api } = stripeFixture();
+  api.paymentIntents.retrieve.mockResolvedValue({
+    id: 'pi_direct',
+    status: 'requires_payment_method',
+    payment_method: null,
+    last_payment_error: { payment_method: { id: 'pm_consumed' } },
+  });
+  api.paymentMethods.create.mockResolvedValue({ id: 'pm_fresh' });
+  await service.confirmAdditionalExpense(
+    'pi_direct',
+    'pm_new_saved',
+    account,
+    'cus_platform',
+  );
+  expect(api.paymentMethods.retrieve).toHaveBeenCalledWith('pm_new_saved');
+  expect(api.paymentMethods.create).toHaveBeenCalledWith(
+    { customer: 'cus_platform', payment_method: 'pm_new_saved' },
+    {
+      stripeAccount: account,
+      idempotencyKey:
+        'additional_expense_pi_direct_pm_new_saved_pm_consumed_retry_card',
+    },
+  );
+  expect(api.paymentIntents.confirm).toHaveBeenCalledWith(
+    'pi_direct',
+    { payment_method: 'pm_fresh', off_session: true },
+    {
+      stripeAccount: account,
+      idempotencyKey:
+        'additional_expense_pi_direct_pm_new_saved_pm_consumed_retry_confirm',
+    },
+  );
+  expect(api.paymentIntents.create).not.toHaveBeenCalled();
+});

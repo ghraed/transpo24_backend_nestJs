@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-06T12:42:37.509129+00:00",
+  "expected": "Translated service name and nonempty literal-colon labels",
+  "actual": "Goods; Description: SYNTHETIC LABEL CHECK NOV06; Fragile: No; Refrigeration: No",
+  "scope": "Native review component opened with synthetic navigation parameters and real isolated Goods service ID. No request submission, photos, fresh routing or journey acceptance. All six label translations separately checked by regression tests.",
+  "evidence": [
+    "device-dev/nov06-goods-labels-native-review.xml",
+    "device-dev/nov06-goods-labels-native-details.xml"
+  ]
+}

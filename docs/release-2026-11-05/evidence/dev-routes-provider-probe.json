@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T19:18:47.688Z",
+  "scope": "real full-AppModule driver route ingress and Google provider; synthetic Basel coordinates; not device/GPS acceptance",
+  "keyRestrictionsChanged": false,
+  "apiStatus": 502,
+  "status": "BLOCKED",
+  "apiMessage": "Routes unavailable.",
+  "providerDiagnostic": {
+    "httpStatus": 403,
+    "status": "PERMISSION_DENIED",
+    "reason": "API_KEY_IP_ADDRESS_BLOCKED",
+    "service": "routes.googleapis.com"
+  },
+  "probeSessionRevoked": true
+}

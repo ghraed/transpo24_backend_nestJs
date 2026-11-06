@@ -1,0 +1,22 @@
+{
+  "at": "2026-11-06T10:57:49.940188+00:00",
+  "nativeLoginAtoB": true,
+  "separateAccountConsentObserved": true,
+  "wrongOwnerRequestStatus": 403,
+  "privateDestinationOpened": false,
+  "evidence": [
+    "device-dev/nov06-customer-b-profile.xml",
+    "device-dev/nov06-customer-b-rejects-a-request.xml"
+  ],
+  "scope": "native review login uses only authorized number; B synthetic; navigation delay attempt retained separately and not complete overlapping-refresh physical acceptance",
+  "nativeRequestObservation": {
+    "delayPath": "/customer/requests/cmw3vo31v0000iefvzagd7pkf/status",
+    "delayResponseMs": 1,
+    "blocked": false,
+    "armed": false,
+    "forceHttp": false,
+    "delayedRequestStartedAt": "2026-11-06T10:57:32.660Z",
+    "delayedUpstreamStatus": 403,
+    "delayedResponseReleasedAt": "2026-11-06T10:57:32.670Z"
+  }
+}

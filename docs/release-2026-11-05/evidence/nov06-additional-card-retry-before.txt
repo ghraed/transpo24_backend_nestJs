@@ -1,0 +1,24 @@
+FAIL src/payments/direct-charges.spec.ts
+  ● recovers a direct additional expense missing its consumed clone using the owned newly selected card on the same intent
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "pm_new_saved"
+
+    Number of calls: 0
+
+      677 |   api.paymentMethods.create.mockResolvedValue({ id: 'pm_fresh' });
+      678 |   await service.confirmAdditionalExpense('pi_direct', 'pm_new_saved', account, 'cus_platform');
+    > 679 |   expect(api.paymentMethods.retrieve).toHaveBeenCalledWith('pm_new_saved');
+          |                                       ^
+      680 |   expect(api.paymentMethods.create).toHaveBeenCalledWith({ customer: 'cus_platform', payment_method: 'pm_new_saved' }, { stripeAccount: account, idempotencyKey: 'additional_expense_pi_direct_pm_new_saved_pm_consumed_retry_card' });
+      681 |   expect(api.paymentIntents.confirm).toHaveBeenCalledWith('pi_direct', { payment_method: 'pm_fresh', off_session: true }, { stripeAccount: account, idempotencyKey: 'additional_expense_pi_direct_pm_new_saved_pm_consumed_retry_confirm' });
+      682 |   expect(api.paymentIntents.create).not.toHaveBeenCalled();
+
+      at Object.<anonymous> (payments/direct-charges.spec.ts:679:39)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 27 passed, 28 total
+Snapshots:   0 total
+Time:        0.814 s, estimated 1 s
+Ran all test suites matching src/payments/direct-charges.spec.ts.

@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-05T19:00:35.197641+00:00",
+  "beforePid": "4033",
+  "ordinaryBackgroundKillAttemptDidNotTerminate": true,
+  "terminationMethod": "explicit force-stop of synthetic Driver Dev only",
+  "processAbsentBeforeRestart": true,
+  "operationId": "mw3wqzn4-w0t12y8yx8ajyu9u8qmzf51csspfayjeb1nctlm5d",
+  "attachmentOperationIdPreserved": true,
+  "retainedFileSha256": "2d62f23f1432848ffa45f776f490c23ce522ef73f9eb707b0d3124d130e44a0e",
+  "retainedFileExistsAfterProcessExit": true,
+  "retainedFileOwnerScoped": true,
+  "faultUnblockedAfterExit": true,
+  "committedHistoryHeldUntilReplay": true
+}

@@ -1,0 +1,16 @@
+{
+  "restoredAt": "2026-11-06T12:46:33.096991+00:00",
+  "apps": {
+    "com.transpo24.app.dev": {
+      "allOriginalPreferenceFilesMatch": true,
+      "encryptedSignInRestored": true,
+      "originalServerSessionNotRevoked": true
+    },
+    "com.transpo24.driver.dev": {
+      "allOriginalPreferenceFilesMatch": true,
+      "encryptedSignInRestored": true,
+      "originalServerSessionNotRevoked": true
+    }
+  },
+  "reverse3001": "tcp:3001"
+}

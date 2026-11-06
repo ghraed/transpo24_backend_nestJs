@@ -1,0 +1,70 @@
+{
+  "observedAt": "2026-11-06T10:29:16.742Z",
+  "phase": "websocket-text-after-replay",
+  "senderApp": "com.transpo24.driver.dev",
+  "roomId": "cmw3w1al200040ffvz6qpxtbq",
+  "requestId": "cmw3vo31v0000iefvzagd7pkf",
+  "control": {
+    "roomId": "cmw3w1al200040ffvz6qpxtbq",
+    "transport": "websocket",
+    "armed": false,
+    "blocked": false,
+    "operationId": "mw4tzs5x-2dkmwvrxwotmjvdawjs92fb4a5wz0cxqndphyn3lyhw9",
+    "messageId": "cmw4tzsin00080ffvok3chw9f",
+    "responseDeliberatelyDropped": true,
+    "socketAcknowledgmentDropped": true,
+    "senderCreatedEventsSuppressed": 1,
+    "actualProxyWebSocketsTerminated": 2,
+    "ackPacketId": "1",
+    "commitObservedAt": "2026-11-06T10:28:08.363Z",
+    "hideCommittedUntilReplay": false,
+    "hideCommittedOnce": false,
+    "staleHistoryServed": true,
+    "replaySucceeded": true,
+    "socketReplaySucceeded": true,
+    "replayRequests": 1
+  },
+  "operationRows": 1,
+  "operationEvents": 1,
+  "chatFileRows": 1,
+  "totalMessageRows": 4,
+  "rows": [
+    {
+      "id": "cmw3wct4e00070ffvvmffznwq",
+      "operationId": "mw3wct4c-mj6bd01r7whvni6b87s3w1nhcvn0n5b4ouactish",
+      "type": "TEXT",
+      "senderId": "cmw3ahxz300018bfv7uo60jnd",
+      "attachmentUrl": null,
+      "createdAt": "2026-11-05T18:46:28.718Z",
+      "bodySha256": "ffe9003a3eb45b7fcc86360d4ce892b8e2943999d1b2c88de5a7520b5772d1c1"
+    },
+    {
+      "id": "cmw3whudf00090ffvx214s1u8",
+      "operationId": "mw3whueq-tq17yahmtjz13iottxgdh71zos1hbn3yi2hjmd16z8r",
+      "type": "TEXT",
+      "senderId": "cmw3ahxz300018bfv7uo60jnd",
+      "attachmentUrl": null,
+      "createdAt": "2026-11-05T18:50:23.619Z",
+      "bodySha256": "ffe9003a3eb45b7fcc86360d4ce892b8e2943999d1b2c88de5a7520b5772d1c1"
+    },
+    {
+      "id": "cmw3wr100000c0ffvfxjskk4o",
+      "operationId": "mw3wqzn4-w0t12y8yx8ajyu9u8qmzf51csspfayjeb1nctlm5d",
+      "type": "FILE",
+      "senderId": "cmw3ahxz300018bfv7uo60jnd",
+      "attachmentUrl": "/request-files/cmw3wqzs3000b0ffvkva1izk7/content",
+      "createdAt": "2026-11-05T18:57:32.112Z",
+      "bodySha256": "c86040ce3ad2b08c0a80cec7e96eda42417a998a8d151637334edeaa54335a48"
+    },
+    {
+      "id": "cmw4tzsin00080ffvok3chw9f",
+      "operationId": "mw4tzs5x-2dkmwvrxwotmjvdawjs92fb4a5wz0cxqndphyn3lyhw9",
+      "type": "TEXT",
+      "senderId": "cmw3ahxz300018bfv7uo60jnd",
+      "attachmentUrl": null,
+      "createdAt": "2026-11-06T10:28:08.352Z",
+      "bodySha256": "51598851ae3b74bfd275b2db92fa656c74472f9f8f68dff2670b683ff2ea2414"
+    }
+  ],
+  "scope": "actual native Dev WebSocket sender; committed ack and sender event suppressed, real proxy sockets closed; direct recipient observer"
+}

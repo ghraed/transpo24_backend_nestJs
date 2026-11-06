@@ -1,0 +1,6 @@
+{
+  "at": "2026-11-06T12:55:42.302906+00:00",
+  "filesChecked": 2196,
+  "findings": [],
+  "scope": "All tracked/prospective nonbinary files in five repositories versus exact known private runtime/session/OTP/database/Google key values; not an independent comprehensive security audit."
+}

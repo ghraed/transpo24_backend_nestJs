@@ -1,0 +1,20 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {root,runtime,assertRuntime}=require('./environment.cjs');assertRuntime();const {PrismaService}=require('../../dist/src/prisma/prisma.service');const db=new PrismaService();const Stripe=require('stripe');const stripe=new Stripe(process.env.STRIPE_TEST_SECRET_KEY,{timeout:10000,maxNetworkRetries:0});
+(async()=>{
+ const f=JSON.parse(fs.readFileSync(path.join(runtime,'native-payment-fixtures.json')));const r=f.requests.find(v=>v.purpose==='native-dev-capture');
+ const request=await db.transportRequest.findUniqueOrThrow({where:{id:r.requestId},select:{id:true,status:true,customerId:true,assignedDriverId:true,acceptedOfferId:true}});assert.equal(request.customerId,f.customerId);
+ const hold=await db.paymentHold.findUniqueOrThrow({where:{requestId:r.requestId},select:{id:true,status:true,confirmationState:true,amount:true,currency:true,stripePaymentIntentId:true,stripeAccountId:true,capturedAt:true,releasedAt:true,cancelledAt:true}});
+ const rows=await db.additionalCharge.findMany({where:{requestId:r.requestId},select:{id:true,amount:true,currency:true,status:true,stripeAccountId:true,stripePaymentIntentId:true,paymentFailureReason:true,savedPaymentMethodLast4:true,approvedAt:true}});
+ const ledger=await db.customerWalletTransaction.findMany({where:{OR:[{paymentHoldId:hold.id},{additionalChargeId:{in:rows.map(v=>v.id)}}]},select:{id:true,type:true,amount:true,currency:true,paymentHoldId:true,additionalChargeId:true}});
+ const settlement=await db.tripPaymentSettlement.findUnique({where:{requestId:r.requestId},select:{status:true,collectedAmount:true,refundedAmount:true,retainedAmount:true,driverShareAmount:true,platformShareAmount:true,driverPayoutState:true}});
+ const provider=[];const providerEvents=[];
+ for(const v of [{kind:'hold',...hold},...rows.map(v=>({kind:'additional',...v}))]){
+  if(!v.stripePaymentIntentId)continue;const p=await stripe.paymentIntents.retrieve(v.stripePaymentIntentId,{expand:['latest_charge']},{stripeAccount:v.stripeAccountId});assert.equal(p.livemode,false);assert.ok(p.metadata.transportRequestId===request.id||p.metadata.requestId===request.id||rows.some(row=>row.id===p.metadata.additionalChargeId));
+  const ch=typeof p.latest_charge==='object'?p.latest_charge:null;
+  const attempts=await stripe.charges.list({limit:100},{stripeAccount:v.stripeAccountId});const ownAttempts=attempts.data.filter(c=>c.payment_intent===p.id);const events=await stripe.events.list({type:'payment_intent.succeeded',limit:100},{stripeAccount:v.stripeAccountId});for(const event of events.data){if(event.data.object.id===p.id)providerEvents.push({id:event.id,type:event.type,created:event.created,account:event.account||v.stripeAccountId,livemode:event.livemode,objectId:p.id});}
+  provider.push({chargeAttempts:ownAttempts.map(c=>({id:c.id,paid:c.paid,captured:c.captured,status:c.status,amount:c.amount,amountRefunded:c.amount_refunded})),kind:v.kind,id:p.id,status:p.status,amount:p.amount,amountCapturable:p.amount_capturable,amountReceived:p.amount_received,currency:p.currency,livemode:p.livemode,lastErrorCode:p.last_payment_error?.code??null,paymentMethodPresent:Boolean(p.payment_method),latestCharge:ch?{id:ch.id,paid:ch.paid,captured:ch.captured,amount:ch.amount,amountRefunded:ch.amount_refunded,refundIds:ch.refunds?.data.map(v=>v.id)??[]}:null});
+ }
+ const result={at:new Date().toISOString(),request,hold,additionalCharges:rows,ledger,settlement,provider,providerEvents,walletLedgerScope:'direct card expense uses its AdditionalCharge record; no wallet debit expected',scope:'read-only actual synthetic database and Stripe TEST objects; no invoice/image/token/client-secret data'};
+ const phase=process.argv[2];if(phase){assert.ok(/^[a-z-]+$/.test(phase));fs.writeFileSync(path.join(root,'docs/release-2026-11-05/evidence/nov06-finance-'+phase+'.json'),JSON.stringify(result,null,2)+'\n');}
+ console.log(JSON.stringify(result));
+})().catch(()=>{console.error('Owned TEST finance reconciliation failed; no provider bodies/secrets printed');process.exitCode=1}).finally(()=>db.$disconnect());

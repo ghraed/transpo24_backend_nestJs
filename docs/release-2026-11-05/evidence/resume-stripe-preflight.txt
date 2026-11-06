@@ -1,0 +1,1 @@
+PASS read-only Stripe TEST preflight: key authenticated, prior TEST connected account retrieved; no charges or account changes. Forwarded webhooks and native authorization still need acceptance.

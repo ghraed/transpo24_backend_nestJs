@@ -1,0 +1,51 @@
+{
+  "at": "2026-11-05T18:30:25.156362+00:00",
+  "device": {
+    "serial": "7925f75a",
+    "model": "2107113SG",
+    "android": "14"
+  },
+  "apps": {
+    "com.transpo24.app.dev": {
+      "nativeApks": [
+        {
+          "part": "base.apk",
+          "sha256": "2d8e6f43b18273d91cf112bdf1dcee8310c17ebdae3bcea5ee2c0406afed4c4c"
+        }
+      ],
+      "metadata": [
+        "versionCode=1 minSdk=24 targetSdk=36",
+        "versionName=1.0.7",
+        "lastUpdateTime=2026-11-05 19:43:32"
+      ],
+      "metroPort": 8081,
+      "head": "142009f5e89d5812be0038e4f087903906f349d1",
+      "sourceInputSha256": "ad2644590e01b8742c2d3050df499adcf8f05f5646094191364c5890b984b2ad",
+      "appApiUrl": "http://127.0.0.1:3001",
+      "temporaryUsbTarget": "http://127.0.0.1:57431",
+      "pushRegistration": "blocked by .dev/STAGING scope mismatch; no bypass",
+      "originalEncryptedPreferencesPreserved": true
+    },
+    "com.transpo24.driver.dev": {
+      "nativeApks": [
+        {
+          "part": "base.apk",
+          "sha256": "565dd394a8245805898ee9cdbe3e03d50748d9554d297c89980deb353f75b35d"
+        }
+      ],
+      "metadata": [
+        "versionCode=1 minSdk=24 targetSdk=36",
+        "versionName=1.0.10",
+        "lastUpdateTime=2026-11-05 19:45:29"
+      ],
+      "metroPort": 8082,
+      "head": "ce9305372656997aeb820cecd92d8979e96e01bb",
+      "sourceInputSha256": "56310fcd534c933e08460c88ee20699e55f4150fda5c7a564ffbc92a4031ca22",
+      "appApiUrl": "http://127.0.0.1:3001",
+      "temporaryUsbTarget": "http://127.0.0.1:57431",
+      "pushRegistration": "blocked by .dev/STAGING scope mismatch; no bypass",
+      "originalEncryptedPreferencesPreserved": true
+    }
+  },
+  "scope": "installed debug APKs + locally served source; no release artifact acceptance"
+}

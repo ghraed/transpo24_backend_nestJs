@@ -1,0 +1,19 @@
+{
+  "at": "2026-11-06T11:35:24.144449+00:00",
+  "fault": {
+    "paymentPath": "/customer/requests/cmw3vo31v0000iefvzagd7pkf/additional-charges/cmw4vkl7b00010ffv9z2bw36h/approve",
+    "armed": false,
+    "blocked": true,
+    "forceHttp": false,
+    "committedResponseStatus": 201,
+    "acknowledgedChargeId": "cmw4vkl7b00010ffv9z2bw36h",
+    "committedChargeStatus": "CAPTURED",
+    "responseDeliberatelyDropped": true,
+    "actualProxyWebSocketsTerminated": 2,
+    "commitObservedAt": "2026-11-06T11:34:11.656Z"
+  },
+  "termination": "background then am kill twice; PID confirmed absent",
+  "ordinaryTermination": true,
+  "forceStopUsed": false,
+  "providerStateBeforeTermination": "same persisted PaymentIntent succeeded;100received;1050 booking hold stillauthorized"
+}

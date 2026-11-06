@@ -1,0 +1,1 @@
+PASS attachment-after-replay: same operation has exactly one committed row and one observed event; 1 chat file row(s).

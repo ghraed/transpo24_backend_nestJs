@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-06T10:32:27.189674+00:00",
+  "package": "com.transpo24.driver.dev",
+  "termination": "background and am kill twice; PID absence confirmed",
+  "pidAbsent": true,
+  "forceStopUsed": false,
+  "staleHistoryFault": "committed operation hidden until retry; database unchanged"
+}

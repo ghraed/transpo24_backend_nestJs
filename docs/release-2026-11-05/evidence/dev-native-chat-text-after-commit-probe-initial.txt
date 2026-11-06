@@ -1,0 +1,7 @@
+Expected values to be strictly equal:
++ actual - expected
+
++ 'cmw3ahxz300018bfv7uo60jnd'
+- 'cmw3ahxz100008bfvq5o5eoee'
+           ^
+

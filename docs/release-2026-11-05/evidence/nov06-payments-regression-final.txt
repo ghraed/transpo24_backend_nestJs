@@ -1,0 +1,27 @@
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=ACTION_REQUIRED, afterPickup=false
+[Nest] 3466534  - 10/28/2026, 12:15:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=ACTION_REQUIRED, afterPickup=false
+[Nest] 3466534  - 11/02/2026, 11:59:00 AM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=RENEWING, afterPickup=false
+[Nest] 3466534  - 11/02/2026, 11:59:00 AM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=RENEWING, afterPickup=true
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=ACTION_REQUIRED, afterPickup=false
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=AUTHORIZING, afterPickup=false
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3466534  - 11/06/2026, 1:29:09 PM   ERROR [PaymentsService] Additional expense notification failed: Error: Push unavailable
+[Nest] 3466534  - 11/06/2026, 1:29:10 PM    WARN [DriverPayoutQueueService] Driver payout queue is disabled because REDIS_HOST is not configured.
+[Nest] 3466534  - 11/06/2026, 1:29:10 PM    WARN [DriverPayoutQueueService] Unable to enqueue driver payout for trip trip-1: queue is not ready.
+[Nest] 3466534  - 11/06/2026, 1:29:10 PM    WARN [PaymentsService] Payout succeeded but notification failed for trip trip.
+
+Test Suites: 15 passed, 15 total
+Tests:       271 passed, 271 total
+Snapshots:   0 total
+Time:        3.254 s, estimated 4 s
+Ran all test suites matching src/payments.

@@ -1,0 +1,2 @@
+PASS scoped full-API text: dropped post-commit response, fresh Node replay, one DB row/event; physical app still pending.
+PASS scoped full-API attachment: dropped post-commit response, fresh Node replay, one DB row/event; physical app still pending.

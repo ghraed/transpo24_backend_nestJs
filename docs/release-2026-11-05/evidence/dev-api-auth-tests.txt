@@ -1,0 +1,588 @@
+FAIL src/auth/driver-approval-http.spec.ts
+  ● driver approval HTTP boundary › allows authenticated browsing without admin approval
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      58 |   it('allows authenticated browsing without admin approval', async () => {
+      59 |     await request(app.getHttpServer() as Server)
+    > 60 |       .get('/driver/requests/alerts')
+         |        ^
+      61 |       .set('Authorization', 'Bearer token')
+      62 |       .expect(200, { alerts: [], locationReference: 'NONE' });
+      63 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as get] (../node_modules/supertest/index.js:40:18)
+      at Object.<anonymous> (auth/driver-approval-http.spec.ts:60:8)
+
+  ● driver approval HTTP boundary › allows authenticated browsing without admin approval
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      58 |   it('allows authenticated browsing without admin approval', async () => {
+      59 |     await request(app.getHttpServer() as Server)
+    > 60 |       .get('/driver/requests/alerts')
+         |        ^
+      61 |       .set('Authorization', 'Bearer token')
+      62 |       .expect(200, { alerts: [], locationReference: 'NONE' });
+      63 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as get] (../node_modules/supertest/index.js:40:18)
+      at Object.<anonymous> (auth/driver-approval-http.spec.ts:60:8)
+
+  ● driver approval HTTP boundary › blocks direct offers from PENDING_PROFILE drivers
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from PENDING_PROFILE drivers
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from PENDING_DOCUMENTS drivers
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from PENDING_DOCUMENTS drivers
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from PENDING_REVIEW drivers
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from PENDING_REVIEW drivers
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from SUSPENDED drivers
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from SUSPENDED drivers
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from REJECTED drivers
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › blocks direct offers from REJECTED drivers
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      71 |     status = driverStatus;
+      72 |     const response = await request(app.getHttpServer() as Server)
+    > 73 |       .post('/driver/requests/r/offers')
+         |        ^
+      74 |       .set('Authorization', 'Bearer token')
+      75 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      76 |       .expect(403);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:73:8
+
+  ● driver approval HTTP boundary › guards patch /driver/requests/r/seen before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards patch /driver/requests/r/seen before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards post /driver/requests/r/accept-alert before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      91 |     const call =
+      92 |       method === 'post'
+    > 93 |         ? agent.post(path)
+         |                 ^
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+      96 |           : agent.get(path);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:93:17
+
+  ● driver approval HTTP boundary › guards post /driver/requests/r/accept-alert before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      91 |     const call =
+      92 |       method === 'post'
+    > 93 |         ? agent.post(path)
+         |                 ^
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+      96 |           : agent.get(path);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:93:17
+
+  ● driver approval HTTP boundary › guards post /driver/requests/r/additional-charges before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      91 |     const call =
+      92 |       method === 'post'
+    > 93 |         ? agent.post(path)
+         |                 ^
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+      96 |           : agent.get(path);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:93:17
+
+  ● driver approval HTTP boundary › guards post /driver/requests/r/additional-charges before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      91 |     const call =
+      92 |       method === 'post'
+    > 93 |         ? agent.post(path)
+         |                 ^
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+      96 |           : agent.get(path);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:93:17
+
+  ● driver approval HTTP boundary › guards patch /driver/trips/r/pickup-item before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards patch /driver/trips/r/pickup-item before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards post /driver/trips/r/start-pickup before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      91 |     const call =
+      92 |       method === 'post'
+    > 93 |         ? agent.post(path)
+         |                 ^
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+      96 |           : agent.get(path);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:93:17
+
+  ● driver approval HTTP boundary › guards post /driver/trips/r/start-pickup before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      91 |     const call =
+      92 |       method === 'post'
+    > 93 |         ? agent.post(path)
+         |                 ^
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+      96 |           : agent.get(path);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:93:17
+
+  ● driver approval HTTP boundary › guards patch /driver/trips/r/start-delivery before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards patch /driver/trips/r/start-delivery before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards patch /driver/trips/r/deliver-item before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards patch /driver/trips/r/deliver-item before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      93 |         ? agent.post(path)
+      94 |         : method === 'patch'
+    > 95 |           ? agent.patch(path)
+         |                   ^
+      96 |           : agent.get(path);
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as patch] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:95:19
+
+  ● driver approval HTTP boundary › guards get /driver/jobs/r before executing its action
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+    > 96 |           : agent.get(path);
+         |                   ^
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+      99 |   it('enables offers only after approval and disables them again after revocation', async () => {
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as get] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:96:19
+
+  ● driver approval HTTP boundary › guards get /driver/jobs/r before executing its action
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      94 |         : method === 'patch'
+      95 |           ? agent.patch(path)
+    > 96 |           : agent.get(path);
+         |                   ^
+      97 |     await call.set('Authorization', 'Bearer token').expect(403);
+      98 |   });
+      99 |   it('enables offers only after approval and disables them again after revocation', async () => {
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as get] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:96:19
+
+  ● driver approval HTTP boundary › enables offers only after approval and disables them again after revocation
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      100 |     status = 'APPROVED';
+      101 |     await request(app.getHttpServer() as Server)
+    > 102 |       .post('/driver/requests/r/offers')
+          |        ^
+      103 |       .set('Authorization', 'Bearer token')
+      104 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      105 |       .expect(201);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at Object.<anonymous> (auth/driver-approval-http.spec.ts:102:8)
+
+  ● driver approval HTTP boundary › enables offers only after approval and disables them again after revocation
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      100 |     status = 'APPROVED';
+      101 |     await request(app.getHttpServer() as Server)
+    > 102 |       .post('/driver/requests/r/offers')
+          |        ^
+      103 |       .set('Authorization', 'Bearer token')
+      104 |       .send({ requestVersion: 'v', price: 50, currency: 'USD' })
+      105 |       .expect(201);
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at Object.<anonymous> (auth/driver-approval-http.spec.ts:102:8)
+
+  ● driver approval HTTP boundary › requires phone verification instead of /auth/driver/register
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      117 |     async (path) => {
+      118 |       await request(app.getHttpServer() as Server)
+    > 119 |         .post(path)
+          |          ^
+      120 |         .send({ email: 'driver@example.com', password: 'password123' })
+      121 |         .expect(403);
+      122 |     },
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:119:10
+
+  ● driver approval HTTP boundary › requires phone verification instead of /auth/driver/register
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      117 |     async (path) => {
+      118 |       await request(app.getHttpServer() as Server)
+    > 119 |         .post(path)
+          |          ^
+      120 |         .send({ email: 'driver@example.com', password: 'password123' })
+      121 |         .expect(403);
+      122 |     },
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:119:10
+
+  ● driver approval HTTP boundary › requires phone verification instead of /auth/driver/login
+
+    TypeError: Cannot read properties of null (reading 'port')
+
+      117 |     async (path) => {
+      118 |       await request(app.getHttpServer() as Server)
+    > 119 |         .post(path)
+          |          ^
+      120 |         .send({ email: 'driver@example.com', password: 'password123' })
+      121 |         .expect(403);
+      122 |     },
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:67:31)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:119:10
+
+  ● driver approval HTTP boundary › requires phone verification instead of /auth/driver/login
+
+    listen EPERM: operation not permitted 0.0.0.0
+
+      117 |     async (path) => {
+      118 |       await request(app.getHttpServer() as Server)
+    > 119 |         .post(path)
+          |          ^
+      120 |         .send({ email: 'driver@example.com', password: 'password123' })
+      121 |         .expect(403);
+      122 |     },
+
+      at Test.serverAddress (../node_modules/supertest/lib/test.js:63:35)
+      at new Test (../node_modules/supertest/lib/test.js:49:14)
+      at Object.obj.<computed> [as post] (../node_modules/supertest/index.js:40:18)
+      at auth/driver-approval-http.spec.ts:119:10
+
+[Nest] 16  - 11/05/2026, 8:20:49 PM     LOG [TwilioVerifyService] {"event":"twilio_verify_send_accepted","phone":"+961••••456","status":"pending"}
+[Nest] 16  - 11/05/2026, 8:20:49 PM   ERROR [TwilioVerifyService] {"event":"twilio_verify_send_failed","phone":"+961••••044","status":400,"providerCode":60610}
+[Nest] 16  - 11/05/2026, 8:20:49 PM     LOG [TwilioVerifyService] {"event":"play_review_verification_requested","phone":"+417••••567"}
+
+Test Suites: 1 failed, 7 passed, 8 total
+Tests:       17 failed, 65 passed, 82 total
+Snapshots:   0 total
+Time:        1.95 s, estimated 3 s
+Ran all test suites matching src/auth.

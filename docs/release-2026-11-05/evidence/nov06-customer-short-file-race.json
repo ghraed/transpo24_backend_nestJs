@@ -1,0 +1,30 @@
+{
+  "logoutUiAt": "2026-11-06T12:28:20.246483+00:00",
+  "faultAtLogout": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/request-files/cmw4y1z3r0001hkfv6cpx1ap7/content",
+    "delayResponseMs": 9000,
+    "delayedRequestStartedAt": "2026-11-06T12:28:14.096Z",
+    "delayedUpstreamStatus": 200
+  },
+  "scope": "Native customer private document download session race; seeded DRAFT/file is not upload or funded journey acceptance",
+  "observedAt": "2026-11-06T12:29:17.793590+00:00",
+  "releasedFault": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/request-files/cmw4y1z3r0001hkfv6cpx1ap7/content",
+    "delayResponseMs": 9000,
+    "delayedRequestStartedAt": "2026-11-06T12:28:14.096Z",
+    "delayedUpstreamStatus": 200,
+    "delayedResponseReleasedAt": "2026-11-06T12:28:23.098Z"
+  },
+  "expected": "A successful private download released after logout cannot open a viewer; remove stale private bytes",
+  "actual": "Native Login remained after response release; no viewer/chooser; no task document in private cache",
+  "result": "PASS scoped native customer private file/logout race",
+  "taskPrivateCacheFilesRemaining": 0,
+  "afterEvidence": "device-dev/nov06-customer-short-file-after-release.xml",
+  "limitation": "Pre-existing Dev JSON.parse logging produced a LogBox notice, whose cause is not established; no private file alert or content was displayed."
+}

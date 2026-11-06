@@ -1,0 +1,43 @@
+{
+  "observedAt": "2026-11-05T19:19:27.028Z",
+  "scope": "real HTTP/DB and socket event observation; fresh Node replay process; NOT physical Android acceptance",
+  "cases": [
+    {
+      "kind": "text",
+      "operationId": "0d3da235-2edf-46fb-8194-5f016343ebde",
+      "messageId": "cmw3xj7t800010ffvv3yaesd7",
+      "rows": 1,
+      "socketEvents": 1,
+      "observationAfterReplayMs": 350,
+      "responseDroppedAfterCommit": true,
+      "freshNodeReplayProcess": true,
+      "newFiles": 0,
+      "identicalTextWithNewOperationIsSeparate": true,
+      "conflictingOperationRejected": true
+    },
+    {
+      "kind": "attachment",
+      "operationId": "73eeac55-eb9e-48c9-b775-9d94c4535579",
+      "messageId": "cmw3xj87s00060ffvbnrbm2gw",
+      "rows": 1,
+      "socketEvents": 1,
+      "observationAfterReplayMs": 350,
+      "responseDroppedAfterCommit": true,
+      "freshNodeReplayProcess": true,
+      "newFiles": 1,
+      "privateDocument": {
+        "authorizedStatus": 200,
+        "outsiderStatus": 403,
+        "anonymousStatus": 401,
+        "sha256": "6f8187b186d3441de9e3f3f88d5c66626f595ab40c31517470367b9d4d408b0d"
+      }
+    }
+  ],
+  "status": "PASS scoped backend integration; NOT native acceptance",
+  "cleanup": {
+    "generatedSessionsRevoked": 3,
+    "generatedSessionsStillActive": 0,
+    "previousFaultControlRestored": true,
+    "privateReplayInputRemoved": true
+  }
+}

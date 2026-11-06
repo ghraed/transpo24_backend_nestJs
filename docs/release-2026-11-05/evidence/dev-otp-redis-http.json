@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-11-05T18:24:48.062Z",
+  "scope": "full isolated API/real Redis; authorized review number; no SMS delivery acceptance",
+  "firstStatus": 201,
+  "phoneAndIpCounterDeltas": [
+    1,
+    1
+  ],
+  "cooldownTtlSeconds": 60,
+  "immediateRepeatStatus": 429,
+  "status": "PASS"
+}

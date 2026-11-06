@@ -1,0 +1,16 @@
+{
+  "at": "2026-11-06T12:38:45.293507+00:00",
+  "status": "PASS human-reported speech/announcements on sampled customer Login; broader TalkBack OPEN",
+  "device": "7925f75a Android14",
+  "scope": "Owner confirmed speech and sampled Login announcements; tutorial completed by owner. Automated taps did not establish swipe focus order. Remaining full customer/driver task focus, announcements and TalkBack flow checks are OPEN. Original accessibility settings restored and verified.",
+  "evidence": [
+    "device-dev/nov06-talkback-login-focus-start.xml",
+    "device-dev/nov06-talkback-login-after-focus.xml",
+    "nov06-device-settings-restored.json"
+  ],
+  "humanObservedAt": "2026-11-06T12:39:09.897537+00:00",
+  "humanFeedback": {
+    "speechAndSampledNamesRolesStates": "there is speach and everything is correct",
+    "tutorial": "i have clicked finihs"
+  }
+}

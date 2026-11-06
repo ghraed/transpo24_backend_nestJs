@@ -1,0 +1,3 @@
+STRIPE_TEST_FORWARDER_READY: platform; signing secret stored privately.
+STRIPE_TEST_FORWARDER_READY: connect; signing secret stored privately.
+Both TEST listeners ready. Independent CLI signing secrets: false. Restart the local API with the new private secrets.

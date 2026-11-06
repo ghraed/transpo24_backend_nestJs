@@ -1,0 +1,127 @@
+{
+  "at": "2026-11-06T11:37:49.640Z",
+  "request": {
+    "id": "cmw3vo31v0000iefvzagd7pkf",
+    "status": "CANCELLED",
+    "customerId": "cmw3ayvff0000sxfv5bmq36zc",
+    "assignedDriverId": "cmw3ahxz300018bfv7uo60jnd",
+    "acceptedOfferId": "cmw3vo3220001iefvdeq8mjw6"
+  },
+  "hold": {
+    "id": "cmw3vtrqe00010ffvxr1dm5jz",
+    "status": "PAYMENT_CAPTURED",
+    "confirmationState": "CANCELLED",
+    "amount": "10.5",
+    "currency": "CHF",
+    "stripePaymentIntentId": "pi_3UYVTUClGb3s3rvz0btWcmFP",
+    "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+    "capturedAt": "2026-11-06T11:37:23.824Z",
+    "releasedAt": null,
+    "cancelledAt": "2026-11-06T11:37:23.824Z"
+  },
+  "additionalCharges": [
+    {
+      "id": "cmw4vkl7b00010ffv9z2bw36h",
+      "amount": "1",
+      "currency": "CHF",
+      "status": "CAPTURED",
+      "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+      "stripePaymentIntentId": "pi_3UYlGDClGb3s3rvz03pW5hPb",
+      "paymentFailureReason": null,
+      "savedPaymentMethodLast4": "4242",
+      "approvedAt": "2026-11-06T11:34:08.951Z"
+    }
+  ],
+  "ledger": [],
+  "settlement": {
+    "status": "CANCELLED_WITH_FEE",
+    "collectedAmount": "1.58",
+    "refundedAmount": "0",
+    "retainedAmount": "1.58",
+    "driverShareAmount": "0.79",
+    "platformShareAmount": "0.79",
+    "driverPayoutState": "PAID_OUT"
+  },
+  "provider": [
+    {
+      "chargeAttempts": [
+        {
+          "id": "ch_3UYVTUClGb3s3rvz0vsZukMX",
+          "paid": true,
+          "captured": true,
+          "status": "succeeded",
+          "amount": 1050,
+          "amountRefunded": 0
+        }
+      ],
+      "kind": "hold",
+      "id": "pi_3UYVTUClGb3s3rvz0btWcmFP",
+      "status": "succeeded",
+      "amount": 1050,
+      "amountCapturable": 0,
+      "amountReceived": 158,
+      "currency": "chf",
+      "livemode": false,
+      "lastErrorCode": null,
+      "paymentMethodPresent": true,
+      "latestCharge": {
+        "id": "ch_3UYVTUClGb3s3rvz0vsZukMX",
+        "paid": true,
+        "captured": true,
+        "amount": 1050,
+        "amountRefunded": 0,
+        "refundIds": []
+      }
+    },
+    {
+      "chargeAttempts": [
+        {
+          "id": "ch_3UYlGDClGb3s3rvz0Gfr5XC3",
+          "paid": true,
+          "captured": true,
+          "status": "succeeded",
+          "amount": 100,
+          "amountRefunded": 0
+        }
+      ],
+      "kind": "additional",
+      "id": "pi_3UYlGDClGb3s3rvz03pW5hPb",
+      "status": "succeeded",
+      "amount": 100,
+      "amountCapturable": 0,
+      "amountReceived": 100,
+      "currency": "chf",
+      "livemode": false,
+      "lastErrorCode": null,
+      "paymentMethodPresent": true,
+      "latestCharge": {
+        "id": "ch_3UYlGDClGb3s3rvz0Gfr5XC3",
+        "paid": true,
+        "captured": true,
+        "amount": 100,
+        "amountRefunded": 0,
+        "refundIds": []
+      }
+    }
+  ],
+  "providerEvents": [
+    {
+      "id": "evt_3UYVTUClGb3s3rvz0myiEaZj",
+      "type": "payment_intent.succeeded",
+      "created": 1793965043,
+      "account": "acct_1UXdDLClGb3s3rvz",
+      "livemode": false,
+      "objectId": "pi_3UYVTUClGb3s3rvz0btWcmFP"
+    },
+    {
+      "id": "evt_3UYlGDClGb3s3rvz0ksF0X2y",
+      "type": "payment_intent.succeeded",
+      "created": 1793964851,
+      "account": "acct_1UXdDLClGb3s3rvz",
+      "livemode": false,
+      "objectId": "pi_3UYlGDClGb3s3rvz03pW5hPb"
+    }
+  ],
+  "walletLedgerScope": "direct card expense uses its AdditionalCharge record; no wallet debit expected",
+  "scope": "read-only actual synthetic database and Stripe TEST objects; no invoice/image/token/client-secret data"
+}

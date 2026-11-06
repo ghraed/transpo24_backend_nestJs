@@ -1,0 +1,7 @@
+{
+  "observedAt": "2026-11-05T16:32:27.404Z",
+  "scope": "real HTTP/DB and socket event observation; fresh Node replay process; NOT physical Android acceptance",
+  "cases": [],
+  "status": "FAIL",
+  "error": "Expected values to be strictly equal:\n\n409 !== 400\n"
+}

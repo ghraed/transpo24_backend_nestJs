@@ -1,0 +1,628 @@
+{
+  "recordedAt": "2026-11-05T16:53:40.141223+00:00",
+  "decision": "NOT READY",
+  "device": {
+    "serial": "7925f75a",
+    "model": "2107113SG",
+    "android": "14",
+    "currentAdbDevices": [],
+    "newApksInstalled": false,
+    "newPhysicalAcceptancePassed": false
+  },
+  "repositories": {
+    "client_mobile": {
+      "revision": "142009f5e89d5812be0038e4f087903906f349d1",
+      "trackedDiffSha256": "212b68ec14faa348d0bb1c3a331350ada2124bac9d019cf5256eddc0e3002032",
+      "untrackedFiles": [
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-apk-metadata.txt",
+          "sha256": "8f4a863b8f493a3774ec8925c8410150525518fb0bc5d33e524e237342592c69"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-apk-scan.json",
+          "sha256": "2333b01655e02242f7d2ddcc62d0018bcd2dd2ded332c40b7232238dc9983f93"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-apk-signature.txt",
+          "sha256": "a355997bae3e4812f3506ebb9f734b38d7fa78d5faaaaad4f038ab00c2f76ab6"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-artifact.json",
+          "sha256": "2a3dafb25ececf3438aae91ab159a57b50859148f3244c4d7ca59f5a83ef17ba"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-final.log",
+          "sha256": "be7a8947b3e0cbba16f2fe0ff73777fce7a7102a798d079e1f56d1ad18b4a0ed"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-final.txt",
+          "sha256": "be7a8947b3e0cbba16f2fe0ff73777fce7a7102a798d079e1f56d1ad18b4a0ed"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-heap-failure.log",
+          "sha256": "03dbe7abc64d5d8e68e760b9d1138b9acb0c50bdd2f50356e9320dcff02b7b5f"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-heap-failure.txt",
+          "sha256": "03dbe7abc64d5d8e68e760b9d1138b9acb0c50bdd2f50356e9320dcff02b7b5f"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build.log",
+          "sha256": "f778e0221d11009c9d8171fa2236b40939a5806b3aef245087e8dfd819f403b2"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build.txt",
+          "sha256": "f778e0221d11009c9d8171fa2236b40939a5806b3aef245087e8dfd819f403b2"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-final-test-repairs.log",
+          "sha256": "0d41291a2748cdffe80738bf47a7033e966090287d9388fe165cdf2fd4c9b635"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-final-test-repairs.txt",
+          "sha256": "0d41291a2748cdffe80738bf47a7033e966090287d9388fe165cdf2fd4c9b635"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint-final.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint-final.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-source-manifest.json",
+          "sha256": "82ef9c14a018e2d7b17a4d85f2f65bb49ce6f105cb427e14db59704ca5194bd7"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-targeted.log",
+          "sha256": "a664053e4951c27f1e4b3c0cd4afeb0c3f7762e8a211c3dad7259b5bf73aeb56"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-targeted.txt",
+          "sha256": "a664053e4951c27f1e4b3c0cd4afeb0c3f7762e8a211c3dad7259b5bf73aeb56"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests-final.log",
+          "sha256": "76c1fac8e9ad989c9c447ba2579cebdab8c490ade129cb2f42184bc54db4badb"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests-final.txt",
+          "sha256": "76c1fac8e9ad989c9c447ba2579cebdab8c490ade129cb2f42184bc54db4badb"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests.log",
+          "sha256": "96bcc67a8b5ca3bda1aa2a9003d362e5c11a87775401c96c53b60a6fad794492"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests.txt",
+          "sha256": "96bcc67a8b5ca3bda1aa2a9003d362e5c11a87775401c96c53b60a6fad794492"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-final.log",
+          "sha256": "52c6dfc8f1321f35a9915d061d5ae8aee43a06d5916519dad41f08f50466f914"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-final.txt",
+          "sha256": "52c6dfc8f1321f35a9915d061d5ae8aee43a06d5916519dad41f08f50466f914"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-initial.log",
+          "sha256": "ed190eb4b25e28980f80da5b21d6cc5691365ee63f028ddf3314517cf71863d8"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-initial.txt",
+          "sha256": "ed190eb4b25e28980f80da5b21d6cc5691365ee63f028ddf3314517cf71863d8"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck.log",
+          "sha256": "52c6dfc8f1321f35a9915d061d5ae8aee43a06d5916519dad41f08f50466f914"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck.txt",
+          "sha256": "52c6dfc8f1321f35a9915d061d5ae8aee43a06d5916519dad41f08f50466f914"
+        },
+        {
+          "file": "scripts/build-refresh.test.js",
+          "sha256": "baf58b4bf9cb2b5fa10dca5c08798efde6391dd5c6bb6eeca76680d1fc3a5879"
+        },
+        {
+          "file": "src/lib/native-intent.test.ts",
+          "sha256": "87e5bed091c339c05c6a8fc304f344afeda8da95f8ce23ccc459a426fa3b040a"
+        },
+        {
+          "file": "src/lib/pending-request-link.test.ts",
+          "sha256": "97a50a21d54720fcddf8fb587aed4b3f4082381f8afaace7b19fbf7fc0618ead"
+        },
+        {
+          "file": "src/lib/pending-request-link.ts",
+          "sha256": "8a65a6e7157a4e8b1df0aa05c6cd144c0c97180d1c225ad6456bdcd8adc3b478"
+        },
+        {
+          "file": "src/localization/provider.test.tsx",
+          "sha256": "34b5b4738fe0cd9041e605c3be758f75454943d419c23dddeb448646212a93dd"
+        },
+        {
+          "file": "src/notifications/usePendingRequestLink.test.tsx",
+          "sha256": "51da27e57e8d887900de062892077becc425a517dd84fca94101dbb9ab7fb9c4"
+        },
+        {
+          "file": "src/notifications/usePendingRequestLink.ts",
+          "sha256": "c6063b41b367288d2b30f7d9761da1dfffd861a1affd331273db70f86991af63"
+        }
+      ],
+      "dirtyTreeSha256": "d08f2abf4f1414097d9ac90a780bc1634c35fc6b22eaf2c20e2fea9f89ebeaa8",
+      "codeDeltaSha256": "7160af6d640cec6310660b8c3bef9342464856f3c9ec67c6b68af7017ec2ac9e",
+      "status": [
+        " M scripts/build-controlled-staging.cjs",
+        " M src/app/+native-intent.tsx",
+        " M src/app/_layout.tsx",
+        " M src/lib/stripe-return.test.ts",
+        " M src/notifications/useNotificationNavigation.ts",
+        "?? docs/release-2026-11-05/evidence/resume-apk-metadata.txt",
+        "?? docs/release-2026-11-05/evidence/resume-apk-scan.json",
+        "?? docs/release-2026-11-05/evidence/resume-apk-signature.txt",
+        "?? docs/release-2026-11-05/evidence/resume-artifact.json",
+        "?? docs/release-2026-11-05/evidence/resume-build-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-build-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-build-heap-failure.log",
+        "?? docs/release-2026-11-05/evidence/resume-build-heap-failure.txt",
+        "?? docs/release-2026-11-05/evidence/resume-build.log",
+        "?? docs/release-2026-11-05/evidence/resume-build.txt",
+        "?? docs/release-2026-11-05/evidence/resume-final-test-repairs.log",
+        "?? docs/release-2026-11-05/evidence/resume-final-test-repairs.txt",
+        "?? docs/release-2026-11-05/evidence/resume-lint-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-lint-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-lint.log",
+        "?? docs/release-2026-11-05/evidence/resume-lint.txt",
+        "?? docs/release-2026-11-05/evidence/resume-source-manifest.json",
+        "?? docs/release-2026-11-05/evidence/resume-targeted.log",
+        "?? docs/release-2026-11-05/evidence/resume-targeted.txt",
+        "?? docs/release-2026-11-05/evidence/resume-tests-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-tests-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-tests.log",
+        "?? docs/release-2026-11-05/evidence/resume-tests.txt",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-initial.log",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-initial.txt",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck.log",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck.txt",
+        "?? scripts/build-refresh.test.js",
+        "?? src/lib/native-intent.test.ts",
+        "?? src/lib/pending-request-link.test.ts",
+        "?? src/lib/pending-request-link.ts",
+        "?? src/localization/provider.test.tsx",
+        "?? src/notifications/usePendingRequestLink.test.tsx",
+        "?? src/notifications/usePendingRequestLink.ts"
+      ],
+      "artifact": {
+        "sourceHash": "f63ce2ed991f564251f9b3ddd9290ffa79644dad75ebeb88893557e34375fb8d",
+        "repository": "client_mobile",
+        "apk": "/media/raed/Data/from ubuntu/Transpo_24 workspace/client_mobile/.staging-artifacts/2026-11-05/resume/client_mobile-staging.apk",
+        "sha256": "7c1f542486d10d91229e04ff1e99b77e05dbc05ad8174154cffe7022ee69a5fe",
+        "api": "http://127.0.0.1:57431",
+        "maps": false,
+        "firebase": true,
+        "firebaseProjectId": "transpo24-staging",
+        "firebaseConfigSha256": "f5be8230d338b3cb580610f2e87ec9e1f68982c4f034cb290650260a3ed1d943",
+        "ota": false,
+        "storeArtifact": false,
+        "source": "/tmp/transpo24-staging-client_mobile-JKKlJW/source",
+        "installedOnDevice": false,
+        "deviceAcceptance": "BLOCKED: disconnected Android; no affected flow retest",
+        "gitRevision": "142009f5e89d5812be0038e4f087903906f349d1"
+      },
+      "artifactScan": {
+        "sha256": "7c1f542486d10d91229e04ff1e99b77e05dbc05ad8174154cffe7022ee69a5fe",
+        "package": "com.transpo24.app.staging",
+        "signatureVerified": true,
+        "nativeAbis": [
+          "arm64-v8a"
+        ],
+        "loopbackApiPresent": true,
+        "serverSecretOrLivePublishablePatterns": [],
+        "otaEnabled": false,
+        "firebaseProjectId": "transpo24-staging",
+        "mapsConfigured": false,
+        "currentRecordedSourceInputsMatch": true,
+        "installed": false,
+        "scope": "APK assets/resources pattern scan and manifest/signature inspection; not comprehensive security or provider acceptance"
+      }
+    },
+    "driver_mobile": {
+      "revision": "ce9305372656997aeb820cecd92d8979e96e01bb",
+      "trackedDiffSha256": "83df1cbf0ac9f5a093e5bb89e151621237187e04871b1da322e20f1f1262b329",
+      "untrackedFiles": [
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-apk-metadata.txt",
+          "sha256": "d7f4f9b4ff9c29d72c998561999cc66830fc0b5ed05faf2db2a0c6ca43977bcd"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-apk-scan.json",
+          "sha256": "23065f6e0d2640c9cd4377cab7378a16478bfb76964aec749bae3660889ab1b5"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-apk-signature.txt",
+          "sha256": "a355997bae3e4812f3506ebb9f734b38d7fa78d5faaaaad4f038ab00c2f76ab6"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-artifact.json",
+          "sha256": "b6b58a71d314cc322e79c3b42f579b9d05e402dcd7ea820e8e0630d04701d5a5"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-final.log",
+          "sha256": "e53b737b29de143f82c23481dfe0ba89436d03098a8e7d7b6f9de9d7d912dd7f"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-final.txt",
+          "sha256": "e53b737b29de143f82c23481dfe0ba89436d03098a8e7d7b6f9de9d7d912dd7f"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-first.log",
+          "sha256": "664ba245cb4b33489b80010838be03a32836a290445b252dc05f1eb7770eed7d"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build-first.txt",
+          "sha256": "664ba245cb4b33489b80010838be03a32836a290445b252dc05f1eb7770eed7d"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build.log",
+          "sha256": "664ba245cb4b33489b80010838be03a32836a290445b252dc05f1eb7770eed7d"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-build.txt",
+          "sha256": "664ba245cb4b33489b80010838be03a32836a290445b252dc05f1eb7770eed7d"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-final-test-repairs.log",
+          "sha256": "e31ef302a8e426a804f79ef5b3b86606785d2ccb10bbe3e16c576a74ab940b6c"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-final-test-repairs.txt",
+          "sha256": "e31ef302a8e426a804f79ef5b3b86606785d2ccb10bbe3e16c576a74ab940b6c"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint-final.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint-final.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-lint.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-source-manifest.json",
+          "sha256": "8c8f666ca4aa3e9e8ddd3ec40a8249b55ba11a88ec6acd0d63fd31e2d6dac5a4"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-targeted.log",
+          "sha256": "57729d100297436144d54cb107bd4405244294f5a345ee0cc3759dcfe3de8982"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-targeted.txt",
+          "sha256": "57729d100297436144d54cb107bd4405244294f5a345ee0cc3759dcfe3de8982"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests-final.log",
+          "sha256": "426e25e99716592dc2a4a910362ae0073504ec2a4c83eacc50f8e87afbd3776c"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests-final.txt",
+          "sha256": "426e25e99716592dc2a4a910362ae0073504ec2a4c83eacc50f8e87afbd3776c"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests.log",
+          "sha256": "37c121e9a27f20b8b6091ef5ded1ed00ba4da83a4282a01ea8258e17736fc4f7"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-tests.txt",
+          "sha256": "37c121e9a27f20b8b6091ef5ded1ed00ba4da83a4282a01ea8258e17736fc4f7"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-final.log",
+          "sha256": "ae97388ab5ff6108ad66dc17e9d926fd72dd3102c5f430519d4d0474379ed721"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-final.txt",
+          "sha256": "ae97388ab5ff6108ad66dc17e9d926fd72dd3102c5f430519d4d0474379ed721"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-initial.log",
+          "sha256": "9e20811734a5d3da44d62e38e0006cf9f6763302f58c965932b0a9395bb7b673"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck-initial.txt",
+          "sha256": "9e20811734a5d3da44d62e38e0006cf9f6763302f58c965932b0a9395bb7b673"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck.log",
+          "sha256": "ae97388ab5ff6108ad66dc17e9d926fd72dd3102c5f430519d4d0474379ed721"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-typecheck.txt",
+          "sha256": "ae97388ab5ff6108ad66dc17e9d926fd72dd3102c5f430519d4d0474379ed721"
+        },
+        {
+          "file": "scripts/build-refresh.test.js",
+          "sha256": "baf58b4bf9cb2b5fa10dca5c08798efde6391dd5c6bb6eeca76680d1fc3a5879"
+        },
+        {
+          "file": "src/app/+native-intent.tsx",
+          "sha256": "be41396ad6de2094e316bb80f51f40c4e7bd010fff4194f58c673bb10acbe8ed"
+        },
+        {
+          "file": "src/lib/native-intent.test.ts",
+          "sha256": "24cbaf65c698900987729f54fb9cc968beb6942452cb32bc8a47b26e6cd359b6"
+        },
+        {
+          "file": "src/lib/pending-request-link.test.ts",
+          "sha256": "d2a742d9545039858e82c0d6093d62f4a418c88a9cb9cf098b3a8fd1ccff1c89"
+        },
+        {
+          "file": "src/lib/pending-request-link.ts",
+          "sha256": "ff919f5e9f03d438cd5ad75836182787e3c490307a2394336b444e62fa9f80b1"
+        },
+        {
+          "file": "src/localization/provider.test.tsx",
+          "sha256": "34b5b4738fe0cd9041e605c3be758f75454943d419c23dddeb448646212a93dd"
+        },
+        {
+          "file": "src/notifications/usePendingRequestLink.test.tsx",
+          "sha256": "f5544069ffaa84bbc96dc1d154410920a6368c14d213a59d7fdf7dd8aeae9e4b"
+        },
+        {
+          "file": "src/notifications/usePendingRequestLink.ts",
+          "sha256": "ad7d126b0e06649ba53cf67cddec43a59de2efef0fcb471bcb7dbf487d61ff40"
+        }
+      ],
+      "dirtyTreeSha256": "8046f1b38e9cd3bfa2790319ae7d6d4e9777daedfbc7f5a174ce0dbef20efaf1",
+      "codeDeltaSha256": "209e443594289eb0f8cd8212743f989a35e5bdf7c8e70cf748460e98acbf88f0",
+      "status": [
+        " M scripts/build-controlled-staging.cjs",
+        " M src/app/_layout.tsx",
+        " M src/localization/provider.tsx",
+        " M src/notifications/useNotificationNavigation.ts",
+        "?? docs/release-2026-11-05/evidence/resume-apk-metadata.txt",
+        "?? docs/release-2026-11-05/evidence/resume-apk-scan.json",
+        "?? docs/release-2026-11-05/evidence/resume-apk-signature.txt",
+        "?? docs/release-2026-11-05/evidence/resume-artifact.json",
+        "?? docs/release-2026-11-05/evidence/resume-build-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-build-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-build-first.log",
+        "?? docs/release-2026-11-05/evidence/resume-build-first.txt",
+        "?? docs/release-2026-11-05/evidence/resume-build.log",
+        "?? docs/release-2026-11-05/evidence/resume-build.txt",
+        "?? docs/release-2026-11-05/evidence/resume-final-test-repairs.log",
+        "?? docs/release-2026-11-05/evidence/resume-final-test-repairs.txt",
+        "?? docs/release-2026-11-05/evidence/resume-lint-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-lint-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-lint.log",
+        "?? docs/release-2026-11-05/evidence/resume-lint.txt",
+        "?? docs/release-2026-11-05/evidence/resume-source-manifest.json",
+        "?? docs/release-2026-11-05/evidence/resume-targeted.log",
+        "?? docs/release-2026-11-05/evidence/resume-targeted.txt",
+        "?? docs/release-2026-11-05/evidence/resume-tests-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-tests-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-tests.log",
+        "?? docs/release-2026-11-05/evidence/resume-tests.txt",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-final.log",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-initial.log",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck-initial.txt",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck.log",
+        "?? docs/release-2026-11-05/evidence/resume-typecheck.txt",
+        "?? scripts/build-refresh.test.js",
+        "?? src/app/+native-intent.tsx",
+        "?? src/lib/native-intent.test.ts",
+        "?? src/lib/pending-request-link.test.ts",
+        "?? src/lib/pending-request-link.ts",
+        "?? src/localization/provider.test.tsx",
+        "?? src/notifications/usePendingRequestLink.test.tsx",
+        "?? src/notifications/usePendingRequestLink.ts"
+      ],
+      "artifact": {
+        "sourceHash": "097959fa66b22da40489d8a4efead3d945693416dbc4984016d9361eaed8ed6c",
+        "repository": "driver_mobile",
+        "apk": "/media/raed/Data/from ubuntu/Transpo_24 workspace/driver_mobile/.staging-artifacts/2026-11-05/resume/driver_mobile-staging.apk",
+        "sha256": "8a3c737a2bed200425fdf92440cf812d36bd75c34da004e5e904a048f7e289df",
+        "api": "http://127.0.0.1:57431",
+        "maps": false,
+        "firebase": true,
+        "firebaseProjectId": "transpo24-staging",
+        "firebaseConfigSha256": "b43bdd650b1b4373a20c399f681c724c4c1b8005c1640f577e4955315fdb2fa6",
+        "ota": false,
+        "storeArtifact": false,
+        "source": "/tmp/transpo24-staging-driver_mobile-eCH35c/source",
+        "installedOnDevice": false,
+        "deviceAcceptance": "BLOCKED: disconnected Android; no affected flow retest",
+        "gitRevision": "ce9305372656997aeb820cecd92d8979e96e01bb"
+      },
+      "artifactScan": {
+        "sha256": "8a3c737a2bed200425fdf92440cf812d36bd75c34da004e5e904a048f7e289df",
+        "package": "com.transpo24.driver.staging",
+        "signatureVerified": true,
+        "nativeAbis": [
+          "arm64-v8a"
+        ],
+        "loopbackApiPresent": true,
+        "serverSecretOrLivePublishablePatterns": [],
+        "otaEnabled": false,
+        "firebaseProjectId": "transpo24-staging",
+        "mapsConfigured": false,
+        "currentRecordedSourceInputsMatch": true,
+        "installed": false,
+        "scope": "APK assets/resources pattern scan and manifest/signature inspection; not comprehensive security or provider acceptance"
+      }
+    },
+    "api": {
+      "revision": "e496ca7d6d6a857edf18c207b771fde481348820",
+      "trackedDiffSha256": "1bf57064fb60fb234a4ee924b1cb9ceb4d73e048f420df5ab08127cf57a9071c",
+      "untrackedFiles": [
+        {
+          "file": "docs/release-2026-11-05/evidence/readiness-report-found.txt",
+          "sha256": "3376407117cc079f5d494f282cc83052ac6c460b826fc33fe61a4c6331139166"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-chat-http-final.txt",
+          "sha256": "fd80171bbef4ae8588c22c40fb35f0d9c15c6cf7a47cd7503b293b8189fd2aa7"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-chat-http-initial.json",
+          "sha256": "8b6f8374a5dd942812aa43e0010b0699a95a5814b2b6e0e7ef5318b5eae1dd6b"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-chat-http-initial.txt",
+          "sha256": "9667eb9a271409ae40b788fde35cc05c1fe984d0f7205d4f46011edabb36e8ad"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-chat-http.json",
+          "sha256": "253adeb34ce44c3139f160954862fa1542900eebdc457f190687a28e94066fcf"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-chat-http.txt",
+          "sha256": "fd80171bbef4ae8588c22c40fb35f0d9c15c6cf7a47cd7503b293b8189fd2aa7"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-device.json",
+          "sha256": "5a5c5133e6bf6ebbb0203f39eb099f5d88d4e64507f8a04dab6b00cacc4d8114"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-evidence-private-value-scan.json",
+          "sha256": "fc91492693dc0138852dc567b35da65e15080fe83abad118defea87e510c3327"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-launcher-tests-final.txt",
+          "sha256": "836f877b05e65aa9c7ca915f7d8283584ec1e735a6c174b6fd2fd41437c87521"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-launcher-tests.txt",
+          "sha256": "70b0584aa7a1b75eb091482ebc7153e53b6f423938b82986baab37312cbf1986"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-prerequisites.json",
+          "sha256": "1106fb569b9ca00bc57a488188bb33ba1af68e2fd17301d3cc3a01058a702656"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-smoke.txt",
+          "sha256": "a3dcac4c016a174f84b031b48223f277d6a83c86d47d1f844a619a0b8c402438"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-stripe-forward.txt",
+          "sha256": "faf0e59ec65b18b805e7e80e4a550accef830eb7db6a401b96065ea077cc02f6"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-stripe-preflight.json",
+          "sha256": "a25cb64416cb2186df8bfa48575349ec6eaac6b9fda6cce1f7d348b707ece677"
+        },
+        {
+          "file": "docs/release-2026-11-05/evidence/resume-stripe-preflight.txt",
+          "sha256": "966bb646655a5e4f9f8a3ef8d5689cb7189634f18aa36f32586b8597f8c52b44"
+        },
+        {
+          "file": "scripts/staging/accept-chat-replay.cjs",
+          "sha256": "d21c75977c467bf67571d3e73fe585a905a44491c412fc5c90b259b2d41dfd77"
+        }
+      ],
+      "dirtyTreeSha256": "e623a8fe3523402adc6bc7787c52858ae71e96123a6e38f3e0085b1109011b6c",
+      "codeDeltaSha256": "9098d99c963d22a613f9a06cbe69cf739e7481e9f7d0626de3a95965d84da4f7",
+      "status": [
+        " M docs/release-2026-11-05/DEVICE_RELEASE_CHECKLIST.md",
+        " M docs/release-2026-11-05/EVIDENCE_INDEX.md",
+        " M docs/release-2026-11-05/PRODUCTION_READINESS_REPORT.md",
+        " M docs/release-2026-11-05/TEST_MATRIX.md",
+        " M scripts/staging/README.md",
+        " M scripts/staging/ack-loss-proxy.cjs",
+        " M scripts/staging/run.cjs",
+        "?? docs/release-2026-11-05/evidence/readiness-report-found.txt",
+        "?? docs/release-2026-11-05/evidence/resume-chat-http-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-chat-http-initial.json",
+        "?? docs/release-2026-11-05/evidence/resume-chat-http-initial.txt",
+        "?? docs/release-2026-11-05/evidence/resume-chat-http.json",
+        "?? docs/release-2026-11-05/evidence/resume-chat-http.txt",
+        "?? docs/release-2026-11-05/evidence/resume-device.json",
+        "?? docs/release-2026-11-05/evidence/resume-evidence-private-value-scan.json",
+        "?? docs/release-2026-11-05/evidence/resume-launcher-tests-final.txt",
+        "?? docs/release-2026-11-05/evidence/resume-launcher-tests.txt",
+        "?? docs/release-2026-11-05/evidence/resume-prerequisites.json",
+        "?? docs/release-2026-11-05/evidence/resume-smoke.txt",
+        "?? docs/release-2026-11-05/evidence/resume-stripe-forward.txt",
+        "?? docs/release-2026-11-05/evidence/resume-stripe-preflight.json",
+        "?? docs/release-2026-11-05/evidence/resume-stripe-preflight.txt",
+        "?? scripts/staging/accept-chat-replay.cjs"
+      ]
+    },
+    "admin": {
+      "revision": "750f560b05480cb9e3e52649d2d291e06d469f3c",
+      "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untrackedFiles": [],
+      "dirtyTreeSha256": "f9b03eaca9aa8dbf94763512106bf6c5e1a1a44b28d65bb0ed42dd7c64b683e0",
+      "codeDeltaSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "status": []
+    },
+    "transpo24-public-site": {
+      "revision": "6032feba15a7655bbcaf215eb22cc8076d8f33dd",
+      "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untrackedFiles": [],
+      "dirtyTreeSha256": "f9b03eaca9aa8dbf94763512106bf6c5e1a1a44b28d65bb0ed42dd7c64b683e0",
+      "codeDeltaSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "status": []
+    }
+  },
+  "validation": {
+    "customer": {
+      "suites": 94,
+      "tests": 680,
+      "typecheck": "PASS",
+      "privacy": "PASS",
+      "focusedLint": "PASS",
+      "finalTestOnlyRepairsTargetedRetest": "PASS"
+    },
+    "driver": {
+      "suites": 85,
+      "tests": 550,
+      "typecheck": "PASS",
+      "privacy": "PASS",
+      "focusedLint": "PASS",
+      "finalTestOnlyRepairsTargetedRetest": "PASS"
+    },
+    "api": "Full-AppModule smoke + real workers and webhook negatives PASS; final chat HTTP/fresh-Node-process replay PASS; launcher tests3 PASS; no application src changed"
+  },
+  "runtime": {
+    "composeProject": "transpo24-acceptance-20261105",
+    "services": {
+      "api": "running healthy at final inspection",
+      "proxy": "running healthy at final inspection",
+      "postgres": "running healthy at final inspection",
+      "redis": "running healthy at final inspection"
+    },
+    "stripeTestForwarder": "Both ready and wrapper still running; sustained provider delivery and independent endpoint secrets remain OPEN",
+    "ownAdbReverse": "57431 restored before disconnect; re-establish after reconnection",
+    "probeSessionsStillActive": 0,
+    "faultControlsRestored": true
+  },
+  "limitations": [
+    "No physical RTL/link/attachment/account-switch retest on final APKs",
+    "Existing Expo FCM source/target mismatch: IAM_PERMISSION_DENIED cloudmessaging.messages.create projects/transpo24; target transpo24-staging; no credential or permission changes",
+    "Restricted staging Maps/routing and SMS scope not configured/confirmed; GPS movement not yet requested",
+    "Remaining native capture/refund/additional-charge/wallet/delivery/payment-reconciliation and four full journeys OPEN",
+    "Six-language human review, large text, keyboard and TalkBack OPEN",
+    "iOS/signing/APNs/iPhone acceptance NOT RUN/BLOCKED"
+  ],
+  "hashDefinition": "dirtyTreeSha256 hashes the exact tracked binary diff plus sorted SHA-256 of nonignored untracked files at snapshot; excludes this generated resume-summary.json to avoid self-reference. codeDeltaSha256 hashes the tracked code diff plus changed/untracked code files; docs/evidence excluded from code delta. Ignored logs have durable txt copies; ignored APKs have separate SHA-256 records."
+}

@@ -1,0 +1,6 @@
+{
+  "checkedAt": "2026-11-05T16:46:07.540995+00:00",
+  "filesChecked": 488,
+  "exactKnownPrivateValueFindings": [],
+  "scope": "Exact private staging runtime secrets/OTP and reused Google private key; public Firebase client API keys are expected. Not a comprehensive independent secret audit."
+}

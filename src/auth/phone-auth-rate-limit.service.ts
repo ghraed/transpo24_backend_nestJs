@@ -19,6 +19,7 @@ export class PhoneAuthRateLimitService implements OnModuleDestroy {
   private readonly cooldowns = new Map<string, number>();
   private readonly redis: Redis | null;
   private didLogFallback = false;
+  private redisConnection: Promise<Redis | null> | null = null;
 
   constructor(config: ConfigService) {
     const host = config.get<string>('REDIS_HOST')?.trim();
@@ -132,15 +133,30 @@ export class PhoneAuthRateLimitService implements OnModuleDestroy {
   }
 
   private async getRedis(): Promise<Redis | null> {
-    if (!this.redis) return null;
-    if (this.redis.status === 'ready') return this.redis;
-    try {
-      if (this.redis.status === 'wait') await this.redis.connect();
-      return this.redis;
-    } catch {
+    const redis = this.redis;
+    if (!redis) return null;
+    if (redis.status === 'ready') return redis;
+    if (this.redisConnection) return this.redisConnection;
+    if (redis.status !== 'wait') {
       this.logFallback();
       return null;
     }
+
+    // Phone/IP counters start concurrently. With offline queueing disabled,
+    // every caller must await the same connection before issuing commands.
+    this.redisConnection = Promise.resolve()
+      .then(async () => {
+        await redis.connect();
+        return redis;
+      })
+      .catch(() => {
+        this.logFallback();
+        return null;
+      })
+      .finally(() => {
+        this.redisConnection = null;
+      });
+    return this.redisConnection;
   }
 
   private hash(value: string): string {

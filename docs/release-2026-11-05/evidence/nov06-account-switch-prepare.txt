@@ -1,0 +1,1 @@
+{"customerA":"cmw3ayvff0000sxfv5bmq36zc","customerB":"cmw4uvgiy0000hsfvuwnr5q9c","requestB":"cmw4uvvqz0000n9fviw1iuid4","active":"a","scope":"isolated synthetic identities; only authorized review number; no SMS/contact/provider mutation"}

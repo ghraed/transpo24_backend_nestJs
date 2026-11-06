@@ -1,0 +1,10 @@
+
+> api@0.0.1 test:e2e
+> jest --config ./test/jest-e2e.json --runInBand
+
+
+Test Suites: 2 passed, 2 total
+Tests:       21 passed, 21 total
+Snapshots:   0 total
+Time:        2.243 s
+Ran all test suites.

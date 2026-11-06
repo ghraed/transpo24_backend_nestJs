@@ -572,16 +572,39 @@ export class StripeService {
     intentId: string,
     paymentMethodId: string,
     accountId?: string | null,
+    customerId?: string,
   ) {
     if (accountId) await this.requirePlatformProcessingFees(accountId);
+    let selectedMethod = accountId ? undefined : paymentMethodId;
+    let retryKey: string | undefined;
+    if (accountId && customerId) {
+      const current = await this.retrievePaymentIntent(intentId, accountId);
+      if (current.status === 'requires_payment_method') {
+        // A declined/SCA attempt consumes an unattached Connect clone. Recover
+        // with the currently selected owned card on the SAME persisted intent.
+        const previous = current.last_payment_error?.payment_method;
+        const previousId =
+          typeof previous === 'string' ? previous : previous?.id;
+        retryKey = `additional_expense_${intentId}_${paymentMethodId}_${previousId ?? 'missing'}_retry`;
+        selectedMethod = await this.cloneCard(
+          customerId,
+          paymentMethodId,
+          accountId,
+          `${retryKey}_card`,
+        );
+      }
+    }
     return this.runStripe(() =>
       this.getClient().paymentIntents.confirm(
         intentId,
         {
-          ...(!accountId ? { payment_method: paymentMethodId } : {}),
+          ...(selectedMethod ? { payment_method: selectedMethod } : {}),
           off_session: true,
         },
-        this.accountOptions(accountId),
+        this.accountOptions(
+          accountId,
+          retryKey ? `${retryKey}_confirm` : undefined,
+        ),
       ),
     );
   }

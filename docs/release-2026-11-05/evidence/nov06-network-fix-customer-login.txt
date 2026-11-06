@@ -1,0 +1,11 @@
+Observed control not found; no tap sent.
+Traceback (most recent call last):
+  File "/tmp/transpo24-customer-review-login.py", line 5, in <module>
+    ui('label','Select country');ui('first-edit');ui('text','United');time.sleep(.4);ui('label','United States');ui('first-edit');ui('text','2025550111');ui('hide-keyboard');ui('label','Agree to Terms of Service')
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/transpo24-customer-review-login.py", line 4, in ui
+    def ui(*a):subprocess.run(['python3','/tmp/transpo24-dev-device.py',*a],check=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/tmp/transpo24-dev-device.py', 'label', 'Select country']' returned non-zero exit status 1.

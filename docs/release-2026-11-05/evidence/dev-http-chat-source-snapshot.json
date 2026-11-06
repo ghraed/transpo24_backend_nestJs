@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-05T19:10:53.298983+00:00",
+  "scope": "physical Dev HTTP text/attachment fault tests before normal WebSocket proxy support",
+  "sources": {
+    "scripts/staging/ack-loss-proxy.cjs": "006a44610c44418eece74c0a95e2ba7c22693280dd3e17aae5d2d5d9b51a256c",
+    "scripts/staging/inspect-dev-chat.cjs": "06c5c4a2d51e74c79d91231d2debe6faeabce4f3637be11bb1cc562c175f4fad",
+    "scripts/staging/observe-dev-chat.cjs": "1787a3e0ee127a351ddbbeb58f26ba59f2dc80f66e7d6d910fc0f1e7cc952a42",
+    "src/chat/chat.service.ts": "45cdecad1b70f805b33187d7066d44c091eb077470aef5435ddb6c8b05f5d01a",
+    "src/chat/chat.controller.ts": "ee0fc91450cb0e5bf590f8a00662586a2edcc482fd8dbecf3b13d55e46247047",
+    "src/trips/trips.gateway.ts": "6a0f0fe992310a79e6f723503d69752b64ffc5ec253e31154bab501a26e2bc71"
+  }
+}

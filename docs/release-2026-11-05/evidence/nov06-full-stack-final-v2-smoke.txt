@@ -1,0 +1,7 @@
+PASS full HTTP AppModule: health, missing-consent gate, explicit consent, STAGING push scope. Synthetic seed is not SMS acceptance.
+LIMIT: Stripe CLI supplies a shared TEST signing secret; independent platform/Connect credential isolation remains a release gate.
+PASS real webhook controller/service + PostgreSQL: signed account update, duplicate replay, tamper/live/missing-account/wrong-endpoint-secret rejection. Signatures are generated locally; Stripe delivery and payment transitions remain separate gates.
+PASS real BullMQ booking-confirmations: registered worker consumed and completed a sweep job.
+PASS real BullMQ driver-payouts: registered worker consumed and completed a sweep job.
+PASS family revocation through full HTTP guard.
+NOT READY: provider delivery, bank authorization, physical GPS, native retry and full journeys are not established by this smoke.

@@ -1,0 +1,49 @@
+TAP version 13
+# PASS intentional SIGTERM shutdown exits cleanly
+# PASS unexpected service success exit fails readiness
+# PASS normal smoke exit remains successful
+# PASS child failure is retained
+# PASS unexpected signal is a failure
+# Subtest: scripts/staging/run.test.cjs
+ok 1 - scripts/staging/run.test.cjs
+  ---
+  duration_ms: 64.524762
+  type: 'test'
+  ...
+# Subtest: recognizes the actual chat send/ack frames with ack zero and keeps only identities
+ok 2 - recognizes the actual chat send/ack frames with ack zero and keeps only identities
+  ---
+  duration_ms: 2.409979
+  type: 'test'
+  ...
+# Subtest: never interprets authentication, unrelated events, malformed data or errors as committed chat
+ok 3 - never interprets authentication, unrelated events, malformed data or errors as committed chat
+  ---
+  duration_ms: 0.438213
+  type: 'test'
+  ...
+# Subtest: recognizes only created-message events and does not retain their content
+ok 4 - recognizes only created-message events and does not retain their content
+  ---
+  duration_ms: 0.210109
+  type: 'test'
+  ...
+# PASS unexpected listener exit 0 fails the wrapper and stops sibling
+# PASS unexpected listener exit 1 fails the wrapper and stops sibling
+# PASS intentional shutdown stops both listeners without reporting acceptance failure
+# PASS readiness output never includes captured signing secrets
+# Subtest: scripts/staging/stripe-forward.test.cjs
+ok 3 - scripts/staging/stripe-forward.test.cjs
+  ---
+  duration_ms: 56.701433
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 87.755523

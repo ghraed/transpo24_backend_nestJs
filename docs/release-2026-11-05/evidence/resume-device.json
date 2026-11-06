@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-11-05T16:45:32.340188+00:00",
+  "serial": "7925f75a",
+  "initialAdbStatus": "device",
+  "model": "2107113SG",
+  "product": "vili_global",
+  "androidVersion": "14",
+  "initialInstalledCustomerStagingVersion": "1.0.7",
+  "initialInstalledDriverStagingVersion": "1.0.10",
+  "recentTranspo24Activities": [
+    "com.transpo24.app.dev",
+    "com.transpo24.driver.dev"
+  ],
+  "currentAdbDevices": [],
+  "disconnectedDuringContinuation": true,
+  "physicalChecksAfterFixes": "BLOCKED; no new APK installed, no data cleared, no physical flow accepted",
+  "existingMappingsObserved": [
+    "tcp:3001",
+    "tcp:8081",
+    "tcp:8082"
+  ],
+  "ownMappingRestoredBeforeDisconnect": "tcp:57431; must restore after reconnect",
+  "productionAndDevelopmentPackagesPreserved": true
+}

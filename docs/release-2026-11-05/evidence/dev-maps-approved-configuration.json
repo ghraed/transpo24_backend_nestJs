@@ -1,0 +1,17 @@
+{
+  "at": "2026-11-05T19:10:53.323Z",
+  "ownerApprovedReuse": true,
+  "isolatedOnly": true,
+  "keys": {
+    "GOOGLE_MAPS_SERVER_API_KEY": {
+      "source": "api/.env",
+      "sha256": "c18edd76e0de25b00aecadaf99a445afb559add006bcb80e31e413936df7a404"
+    },
+    "GOOGLE_ROUTES_API_KEY": {
+      "source": "api/.env",
+      "sha256": "c18edd76e0de25b00aecadaf99a445afb559add006bcb80e31e413936df7a404"
+    }
+  },
+  "sourceKeyOrRestrictionsOrProjectPermissionsOrBillingChanged": false,
+  "providerAcceptance": "NOT YET VERIFIED"
+}

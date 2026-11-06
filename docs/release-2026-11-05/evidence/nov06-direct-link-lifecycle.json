@@ -1,0 +1,19 @@
+{
+  "at": "2026-11-06T12:47:58.537288+00:00",
+  "scope": "Physical direct request links only, not push; current Dev APKs; synthetic accounts",
+  "customer": {
+    "foreground": "PASS owned request-status sample",
+    "background": "PASS device-dev/nov06-customer-link-background-current.xml",
+    "normalTermination": "PASS absentPID after second am kill, COLD launch, device-dev/nov06-customer-link-normal-termination-current.xml",
+    "loggedOutConsent": "Prior scoped native customer pending-link/review-login/payment-terms and Nov6 accountB consent evidence retained; not a forced new policy-version test",
+    "wrongOwner": "PASS native accountB requestA403, nov06-customer-native-account-switch.json"
+  },
+  "driver": {
+    "foreground": "PASS owned review-request-details sample",
+    "background": "PASS device-dev/nov06-driver-link-background-settled.xml",
+    "normalTermination": "PASS absentPID after second am kill, COLD launch, device-dev/nov06-driver-link-normal-termination.xml",
+    "loggedOutLogin": "PASS device-dev/nov06-driver-loggedout-link-after-login.xml; normal review flow, no SMS",
+    "wrongOwner": "PASS404 hides assigned job, nov06-driver-wrong-owner-link.json"
+  },
+  "remaining": "All target-route permutations, forced new-version/expired-consent cases and actual push-delivery lifecycle remain open. Generic Dev form cold URL previously reopened cached Wallet; not accepted as a request-link failure or pass. Initial activity-relaunch/network-recovery episode reopened cached Wallet until resend without an upstream-status trace; controlled exceptional recreation/recovery remains unaccepted."
+}

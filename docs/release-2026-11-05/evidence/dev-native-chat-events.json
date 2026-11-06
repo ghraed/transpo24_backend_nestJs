@@ -1,0 +1,31 @@
+{
+  "startedAt": "2026-11-05T18:45:00.506Z",
+  "scope": "direct real AppModule recipient socket observer; sender remains native Dev over faulted HTTP fallback",
+  "roomId": "cmw3w1al200040ffvz6qpxtbq",
+  "events": [
+    {
+      "observedAt": "2026-11-05T18:46:28.723Z",
+      "messageId": "cmw3wct4e00070ffvvmffznwq",
+      "operationId": "mw3wct4c-mj6bd01r7whvni6b87s3w1nhcvn0n5b4ouactish",
+      "type": "TEXT",
+      "bodySha256": "ffe9003a3eb45b7fcc86360d4ce892b8e2943999d1b2c88de5a7520b5772d1c1"
+    },
+    {
+      "observedAt": "2026-11-05T18:50:23.621Z",
+      "messageId": "cmw3whudf00090ffvx214s1u8",
+      "operationId": "mw3whueq-tq17yahmtjz13iottxgdh71zos1hbn3yi2hjmd16z8r",
+      "type": "TEXT",
+      "bodySha256": "ffe9003a3eb45b7fcc86360d4ce892b8e2943999d1b2c88de5a7520b5772d1c1"
+    },
+    {
+      "observedAt": "2026-11-05T18:57:32.116Z",
+      "messageId": "cmw3wr100000c0ffvfxjskk4o",
+      "operationId": "mw3wqzn4-w0t12y8yx8ajyu9u8qmzf51csspfayjeb1nctlm5d",
+      "type": "FILE",
+      "bodySha256": "c86040ce3ad2b08c0a80cec7e96eda42417a998a8d151637334edeaa54335a48"
+    }
+  ],
+  "joinedAt": "2026-11-05T18:45:00.653Z",
+  "stoppedAt": "2026-11-05T19:05:00.670Z",
+  "observerSessionRevoked": true
+}

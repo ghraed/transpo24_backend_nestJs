@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-05T18:15:38.979217+00:00",
+  "oldPid": "27028",
+  "processAbsentBeforeLaunch": true,
+  "method": "am kill while backgrounded; not force-stop",
+  "route": "request-status",
+  "fixture": "owned synthetic chat eligibility request; not financial journey acceptance"
+}

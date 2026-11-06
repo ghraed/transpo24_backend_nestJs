@@ -1,0 +1,3 @@
+11-05 20:10:05.060 32489  3121 I ReactNativeJS: 'T24_LINK intent', true, '<other>'
+11-05 20:10:06.080 32489  3121 I ReactNativeJS: 'T24_LINK startup', '/receive-requests'
+11-05 20:10:06.400 32489  3121 I ReactNativeJS: 'T24_LINK read', '/receive-requests', false, true

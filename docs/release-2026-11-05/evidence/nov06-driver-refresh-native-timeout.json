@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T12:16:41.380094+00:00",
+  "fault": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/driver/me",
+    "delayResponseMs": 0,
+    "delayedRequestStartedAt": "2026-11-06T12:14:23.065Z",
+    "delayedUpstreamStatus": 200
+  },
+  "scope": "Driver A refresh was held 60s but native API timeout is12s. B native login completed after timeout; this attempt does NOT prove late successful refresh after switch. B profile remained B; exact overlap remains open."
+}

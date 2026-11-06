@@ -1,0 +1,88 @@
+{
+  "at": "2026-11-06T11:34:38.077Z",
+  "request": {
+    "id": "cmw3vo31v0000iefvzagd7pkf",
+    "status": "DRIVER_GOING_TO_PICKUP",
+    "customerId": "cmw3ayvff0000sxfv5bmq36zc",
+    "assignedDriverId": "cmw3ahxz300018bfv7uo60jnd",
+    "acceptedOfferId": "cmw3vo3220001iefvdeq8mjw6"
+  },
+  "hold": {
+    "id": "cmw3vtrqe00010ffvxr1dm5jz",
+    "status": "PAYMENT_HELD",
+    "confirmationState": "CONFIRMED",
+    "amount": "10.5",
+    "currency": "CHF",
+    "stripePaymentIntentId": "pi_3UYVTUClGb3s3rvz0btWcmFP",
+    "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+    "capturedAt": null,
+    "releasedAt": null,
+    "cancelledAt": null
+  },
+  "additionalCharges": [
+    {
+      "id": "cmw4vkl7b00010ffv9z2bw36h",
+      "amount": "1",
+      "currency": "CHF",
+      "status": "CAPTURED",
+      "stripeAccountId": "acct_1UXdDLClGb3s3rvz",
+      "stripePaymentIntentId": "pi_3UYlGDClGb3s3rvz03pW5hPb",
+      "paymentFailureReason": null,
+      "savedPaymentMethodLast4": "4242",
+      "approvedAt": "2026-11-06T11:34:08.951Z"
+    }
+  ],
+  "ledger": [],
+  "settlement": {
+    "status": "AUTHORIZED",
+    "collectedAmount": "0",
+    "refundedAmount": "0",
+    "retainedAmount": "0",
+    "driverShareAmount": "0",
+    "platformShareAmount": "0",
+    "driverPayoutState": "NOT_EARNED"
+  },
+  "provider": [
+    {
+      "kind": "hold",
+      "id": "pi_3UYVTUClGb3s3rvz0btWcmFP",
+      "status": "requires_capture",
+      "amount": 1050,
+      "amountCapturable": 1050,
+      "amountReceived": 0,
+      "currency": "chf",
+      "livemode": false,
+      "lastErrorCode": null,
+      "paymentMethodPresent": true,
+      "latestCharge": {
+        "id": "ch_3UYVTUClGb3s3rvz0vsZukMX",
+        "paid": true,
+        "captured": false,
+        "amount": 1050,
+        "amountRefunded": 0,
+        "refundIds": []
+      }
+    },
+    {
+      "kind": "additional",
+      "id": "pi_3UYlGDClGb3s3rvz03pW5hPb",
+      "status": "succeeded",
+      "amount": 100,
+      "amountCapturable": 0,
+      "amountReceived": 100,
+      "currency": "chf",
+      "livemode": false,
+      "lastErrorCode": null,
+      "paymentMethodPresent": true,
+      "latestCharge": {
+        "id": "ch_3UYlGDClGb3s3rvz0Gfr5XC3",
+        "paid": true,
+        "captured": true,
+        "amount": 100,
+        "amountRefunded": 0,
+        "refundIds": []
+      }
+    }
+  ],
+  "scope": "read-only actual synthetic database and Stripe TEST objects; no invoice/image/token/client-secret data"
+}

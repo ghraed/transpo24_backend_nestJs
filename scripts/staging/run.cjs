@@ -5,6 +5,18 @@ const { root, runtime, load } = require('./environment.cjs');
 const env = { PATH: process.env.PATH, LANG: 'C.UTF-8', ...load() };
 const action = process.argv[2];
 const actions = {
+  'seed-dev-private-file': [path.join(__dirname, 'seed-dev-private-file.cjs')],
+  'dev-driver-switch': [path.join(__dirname, 'dev-driver-switch.cjs'), ...process.argv.slice(3)],
+  'inspect-dev-finance': [path.join(__dirname, 'inspect-dev-finance.cjs'), ...process.argv.slice(3)],
+  'dev-account-switch': [path.join(__dirname, 'dev-account-switch.cjs'), ...process.argv.slice(3)],
+  'inspect-dev-identity': [path.join(__dirname, 'inspect-dev-identity.cjs')],
+  'probe-dev-routes': [path.join(__dirname, 'probe-dev-routes.cjs')],
+  'inspect-dev-chat': [path.join(__dirname, 'inspect-dev-chat.cjs'), ...process.argv.slice(3)],
+  'observe-dev-chat': [path.join(__dirname, 'observe-dev-chat.cjs'), ...process.argv.slice(3)],
+  'prepare-dev-chat': [path.join(__dirname, 'prepare-dev-chat.cjs')],
+  'seed-dev-financial': [path.join(__dirname, 'seed-dev-financial.cjs')],
+  'probe-otp-redis': [path.join(__dirname, 'probe-otp-redis.cjs')],
+  'accept-chat-replay': [path.join(__dirname, 'accept-chat-replay.cjs'), ...process.argv.slice(3)],
   migrate: [path.join(root, 'node_modules/prisma/build/index.js'), 'migrate', 'deploy', '--config', path.join(root, 'prisma.config.ts')],
   serve: [path.join(__dirname, 'serve.cjs')],
   smoke: [path.join(__dirname, 'smoke.cjs')],

@@ -1,0 +1,74 @@
+{
+  "at": "2026-11-06T12:51:34.385332+00:00",
+  "status": "NOT READY",
+  "nativeScope": "Xiaomi7925f75a Android14; only customer/driver Dev APKs; source-driven Metro results separate from signed RC/iOS",
+  "finalTests": {
+    "customer": {
+      "suites": 96,
+      "tests": 694,
+      "exitCode": 0,
+      "log": "client_mobile/docs/release-2026-11-05/evidence/nov06-tests-final-v8.txt"
+    },
+    "driver": {
+      "suites": 87,
+      "tests": 558,
+      "exitCode": 0,
+      "log": "driver_mobile/docs/release-2026-11-05/evidence/nov06-tests-final-v7.txt"
+    },
+    "apiUnit": {
+      "suites": 93,
+      "tests": 1176,
+      "exitCode": 0
+    },
+    "apiHttp": {
+      "suites": 2,
+      "tests": 21,
+      "exitCode": 0
+    },
+    "apiPayments": {
+      "suites": 15,
+      "tests": 271,
+      "exitCode": 0
+    },
+    "typePrivacyFocusedLint": "PASS final changed-file lint: customer38files0errors28warnings,driver26files0errors20warnings. Driver test-only Probe render assignment moved into effect and targeted2PASS; original failure retained.",
+    "fullStackSmoke": "PASS real workers/webhook controllers, locally signed smoke distinct from provider-origin events"
+  },
+  "newPhysicalPassed": [
+    "Native sender WebSocket text ACK/event loss with actual socket close, ordinary process restart/retry1row1event; identical new operation distinct",
+    "Attachment native HTTPupload + WS event loss, actual socket close, ordinary restart/retry1file/message/event",
+    "Both apps private download released after logout cannot launch viewer; customer stale cache removed",
+    "Driver delayed fresh200 profile refresh after logout leaves Login; A-to-B late success still open",
+    "Native customerB wrong-owner403, driverB wrong-owner404; account consent/login samples",
+    "Current normal Arabic RTL reload and six selections in both apps at font1.3; native sampled draft process restore",
+    "TEST additionalCHF1 capture samePI/recovery after dropped successful response and ordinary restart; native cancellationCHF1.58 capture/CHF8.92 reserve release",
+    "Network diagnostic misclassified as ownership fixed; exact connection drop/recovery physically accepted",
+    "Literal-colon labels/raw service-key fallback fixed and native review sample accepted",
+    "Owner confirmed sampled customerLogin TalkBack speech/announcements; tutorial finished; broader task navigation open"
+  ],
+  "remaining": [
+    "Full A-to-B overlapping refresh/navigation/draft/upload cases",
+    "Remaining destination/new-consent-version link permutations and controlled exceptional activity-recreation/network-recovery repro",
+    "Delivered capture, true refund, additionalSCA3184, supported wallets, delivery confirmation and remaining payment interruption reconciliation",
+    "All four complete transport/proof/completion/rating journeys; fresh routing/GPS prerequisites blocked",
+    "Broader draft/photo restoration, large-text/keyboard/full TalkBack and human linguistic/legal review",
+    "Signed AndroidRC and all iOS/APNs/native/a11y checks",
+    "Retained dependency/operational release gates and missing contemporaneous per-event Metro hashes where not recorded"
+  ],
+  "providerBlockers": {
+    "routes": "Google403 API_KEY_IP_ADDRESS_BLOCKED with approved reused existing key; no restriction changed",
+    "push": "Existing-key Expo source transpo24 vs app target transpo24-staging; genuine receipt FCM403 IAM_PERMISSION_DENIED cloudmessaging.messages.create; no credentials/IAM/metadata/directFCM substitute",
+    "sms": "Unconfigured staging Twilio; authorized review code is not SMS delivery"
+  },
+  "ownerNextActions": [
+    "Decide approved restricted routing access for isolated host; physical movement requested only after actual provider access passes",
+    "Resolve existing-key Expo source/target routing within existing-key requirement; specifically authorize any required configuration change before action",
+    "Provide/configure approved staging SMS service/destination",
+    "Provide human full language/a11y review and signed AndroidRC/iOS build/device prerequisites"
+  ],
+  "restored": [
+    "Both original Dev preference archives and encrypted sign-ins verified byte-for-byte",
+    "Original USB3001->3001,8081->8081,8082->8082 verified",
+    "Original font1.0/accessibility and original fault-control bytes verified"
+  ],
+  "retained": "All4 isolated containers healthy, official TEST forwarder alive, dedicated DB/Redis volumes/credentials/backups/TEST financial history/evidence retained. No push/deploy/OTA/livefunds/data wipe."
+}

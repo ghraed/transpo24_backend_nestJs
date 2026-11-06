@@ -1,0 +1,9 @@
+[Nest] 2695800  - 11/05/2026, 8:21:44 PM     LOG [TwilioVerifyService] {"event":"twilio_verify_send_accepted","phone":"+961••••456","status":"pending"}
+[Nest] 2695800  - 11/05/2026, 8:21:44 PM   ERROR [TwilioVerifyService] {"event":"twilio_verify_send_failed","phone":"+961••••044","status":400,"providerCode":60610}
+[Nest] 2695800  - 11/05/2026, 8:21:44 PM     LOG [TwilioVerifyService] {"event":"play_review_verification_requested","phone":"+417••••567"}
+
+Test Suites: 8 passed, 8 total
+Tests:       82 passed, 82 total
+Snapshots:   0 total
+Time:        1.75 s, estimated 2 s
+Ran all test suites matching src/auth.

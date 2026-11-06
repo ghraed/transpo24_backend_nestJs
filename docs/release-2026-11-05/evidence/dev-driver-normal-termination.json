@@ -1,0 +1,6 @@
+{
+  "beforePid": "26610",
+  "afterPid": "",
+  "method": "am kill while backgrounded; not force-stop",
+  "terminated": true
+}

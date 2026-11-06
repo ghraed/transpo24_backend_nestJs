@@ -1,0 +1,32 @@
+{
+  "label": "websocket",
+  "startedAt": "2026-11-06T10:24:53.218Z",
+  "scope": "direct real AppModule recipient WebSocket observer; native sender WebSocket fault tested separately",
+  "roomId": "cmw3w1al200040ffvz6qpxtbq",
+  "events": [
+    {
+      "observedAt": "2026-11-06T10:28:08.356Z",
+      "messageId": "cmw4tzsin00080ffvok3chw9f",
+      "operationId": "mw4tzs5x-2dkmwvrxwotmjvdawjs92fb4a5wz0cxqndphyn3lyhw9",
+      "type": "TEXT",
+      "bodySha256": "51598851ae3b74bfd275b2db92fa656c74472f9f8f68dff2670b683ff2ea2414"
+    },
+    {
+      "observedAt": "2026-11-06T10:29:32.087Z",
+      "messageId": "cmw4u1l4b000a0ffvnsq2myh6",
+      "operationId": "mw4u1krw-r9n3i6s4r4anfeuxc4p39r3uu2guzg0mmet3moetfdfa",
+      "type": "TEXT",
+      "bodySha256": "51598851ae3b74bfd275b2db92fa656c74472f9f8f68dff2670b683ff2ea2414"
+    },
+    {
+      "observedAt": "2026-11-06T10:31:48.659Z",
+      "messageId": "cmw4u4ii7000d0ffvq7u922rl",
+      "operationId": "mw4u4hwk-mwnr73ex4pk7d9vt66bzfu1jrmt8vxza8a34w4kjvji",
+      "type": "FILE",
+      "bodySha256": "c86040ce3ad2b08c0a80cec7e96eda42417a998a8d151637334edeaa54335a48"
+    }
+  ],
+  "joinedAt": "2026-11-06T10:24:53.363Z",
+  "stoppedAt": "2026-11-06T10:44:52.791Z",
+  "observerSessionRevoked": true
+}

@@ -38,6 +38,7 @@ services:
     command: ["node", "scripts/staging/run.cjs", "proxy"]
     volumes:
       - .:/workspace/scripts/staging:ro
+      - ../../node_modules:/workspace/node_modules:ro
       - ../../.staging-local:/workspace/.staging-local
     depends_on:
       api: { condition: service_healthy }

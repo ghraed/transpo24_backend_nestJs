@@ -1,0 +1,2 @@
+native-dev-capture: GRACE_PERIOD
+{"observedAt":"2026-11-05T18:32:42.802Z","purpose":"native-dev-capture","requestId":"cmw3vo31v0000iefvzagd7pkf","requestStatus":"QUOTED","assigned":false,"paymentHoldPresent":true,"confirmationState":"GRACE_PERIOD","appPaymentStatus":"PAYMENT_HOLD_PENDING","stripeAccountId":"acct_1UXdDLClGb3s3rvz","stripePaymentIntentId":null,"authorizedAt":null,"approvalDeadlineAt":null}

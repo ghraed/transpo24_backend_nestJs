@@ -1,0 +1,29 @@
+{
+  "logoutUiAt": "2026-11-06T12:20:17.837482+00:00",
+  "faultAtLogout": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/driver/me",
+    "delayResponseMs": 0,
+    "bypassConditionalCache": true,
+    "delayedRequestStartedAt": "2026-11-06T12:20:11.588Z",
+    "delayedUpstreamStatus": 200
+  },
+  "scope": "Native driver A pending refresh followed by normal UI logout; full A-to-B late success separately open",
+  "releasedFault": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/driver/me",
+    "delayResponseMs": 0,
+    "bypassConditionalCache": true,
+    "delayedRequestStartedAt": "2026-11-06T12:20:11.588Z",
+    "delayedUpstreamStatus": 200,
+    "delayedResponseReleasedAt": "2026-11-06T12:20:21.598Z"
+  },
+  "expected": "Normal logout remains effective when old successful profile refresh is released before network timeout",
+  "actual": "Login remained, no old driver profile/navigation or stale alert",
+  "result": "PASS scoped logout/late successful native refresh",
+  "afterEvidence": "device-dev/nov06-driver-fresh-refresh-after-release.xml"
+}

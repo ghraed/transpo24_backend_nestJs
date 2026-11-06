@@ -1,0 +1,17 @@
+{
+  "at": "2026-11-06T12:41:54.434835+00:00",
+  "fault": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "dropGetPath": "/customer/requests/cmw4y1z3l0000hkfvobzb42zc/status",
+    "droppedGetConnections": 4,
+    "droppedGetAt": "2026-11-06T12:41:43.870Z"
+  },
+  "expected": "Dropped actual status connection produces connectivity message, not an ownership denial",
+  "actual": "Native shows Cannot reach backend ... backend network access; not You do not have access",
+  "evidence": "device-dev/nov06-network-fix-disconnected.xml",
+  "scope": "Exact synthetic GET socket destroyed by isolated proxy; USB and other endpoints remained connected; no mutations",
+  "recovery": "PASS native refresh after removing exact-route fault restored DRAFT/files and cleared connection error",
+  "recoveryEvidence": "device-dev/nov06-network-fix-recovered.xml"
+}

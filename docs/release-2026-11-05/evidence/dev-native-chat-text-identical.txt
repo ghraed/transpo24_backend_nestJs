@@ -1,0 +1,1 @@
+PASS text-identical-new-operation: same operation has exactly one committed row and one observed event; 0 chat file row(s).

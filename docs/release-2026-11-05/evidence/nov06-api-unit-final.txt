@@ -1,0 +1,65 @@
+
+> api@0.0.1 test:unit
+> jest --runInBand
+
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: Indexing all PDF objects
+[Nest] 3739091  - 11/06/2026, 2:27:26 PM     LOG [TranslationService] {"event":"translation_completed","mode":"single","sourceLanguage":"en","targetLanguage":"fr","textCount":1,"cacheHits":0,"providerCalls":1}
+[Nest] 3739091  - 11/06/2026, 2:27:26 PM     LOG [TranslationService] {"event":"translation_completed","mode":"batch","sourceLanguage":"en","targetLanguage":"fr","textCount":3,"cacheHits":0,"providerCalls":2}
+[Nest] 3739091  - 11/06/2026, 2:27:26 PM     LOG [TranslationService] {"event":"translation_completed","mode":"single","sourceLanguage":"en","targetLanguage":"es","textCount":1,"cacheHits":1,"providerCalls":0}
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=ACTION_REQUIRED, afterPickup=false
+[Nest] 3739091  - 10/28/2026, 12:15:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=ACTION_REQUIRED, afterPickup=false
+[Nest] 3739091  - 11/02/2026, 11:59:00 AM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=RENEWING, afterPickup=false
+[Nest] 3739091  - 11/02/2026, 11:59:00 AM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=RENEWING, afterPickup=true
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=ACTION_REQUIRED, afterPickup=false
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Booking authorization failed: request=request, state=AUTHORIZING, afterPickup=false
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 10/28/2026, 12:10:00 PM    WARN [DelayedBookingPaymentsService] Captured booking payment requires review: request=request, intent=pi_booking_hold_0
+[Nest] 3739091  - 11/08/2026, 12:00:00 PM   ERROR [FurnitureReservationsService] Furniture reservation request requires retry: Error: push unavailable
+[Nest] 3739091  - 11/06/2026, 2:27:29 PM   ERROR [PaymentsService] Additional expense notification failed: Error: Push unavailable
+[Nest] 3739091  - 11/06/2026, 2:27:30 PM    WARN [DriverPayoutQueueService] Driver payout queue is disabled because REDIS_HOST is not configured.
+[Nest] 3739091  - 11/06/2026, 2:27:30 PM    WARN [DriverPayoutQueueService] Unable to enqueue driver payout for trip trip-1: queue is not ready.
+[Nest] 3739091  - 11/06/2026, 2:27:31 PM    WARN [NotificationsService] Expo push ticket error for BOOKING_FUNDS_RESERVED: Rate exceeded
+[Nest] 3739091  - 11/06/2026, 2:27:31 PM   ERROR [NotificationsService] Push notification dispatch failed for BOOKING_FUNDS_RESERVED: The push provider did not accept the notification.
+[Nest] 3739091  - 11/06/2026, 2:27:31 PM    WARN [PaymentsService] Payout succeeded but notification failed for trip trip.
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM     LOG [TwilioVerifyService] {"event":"twilio_verify_send_accepted","phone":"+961••••456","status":"pending"}
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   ERROR [TwilioVerifyService] {"event":"twilio_verify_send_failed","phone":"+961••••044","status":400,"providerCode":60610}
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM     LOG [TwilioVerifyService] {"event":"play_review_verification_requested","phone":"+417••••567"}
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   ERROR [NotificationsService] Push notification dispatch failed for DRIVER_ARRIVED_PICKUP: Push unavailable
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   ERROR [NotificationsService] Push notification dispatch failed for BOOKING_FUNDS_RESERVED: Push unavailable
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   DEBUG [PushTokensService] Registered Expo push token for user user (CUSTOMER).
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   DEBUG [PushTokensService] Registered Expo push token for user user (DRIVER).
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   DEBUG [PushTokensService] Registered Expo push token for user user (CUSTOMER).
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   DEBUG [PushTokensService] Registered Expo push token for user user (DRIVER).
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   DEBUG [PushTokensService] Registered Expo push token for user user (CUSTOMER).
+[Nest] 3739091  - 11/06/2026, 2:27:32 PM   DEBUG [PushTokensService] Registered Expo push token for user user (DRIVER).
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM    WARN [SwissCarInfoVinDecoder] {"event":"vin_decode_provider_http_error","provider":"swisscarinfo","status":429}
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM   ERROR [SwissCarInfoVinDecoder] {"event":"vin_decode_provider_configuration_error","provider":"swisscarinfo","variable":"SWISSCARINFO_API_KEY"}
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM   ERROR [SwissCarInfoVinDecoder] {"event":"vin_decode_provider_configuration_error","provider":"swisscarinfo","variable":"SWISSCARINFO_API_URL"}
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM    WARN [WebPushProvider] Removed expired web push subscription sub-expired after status 410.
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM    WARN [WebPushProvider] Web push delivery failed for subscription sub-temporary: 503 Service unavailable
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM   DEBUG [PushTokensService] Registered Expo push token for user customer-1 (CUSTOMER).
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM   DEBUG [PushTokensService] Registered Expo push token for user customer-driver-1 (DRIVER).
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM    WARN [OneAutoApiVinDecoder] {"event":"vin_decode_provider_http_error","provider":"oneautoapi","status":503}
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM   ERROR [OneAutoApiVinDecoder] {"event":"vin_decode_provider_configuration_error","provider":"oneautoapi","variable":"ONEAUTOAPI_API_KEY"}
+[Nest] 3739091  - 11/06/2026, 2:27:33 PM   ERROR [OneAutoApiVinDecoder] {"event":"vin_decode_provider_configuration_error","provider":"oneautoapi","variable":"ONEAUTOAPI_API_URL"}
+
+Test Suites: 93 passed, 93 total
+Tests:       1176 passed, 1176 total
+Snapshots:   0 total
+Time:        39.182 s, estimated 40 s
+Ran all test suites.

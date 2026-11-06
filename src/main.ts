@@ -9,7 +9,7 @@ async function bootstrap() {
 
   configureHttpApplication(app);
 
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  await app.listen(process.env.PORT ?? 3001, '0.0.0.0');
 }
 
 void bootstrap();

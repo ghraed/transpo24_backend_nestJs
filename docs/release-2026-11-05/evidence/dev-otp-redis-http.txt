@@ -1,0 +1,1 @@
+PASS full API + real Redis: first review send increments both counters, cooldown persisted, immediate repeat429. No SMS sent.

@@ -1,0 +1,13 @@
+{
+  "fault": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/request-files/cmw4y1z3r0001hkfv6cpx1ap7/content",
+    "delayResponseMs": 30000,
+    "delayedRequestStartedAt": "2026-11-06T12:22:40.214Z",
+    "delayedUpstreamStatus": 200,
+    "delayedResponseAbandonedAt": "2026-11-06T12:23:10.224Z"
+  },
+  "scope": "Native file download connection abandoned before30s release; normal logout succeeded, but late downloaded-byte completion not accepted by this attempt"
+}

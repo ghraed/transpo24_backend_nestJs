@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-06T12:45:02.108853+00:00",
+  "device": "7925f75a",
+  "apps": {
+    "com.transpo24.app.dev": {
+      "sha256": "2d8e6f43b18273d91cf112bdf1dcee8310c17ebdae3bcea5ee2c0406afed4c4c",
+      "matchesInstalledBaseline": true
+    },
+    "com.transpo24.driver.dev": {
+      "sha256": "565dd394a8245805898ee9cdbe3e03d50748d9554d297c89980deb353f75b35d",
+      "matchesInstalledBaseline": true
+    }
+  }
+}

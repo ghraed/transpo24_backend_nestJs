@@ -1,0 +1,23 @@
+{
+  "at": "2026-11-06T10:47:15.023554+00:00",
+  "before": "After normal synthetic driver logout the delayed authenticated PDF launched MIUI resolver; chooser canceled without opening/sharing.",
+  "afterFirstFix": "No viewer launch; obsolete component error alert remained.",
+  "afterFinalFix": "Normal login screen after released response; no chooser and no stale error alert.",
+  "scope": "Driver Dev physical; customer and driver deferred-response regressions; customer physical retest pending",
+  "fault": {
+    "roomId": "cmw3w1al200040ffvz6qpxtbq",
+    "forceHttp": false,
+    "armed": false,
+    "blocked": false,
+    "delayPath": "/request-files/cmw4u4ii5000c0ffvako05uti/content",
+    "delayResponseMs": 30000,
+    "delayedRequestStartedAt": "2026-11-06T10:45:15.577Z",
+    "delayedResponseReleasedAt": "2026-11-06T10:45:45.587Z"
+  },
+  "evidence": [
+    "device-dev/nov06-file-race-logged-out.xml",
+    "device-dev/nov06-file-race-after-cancel.xml",
+    "device-dev/nov06-file-final-logged-out-before-release.xml",
+    "device-dev/nov06-file-final-after-release.xml"
+  ]
+}

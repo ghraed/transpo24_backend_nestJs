@@ -1,0 +1,3 @@
+Keyboard hidden.
+Entered private synthetic code as one normalized input; value omitted.
+Only verified authorized synthetic review number used; no SMS sent by review configuration.

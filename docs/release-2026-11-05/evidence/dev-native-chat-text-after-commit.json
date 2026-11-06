@@ -1,0 +1,33 @@
+{
+  "observedAt": "2026-11-05T18:48:42.345Z",
+  "phase": "text-after-commit",
+  "senderApp": "com.transpo24.driver.dev",
+  "roomId": "cmw3w1al200040ffvz6qpxtbq",
+  "requestId": "cmw3vo31v0000iefvzagd7pkf",
+  "control": {
+    "endpoint": "/chat/rooms/cmw3w1al200040ffvz6qpxtbq/messages",
+    "roomId": "cmw3w1al200040ffvz6qpxtbq",
+    "armed": false,
+    "blocked": true,
+    "operationId": "mw3wct4c-mj6bd01r7whvni6b87s3w1nhcvn0n5b4ouactish",
+    "messageId": "cmw3wct4e00070ffvvmffznwq",
+    "committedResponseStatus": 201,
+    "responseDeliberatelyDropped": true
+  },
+  "operationRows": 1,
+  "operationEvents": 1,
+  "chatFileRows": 0,
+  "totalMessageRows": 1,
+  "rows": [
+    {
+      "id": "cmw3wct4e00070ffvvmffznwq",
+      "operationId": "mw3wct4c-mj6bd01r7whvni6b87s3w1nhcvn0n5b4ouactish",
+      "type": "TEXT",
+      "senderId": "cmw3ahxz300018bfv7uo60jnd",
+      "attachmentUrl": null,
+      "createdAt": "2026-11-05T18:46:28.718Z",
+      "bodySha256": "ffe9003a3eb45b7fcc86360d4ce892b8e2943999d1b2c88de5a7520b5772d1c1"
+    }
+  ],
+  "scope": "actual native Dev sender with HTTP acknowledgment fault; separate direct recipient socket observer; not sender WebSocket acknowledgment-loss acceptance"
+}

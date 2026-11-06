@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T12:47:58.537288+00:00",
+  "scope": "Current Android Dev APKs, sampled native screens at font1.3; not whole-flow or human translation acceptance",
+  "expected": "Normal in-app Arabic switch applies native mirrored layout without force-stop; all six selections work; returnLTR",
+  "actual": {
+    "customer": "PASS Arabic samePID24837, mirrored Wallet/Profile; French returnedLTR; DE/ES/IT/EN selected normally",
+    "driver": "PASS Arabic samePID10154, mirrored Jobs; French returnedLTR; DE/ES/IT/EN selected normally",
+    "literalLabels": "PASS native Goods review sample and real-i18n regression all six languages",
+    "talkBack": "Owner confirmed speech and sampled customerLogin announcements; full swipe order/task flow not accepted"
+  },
+  "settings": "Original font1.0/accessibility settings restored and verified in nov06-device-settings-restored.json",
+  "limits": "Six complete journeys, human linguistic/legal review, broader large text/keyboard/TalkBack and all iOS remain open"
+}

@@ -1,0 +1,33 @@
+{
+  "at": "2026-11-06T12:47:58.537288+00:00",
+  "services": [
+    {
+      "service": "api",
+      "health": "healthy"
+    },
+    {
+      "service": "postgres",
+      "health": "healthy"
+    },
+    {
+      "service": "proxy",
+      "health": "healthy"
+    },
+    {
+      "service": "redis",
+      "health": "healthy"
+    }
+  ],
+  "stripeTestForwarderRunning": true,
+  "usbOriginalMappingsVerified": true,
+  "reverseRules": [
+    "UsbFfs tcp:3001 tcp:3001",
+    "UsbFfs tcp:8081 tcp:8081",
+    "UsbFfs tcp:8082 tcp:8082"
+  ],
+  "appPreferences": "Original Nov6 bytes verified in dev-original-state-restored-20261106.json; original account server sessions not revoked",
+  "settings": "Original font1.0 and accessibility verified",
+  "faultControls": "Original Nov6 control bytes restored; no active drop/delay/forceHTTP fault",
+  "retained": "Dedicated PostgreSQL/Redis volumes, credentials, original preference archives, APK/evidence and owned TEST financial history retained",
+  "releaseDecision": "NOT READY"
+}

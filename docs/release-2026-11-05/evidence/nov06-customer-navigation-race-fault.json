@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-11-06T10:55:57.304814+00:00",
+  "fault": {
+    "delayPath": "/customer/requests/cmw3vo31v0000iefvzagd7pkf/status",
+    "delayResponseMs": 45000,
+    "blocked": false,
+    "armed": false,
+    "forceHttp": false,
+    "delayedRequestStartedAt": "2026-11-06T10:54:44.123Z",
+    "delayedUpstreamStatus": 200,
+    "delayedResponseReleasedAt": "2026-11-06T10:55:29.123Z"
+  },
+  "scope": "synthetic A owned request GET delayed; UI logout then B review login; verify result separately; first logout tap found no control after startup transition and was retried from profile"
+}

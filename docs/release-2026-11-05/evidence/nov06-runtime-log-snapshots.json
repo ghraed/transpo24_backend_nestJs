@@ -1,0 +1,18 @@
+{
+  "at": "2026-11-06T12:54:58.899132+00:00",
+  "scope": "Frozen byte snapshots for immutable evidence; original retained logs may receive future task-owned runtime events. Hash manifests exclude the live originals.",
+  "files": [
+    {
+      "live": "nov06-stripe-forward.txt",
+      "snapshot": "nov06-stripe-forward-frozen.txt",
+      "sha256": "c0db98db3bf888ce57529318961b0cdbbab0a7ae6dee30706eae6dbde696d453",
+      "bytes": 426
+    },
+    {
+      "live": "stripe-provider-webhooks.jsonl",
+      "snapshot": "nov06-provider-webhooks-frozen.jsonl",
+      "sha256": "1c1cc5a5b420c6ee7cbfad210a398bf2887f0c8d5e0c90048dcb3f269069799b",
+      "bytes": 4920
+    }
+  ]
+}

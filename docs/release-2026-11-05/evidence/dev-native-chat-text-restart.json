@@ -1,0 +1,9 @@
+{
+  "at": "2026-11-05T18:48:47.357425+00:00",
+  "beforePid": "2627",
+  "processAbsentBeforeRestart": true,
+  "ordinaryBackgroundKill": true,
+  "faultUnblockedAfterProcessExit": true,
+  "committedHistoryHeldUntilReplay": true,
+  "operationId": "mw3wct4c-mj6bd01r7whvni6b87s3w1nhcvn0n5b4ouactish"
+}

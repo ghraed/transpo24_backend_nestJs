@@ -1621,6 +1621,7 @@ export class PaymentsService {
           intentId,
           method.id,
           chargeAccountId,
+          stripeCustomerId,
         );
       await this.syncStripeAdditionalExpense(intent, chargeAccountId);
       if (intent.status !== 'succeeded')

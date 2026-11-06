@@ -1,0 +1,10 @@
+{
+  "customerId": "cmw3ayvff0000sxfv5bmq36zc",
+  "requestId": "cmw4y1z3l0000hkfvobzb42zc",
+  "fileId": "cmw4y1z3r0001hkfv6cpx1ap7",
+  "fileName": "T24_ACCEPTANCE_CUSTOMER_SESSION_20261106.pdf",
+  "fileSha256": "2d62f23f1432848ffa45f776f490c23ce522ef73f9eb707b0d3124d130e44a0e",
+  "fileBytes": 601,
+  "createdAt": "2026-11-06T12:21:48.668Z",
+  "scope": "Seeded synthetic DRAFT plus task-owned PDF bytes for native read/account race only. No upload, funded booking, transport or provider acceptance."
+}

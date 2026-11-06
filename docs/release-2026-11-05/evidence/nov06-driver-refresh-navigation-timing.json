@@ -1,0 +1,14 @@
+{
+  "fault": {
+    "armed": false,
+    "blocked": false,
+    "forceHttp": false,
+    "delayPath": "/driver/me",
+    "delayResponseMs": 8000,
+    "delayedRequestStartedAt": "2026-11-06T12:17:53.843Z",
+    "delayedUpstreamStatus": 304,
+    "delayedResponseReleasedAt": "2026-11-06T12:17:53.642Z"
+  },
+  "accepted": false,
+  "reason": "Automation navigated before profile touches settled; logout control was not tapped. No late-refresh acceptance inferred."
+}
