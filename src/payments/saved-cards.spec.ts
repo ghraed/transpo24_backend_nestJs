@@ -165,4 +165,45 @@ describe('Saved card security', () => {
       service.getCustomerSavedCards('user_without_cards'),
     ).resolves.toEqual([]);
   });
+
+  it('repairs a missing Stripe customer before loading the default card', async () => {
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({ stripeCustomerId: 'cus_missing' })
+      .mockResolvedValueOnce({
+        id: 'user_owner',
+        email: 'owner@example.com',
+        name: 'Owner',
+        stripeCustomerId: 'cus_missing',
+      });
+    const update = jest.fn().mockResolvedValue({});
+    const ensureCustomer = jest
+      .spyOn(stripe, 'ensureCustomer')
+      .mockResolvedValue('cus_recreated');
+    const getDefault = jest
+      .spyOn(stripe, 'getCustomerDefaultPaymentMethod')
+      .mockResolvedValue(null);
+    const service = new PaymentsService(
+      { user: { findUnique, update } } as never,
+      stripe,
+      {} as never,
+    );
+
+    await expect(
+      service.getCustomerDefaultPaymentMethodSummary({
+        customerId: 'user_owner',
+      }),
+    ).resolves.toBeNull();
+    expect(ensureCustomer).toHaveBeenCalledWith({
+      customerId: 'user_owner',
+      email: 'owner@example.com',
+      name: 'Owner',
+      stripeCustomerId: 'cus_missing',
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'user_owner' },
+      data: { stripeCustomerId: 'cus_recreated' },
+    });
+    expect(getDefault).toHaveBeenCalledWith('cus_recreated');
+  });
 });

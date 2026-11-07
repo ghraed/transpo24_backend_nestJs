@@ -1291,10 +1291,11 @@ export class PaymentsService {
       return null;
     }
 
+    const stripeCustomerId = await this.ensureSavedCardCustomer(
+      input.customerId,
+    );
     const paymentMethod =
-      await this.stripeService.getCustomerDefaultPaymentMethod(
-        customer.stripeCustomerId,
-      );
+      await this.stripeService.getCustomerDefaultPaymentMethod(stripeCustomerId);
 
     return paymentMethod
       ? this.toSavedPaymentMethodSummary(paymentMethod)
