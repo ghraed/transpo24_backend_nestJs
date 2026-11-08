@@ -27,6 +27,10 @@ function createHarness() {
       updateMany: jest.fn(),
     },
     driverProfile: { findUnique: jest.fn() },
+    legalAcceptance: {
+      findUnique: jest.fn(),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
     refreshSession: {
       create: jest.fn().mockResolvedValue({}),
       findUnique: jest.fn(),
@@ -46,6 +50,113 @@ function createHarness() {
   );
   return { prisma, twilio, rateLimit, service };
 }
+
+describe('Legal consent compatibility', () => {
+  it('returns the current policy and requires a matching stored hash', async () => {
+    const { service, prisma } = createHarness();
+    const first = await service.legalStatus('customer-1');
+    expect(first.accepted).toBe(false);
+    expect(first.text).toContain('Transpo24');
+    prisma.legalAcceptance.findUnique.mockResolvedValue({
+      documentHash: first.documentHash,
+    });
+    expect((await service.legalStatus('customer-1')).accepted).toBe(true);
+  });
+
+  it('records authenticated consent and rejects an unknown version', async () => {
+    const { service, prisma } = createHarness();
+    const version = (await service.legalStatus('customer-1')).version;
+    await service.acceptTerms('customer-1', version);
+    expect(prisma.legalAcceptance.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_version: { userId: 'customer-1', version } },
+        create: expect.objectContaining({
+          userId: 'customer-1',
+          version,
+          method: 'AUTHENTICATED_ACCEPTANCE',
+        }),
+      }),
+    );
+    await expect(service.acceptTerms('customer-1', 'wrong')).rejects.toThrow();
+  });
+
+  it('records consent for an existing customer after phone verification', async () => {
+    const { service, prisma, twilio } = createHarness();
+    twilio.verifyCode.mockResolvedValue('approved');
+    prisma.user.findUnique.mockResolvedValue(customer);
+    const version = (await service.legalStatus(customer.id)).version;
+    await service.verifyPhoneCode(
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: version,
+      },
+      '127.0.0.1',
+    );
+    expect(prisma.legalAcceptance.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          userId: customer.id,
+          method: 'PHONE_VERIFICATION',
+        }),
+      }),
+    );
+  });
+
+  it('creates new customer and driver consent in the same user insert', async () => {
+    const { service, prisma, twilio } = createHarness();
+    twilio.verifyCode.mockResolvedValue('approved');
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.create.mockImplementation(
+      ({ data }: { data: { role: UserRole } }) =>
+        data.role === UserRole.CUSTOMER
+          ? customer
+          : {
+              id: 'driver-1',
+              name: 'Driver',
+              email: 'driver@example.com',
+              role: UserRole.DRIVER,
+              deletedAt: null,
+              driverProfile: {
+                id: 'profile-1',
+                firstName: '',
+                lastName: '',
+                phone: '+96170123458',
+                countryCode: null,
+                countryCodes: [],
+                city: null,
+                cities: [],
+                status: DriverStatus.PENDING_PROFILE,
+                isProfileCompleted: false,
+              },
+            },
+    );
+    const version = (await service.legalStatus(customer.id)).version;
+    await service.verifyPhoneCode(
+      {
+        phoneNumber: customer.phoneNumber,
+        code: '123456',
+        acceptedTermsVersion: version,
+      },
+      '127.0.0.1',
+    );
+    await service.verifyDriverPhoneCode(
+      {
+        phoneNumber: '+96170123458',
+        code: '123456',
+        acceptedTermsVersion: version,
+      },
+      '127.0.0.1',
+    );
+    for (const call of prisma.user.create.mock.calls) {
+      expect(call[0].data.legalAcceptances.create).toEqual(
+        expect.objectContaining({ version, method: 'PHONE_VERIFICATION' }),
+      );
+    }
+    expect(prisma.legalAcceptance.upsert).not.toHaveBeenCalled();
+  });
+});
 
 describe('AuthService phone authentication', () => {
   it('returns the same generic send-code response', async () => {

@@ -1,6 +1,17 @@
-import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 export class VerifyPhoneCodeDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  acceptedTermsVersion?: string;
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(32)

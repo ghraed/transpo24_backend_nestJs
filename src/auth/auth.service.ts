@@ -1,3 +1,10 @@
+import {
+  TERMS_VERSION,
+  TERMS_HASH,
+  TERMS_TEXT,
+  requireTermsVersion,
+  termsEvidence,
+} from './legal';
 import { assertDriverApproved } from './driver-approval';
 import { normalizeDriverBusiness } from '../driver/driver-business';
 import {
@@ -129,6 +136,31 @@ export class AuthService {
     private readonly phoneRateLimit: PhoneAuthRateLimitService,
   ) {}
 
+  async legalStatus(userId: string) {
+    const accepted = await this.prisma.legalAcceptance.findUnique({
+      where: { userId_version: { userId, version: TERMS_VERSION } },
+    });
+    return {
+      version: TERMS_VERSION,
+      documentHash: TERMS_HASH,
+      text: TERMS_TEXT,
+      accepted: Boolean(accepted && accepted.documentHash === TERMS_HASH),
+    };
+  }
+
+  async acceptTerms(
+    userId: string,
+    version: string,
+    method = 'AUTHENTICATED_ACCEPTANCE',
+  ) {
+    requireTermsVersion(version);
+    return this.prisma.legalAcceptance.upsert({
+      where: { userId_version: { userId, version } },
+      create: { userId, ...termsEvidence(method) },
+      update: {},
+    });
+  }
+
   async sendPhoneCode(
     dto: SendPhoneCodeDto,
     ipAddress: string,
@@ -151,6 +183,7 @@ export class AuthService {
     dto: VerifyPhoneCodeDto,
     ipAddress: string,
   ): Promise<PhoneAuthResponseDto> {
+    if (dto.acceptedTermsVersion) requireTermsVersion(dto.acceptedTermsVersion);
     const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
     await this.assertApprovedPhoneVerification(
       phoneNumber,
@@ -209,6 +242,13 @@ export class AuthService {
       try {
         user = await this.prisma.user.create({
           data: {
+            ...(dto.acceptedTermsVersion
+              ? {
+                  legalAcceptances: {
+                    create: termsEvidence('PHONE_VERIFICATION'),
+                  },
+                }
+              : {}),
             name: 'Customer',
             email: this.createCustomerPlaceholderEmail(phoneNumber),
             passwordHash: hashPassword(randomBytes(32).toString('base64url')),
@@ -237,6 +277,12 @@ export class AuthService {
       throw new ForbiddenException('Customer access is required.');
     }
 
+    if (dto.acceptedTermsVersion && !isNewUser)
+      await this.acceptTerms(
+        user.id,
+        dto.acceptedTermsVersion,
+        'PHONE_VERIFICATION',
+      );
     return this.issueCustomerSession(user, isNewUser);
   }
 
@@ -262,6 +308,7 @@ export class AuthService {
     dto: VerifyPhoneCodeDto,
     ipAddress: string,
   ): Promise<LoginResponseDto> {
+    if (dto.acceptedTermsVersion) requireTermsVersion(dto.acceptedTermsVersion);
     const phoneNumber = normalizePhoneNumber(dto.phoneNumber);
     await this.assertApprovedPhoneVerification(
       phoneNumber,
@@ -279,9 +326,17 @@ export class AuthService {
       select: this.driverSessionUserSelect,
     });
 
+    const isNewUser = !user;
     if (!user) {
       user = await this.prisma.user.create({
         data: {
+          ...(dto.acceptedTermsVersion
+            ? {
+                legalAcceptances: {
+                  create: termsEvidence('PHONE_VERIFICATION'),
+                },
+              }
+            : {}),
           name: 'Driver',
           email: this.createDriverPlaceholderEmail(phoneNumber),
           passwordHash: hashPassword(randomBytes(32).toString('base64url')),
@@ -304,6 +359,12 @@ export class AuthService {
       });
     }
 
+    if (dto.acceptedTermsVersion && !isNewUser)
+      await this.acceptTerms(
+        user.id,
+        dto.acceptedTermsVersion,
+        'PHONE_VERIFICATION',
+      );
     return this.buildDriverAuthResponse(user);
   }
 
