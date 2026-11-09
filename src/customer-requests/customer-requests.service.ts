@@ -2295,7 +2295,7 @@ export class CustomerRequestsService {
       ),
     );
     pendingEvents.forEach((emit) => emit());
-    void this.notificationsService
+    await this.notificationsService
       .notifyDriversAboutNewTransportRequest({
         drivers: dispatch.driverNotifications,
         updated: true,
@@ -2369,7 +2369,13 @@ export class CustomerRequestsService {
     const dispatchResult =
       await this.dispatchSubmittedRequestToEligibleDrivers(updatedRequest);
 
-    void this.notificationsService
+    if (dispatchResult.driverNotifications.length === 0) {
+      this.logger.warn(
+        `Request ${updatedRequest.id} has no eligible drivers for a new request notification.`,
+      );
+    }
+
+    await this.notificationsService
       .notifyDriversAboutNewTransportRequest({
         drivers: dispatchResult.driverNotifications,
       })

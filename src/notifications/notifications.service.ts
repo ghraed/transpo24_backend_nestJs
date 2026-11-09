@@ -174,6 +174,14 @@ export class NotificationsService {
       });
 
       if (storedTokens.length === 0) {
+        if (
+          input.app === PushApp.DRIVER &&
+          input.type === 'NEW_TRANSPORT_REQUEST'
+        ) {
+          this.logger.warn(
+            `Request ${input.data?.requestId ?? 'unknown'} has no registered driver device in ${pushScope(input.app).environment} for ${userIds.length} recipient(s).`,
+          );
+        }
         return;
       }
 
@@ -191,6 +199,14 @@ export class NotificationsService {
       await this.deactivateTokensByIds(invalidTokenIds);
 
       if (validTokens.length === 0) {
+        if (
+          input.app === PushApp.DRIVER &&
+          input.type === 'NEW_TRANSPORT_REQUEST'
+        ) {
+          this.logger.warn(
+            `Request ${input.data?.requestId ?? 'unknown'} has no valid driver device token.`,
+          );
+        }
         return;
       }
 

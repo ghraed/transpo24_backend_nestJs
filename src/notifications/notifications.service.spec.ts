@@ -215,6 +215,28 @@ describe('NotificationsService', () => {
     expect(expo.sendPushNotificationsAsync).not.toHaveBeenCalled();
   });
 
+  it('reports when a new request has no registered driver device', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const service = createService({ pushToken: { findMany } });
+    const warn = jest.fn();
+    Object.assign(service, { logger: { warn, error: jest.fn() } });
+
+    await service.notifyDriversAboutNewTransportRequest({
+      drivers: [
+        {
+          userId: 'driver-user-1',
+          requestId: 'req_1',
+          serviceType: 'Goods',
+          distanceKm: 1,
+        },
+      ],
+    });
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Request req_1 has no registered driver device'),
+    );
+  });
+
   it.each(['android', 'ios'])(
     'sends audible high-priority notifications on %s',
     async (platform) => {
