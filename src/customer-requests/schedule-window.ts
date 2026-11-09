@@ -76,8 +76,8 @@ export function assertScheduleWindow({
     throw new BadRequestException(
       'Delivery must be between today and five days ahead.',
     );
-  if (!effectivePickup || day(delivery) <= day(effectivePickup))
+  if (!effectivePickup || day(delivery) < day(effectivePickup))
     throw new BadRequestException(
-      'Delivery date must be after the pickup date.',
+      'Delivery date cannot be before the pickup date.',
     );
 }

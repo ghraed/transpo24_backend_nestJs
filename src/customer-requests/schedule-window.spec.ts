@@ -22,19 +22,16 @@ describe('request scheduling window', () => {
       'Delivery must be between today and five days ahead.',
     );
   });
-  it('rejects same-day and earlier delivery', () => {
-    expect(check(day(2), day(2))).toThrow(
-      'Delivery date must be after the pickup date.',
-    );
+  it('accepts same-day delivery and rejects earlier delivery', () => {
+    expect(check(day(0), day(0))).not.toThrow();
+    expect(check(day(2), day(2))).not.toThrow();
     expect(check(day(2), day(1))).toThrow(
-      'Delivery date must be after the pickup date.',
+      'Delivery date cannot be before the pickup date.',
     );
   });
   it('uses today for immediate pickup', () => {
     expect(check(day(20), day(1), false, true)).not.toThrow();
-    expect(check(day(20), day(0), false, true)).toThrow(
-      'Delivery date must be after the pickup date.',
-    );
+    expect(check(day(20), day(0), false, true)).not.toThrow();
   });
   it('preserves the furniture pickup exemption and global delivery limit', () => {
     expect(check(day(20), undefined, true)).not.toThrow();
@@ -80,7 +77,7 @@ describe('customer calendar timezone', () => {
         delivery: new Date('2026-10-18T09:00:00Z'),
         timeZone: 'Asia/Beirut',
       }),
-    ).toThrow('Delivery date must be after the pickup date.');
+    ).not.toThrow();
   });
   it('uses calendar days across daylight-saving transitions', () => {
     expect(() =>
@@ -105,15 +102,13 @@ describe('vehicle uses the standard goods schedule', () => {
       timeZone: 'Asia/Beirut',
       now,
     });
-  it('accepts later delivery within today through five days ahead', () => {
+  it('accepts same-day and later delivery within today through five days ahead', () => {
+    expect(check('2026-10-17T08:00:00Z', '2026-10-17T10:00:00Z')).not.toThrow();
     expect(check('2026-10-17T08:00:00Z', '2026-10-22T10:00:00Z')).not.toThrow();
   });
-  it('rejects distant pickup, same-day delivery and out-of-window delivery', () => {
+  it('rejects distant pickup and out-of-window delivery', () => {
     expect(check('2026-10-23T08:00:00Z', '2026-10-24T10:00:00Z')).toThrow(
       'Pickup must be between today and five days ahead.',
-    );
-    expect(check('2026-10-17T08:00:00Z', '2026-10-17T10:00:00Z')).toThrow(
-      'Delivery date must be after the pickup date.',
     );
     expect(check('2026-10-22T08:00:00Z', '2026-10-23T10:00:00Z')).toThrow(
       'Delivery must be between today and five days ahead.',
