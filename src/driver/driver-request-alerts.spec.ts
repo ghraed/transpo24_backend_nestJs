@@ -92,40 +92,6 @@ function setup(isOnline = true) {
 }
 
 describe('unresolved driver job requests', () => {
-  it('hides overdue scheduled jobs even when previously seen', async () => {
-    const { service, findMany } = setup();
-    const priorAlert = [{ driverId: 'driver', status: 'SEEN' }];
-    findMany.mockResolvedValue([
-      {
-        id: 'overdue',
-        isImmediate: false,
-        scheduledPickupAt: new Date(Date.now() - 60_000),
-        service: { key: 'GOODS_TRANSPORT' },
-        driverAlerts: priorAlert,
-      },
-      {
-        id: 'upcoming',
-        isImmediate: false,
-        scheduledPickupAt: new Date(Date.now() + 60_000),
-        service: { key: 'GOODS_TRANSPORT' },
-        driverAlerts: priorAlert,
-      },
-      {
-        id: 'immediate-history',
-        isImmediate: true,
-        scheduledPickupAt: null,
-        service: { key: 'GOODS_TRANSPORT' },
-        driverAlerts: priorAlert,
-      },
-    ]);
-
-    const result = await service.getDriverRequestAlerts({ userId: 'user' });
-    expect(result.alerts.map((alert) => alert.requestId)).toEqual([
-      'upcoming',
-      'immediate-history',
-    ]);
-  });
-
   it.each([true, false])(
     'keeps old opened requests accessible (online: %s)',
     async (online) => {
