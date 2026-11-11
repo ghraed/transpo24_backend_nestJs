@@ -1295,7 +1295,9 @@ export class PaymentsService {
       input.customerId,
     );
     const paymentMethod =
-      await this.stripeService.getCustomerDefaultPaymentMethod(stripeCustomerId);
+      await this.stripeService.getCustomerDefaultPaymentMethod(
+        stripeCustomerId,
+      );
 
     return paymentMethod
       ? this.toSavedPaymentMethodSummary(paymentMethod)
