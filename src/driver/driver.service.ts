@@ -1800,6 +1800,16 @@ export class DriverService {
       const lockedFurniture =
         request.service?.key === 'FURNITURE_TRANSPORT' &&
         !!request.deferredPaymentState;
+      const checkedAt = new Date();
+      // A received alert does not keep an open scheduled job actionable after pickup.
+      // Preserve booked furniture requests, which have their own payment workflow.
+      if (
+        !lockedFurniture &&
+        request.isImmediate === false &&
+        request.scheduledPickupAt &&
+        request.scheduledPickupAt <= checkedAt
+      )
+        continue;
       const matchingRequest = lockedFurniture
         ? {
             ...request,
@@ -1815,7 +1825,6 @@ export class DriverService {
             origin: input.route.coordinates[0],
           }
         : undefined;
-      const checkedAt = new Date();
       const eligible = isEligibleRequest(
         matchingRequest,
         availability,
