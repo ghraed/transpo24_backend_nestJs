@@ -20,6 +20,7 @@ export interface DriverRequestAlertSummaryDto {
   requestCreatedAt: string;
   customerName: string;
   isCurrentlyEligible?: boolean;
+  outsideWorkingHours?: boolean;
   alertId: string;
   requestId: string;
   alertStatus: DriverRequestAlertStatus;
@@ -74,6 +75,7 @@ export interface DriverRequestDetailsResponseDto extends DriverRequestAlertSumma
   offerEligibility?: {
     canSendOffer: boolean;
     reason: RequestIneligibilityReason | null;
+    requiresOutsideWorkingHoursConfirmation?: boolean;
   };
   offerStatus: DriverOfferStatus | null;
   customerNote: string | null;

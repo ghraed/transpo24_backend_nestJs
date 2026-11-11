@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsInt,
   IsNumber,
@@ -10,6 +11,9 @@ import {
 } from 'class-validator';
 
 export class SendDriverPriceOfferDto {
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeOutsideWorkingHours?: boolean;
   // Missing versions from older apps must reach the same safe conflict response.
   @IsOptional()
   @IsString()

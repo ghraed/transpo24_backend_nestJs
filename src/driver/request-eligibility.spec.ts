@@ -76,6 +76,44 @@ const vehicles: MatchingVehicle[] = [
 ];
 
 describe('shared request eligibility', () => {
+  it('permits only the driver-hours exception after confirmation', () => {
+    const a = availability();
+    a.schedule = [];
+    expect(offerIneligibilityReason(request(), a, vehicles, now)).toBe(
+      'OUTSIDE_WORKING_HOURS',
+    );
+    expect(
+      offerIneligibilityReason(request(), a, vehicles, now, true),
+    ).toBeNull();
+    expect(offerIneligibilityReason(request(), a, [], now, true)).toBe(
+      'NO_COMPATIBLE_VEHICLE',
+    );
+    expect(
+      offerIneligibilityReason(
+        request(),
+        a,
+        [
+          {
+            ...vehicles[0],
+            workingSchedule: [
+              { dayOfWeek: 'THURSDAY', isAvailable: false, timeRanges: [] },
+            ],
+          },
+        ],
+        now,
+        true,
+      ),
+    ).toBe('NO_COMPATIBLE_VEHICLE');
+    expect(
+      offerIneligibilityReason(
+        { ...request(), status: 'CANCELLED' },
+        a,
+        vehicles,
+        now,
+        true,
+      ),
+    ).toBe('REQUEST_CLOSED');
+  });
   it('reports the blocking setting without changing eligibility rules', () => {
     const check = (
       a: MatchingAvailability | null,
@@ -642,10 +680,21 @@ describe('dispatch, Jobs and map consistency', () => {
     });
     const list = await driver.getDriverRequestAlerts({ userId: 'user' });
     const eligible = ['nearby', 'scheduled', 'lebanon'].includes(scenario);
-    expect(list.alerts).toHaveLength(eligible ? 1 : 0);
+    expect(list.alerts).toHaveLength(
+      eligible || scenario === 'outside-hours' ? 1 : 0,
+    );
+    if (scenario === 'outside-hours') {
+      expect(list.alerts[0]).toMatchObject({
+        outsideWorkingHours: true,
+        isCurrentlyEligible: true,
+      });
+    }
     expect(
       list.alerts.filter((alert) => alert.isCurrentlyEligible),
-    ).toHaveLength(result.driverNotifications.length);
+    ).toHaveLength(
+      result.driverNotifications.length +
+        (scenario === 'outside-hours' ? 1 : 0),
+    );
     expect(gateway.emitRequestNew).toHaveBeenCalledTimes(eligible ? 1 : 0);
     expect(prisma.driverAvailability.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ select: MATCHING_AVAILABILITY_SELECT }),

@@ -177,6 +177,30 @@ describe('request content version', () => {
 });
 
 describe('offer snapshot guard', () => {
+  it('uses the explicit outside-hours confirmation on the versioned offer', async () => {
+    const { service, input } = setup();
+    await service.sendDriverPriceOffer({
+      ...input,
+      acknowledgeOutsideWorkingHours: true,
+    });
+    expect(offerIneligibilityReason).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Date),
+      true,
+    );
+
+    jest.mocked(offerIneligibilityReason).mockClear();
+    await service.sendDriverPriceOffer(input);
+    expect(offerIneligibilityReason).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Date),
+      false,
+    );
+  });
   it.each([undefined, '', 'outdated'])(
     'rejects missing or stale version %s without creating an offer',
     async (requestVersion) => {

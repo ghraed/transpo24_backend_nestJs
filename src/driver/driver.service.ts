@@ -21,6 +21,7 @@ import {
   coverageDistance,
   immediateReference,
   isEligibleRequest,
+  requestIneligibilityReason,
   offerIneligibilityReason,
   REQUEST_INELIGIBILITY_MESSAGES,
   LIVE_LOCATION_MAX_AGE_MS,
@@ -283,6 +284,7 @@ interface GetDriverRequestDetailsInput {
 interface UpdateDriverRequestAlertInput {
   userId: string;
   requestId: string;
+  acknowledgeOutsideWorkingHours?: boolean;
 }
 
 interface UploadDriverVehicleDocumentsInput {
@@ -331,6 +333,7 @@ interface UploadDriverOnboardingDocumentsInput {
 
 interface SendDriverPriceOfferInput {
   requestVersion?: string;
+  acknowledgeOutsideWorkingHours?: boolean;
   userId: string;
   requestId: string;
   price: number;
@@ -1797,30 +1800,53 @@ export class DriverService {
       const lockedFurniture =
         request.service?.key === 'FURNITURE_TRANSPORT' &&
         !!request.deferredPaymentState;
+      const matchingRequest = lockedFurniture
+        ? {
+            ...request,
+            status: 'PENDING_QUOTES',
+            assignedDriverId: null,
+            acceptedOfferId: null,
+          }
+        : request;
+      const routeCoverage = input.route
+        ? {
+            distanceKm: routeDistance,
+            radiusKm: input.route.radiusKm,
+            origin: input.route.coordinates[0],
+          }
+        : undefined;
+      const checkedAt = new Date();
       const eligible = isEligibleRequest(
-        lockedFurniture
-          ? {
-              ...request,
-              status: 'PENDING_QUOTES',
-              assignedDriverId: null,
-              acceptedOfferId: null,
-            }
-          : request,
+        matchingRequest,
         availability,
         vehicles,
-        new Date(),
+        checkedAt,
         !lockedFurniture,
-        input.route
-          ? {
-              distanceKm: routeDistance,
-              radiusKm: input.route.radiusKm,
-              origin: input.route.coordinates[0],
-            }
-          : undefined,
+        routeCoverage,
       );
-      if (input.route && !eligible) continue;
-      if (lockedFurniture && !eligible) continue;
-      if (!existingAlert && !eligible) continue;
+      const outsideWorkingHours =
+        !eligible &&
+        requestIneligibilityReason(
+          matchingRequest,
+          availability,
+          vehicles,
+          checkedAt,
+          !lockedFurniture,
+          routeCoverage,
+        ) === 'OUTSIDE_WORKING_HOURS' &&
+        isEligibleRequest(
+          matchingRequest,
+          availability,
+          vehicles,
+          checkedAt,
+          !lockedFurniture,
+          routeCoverage,
+          true,
+          true,
+        );
+      if (input.route && !eligible && !outsideWorkingHours) continue;
+      if (lockedFurniture && !eligible && !outsideWorkingHours) continue;
+      if (!existingAlert && !eligible && !outsideWorkingHours) continue;
       const distanceKm = input.route
         ? routeDistance
         : coverageDistance(request, availability);
@@ -1832,7 +1858,9 @@ export class DriverService {
 
       alerts.push({
         ...this.toRequestAlertSummary(request, alert, distanceKm),
-        isCurrentlyEligible: eligible && !lockedFurniture,
+        isCurrentlyEligible:
+          (eligible || outsideWorkingHours) && !lockedFurniture,
+        ...(outsideWorkingHours ? { outsideWorkingHours: true } : {}),
       });
     }
 
@@ -1963,6 +1991,15 @@ export class DriverService {
       vehicles,
       new Date(),
     );
+    const outsideWorkingHours =
+      reason === 'OUTSIDE_WORKING_HOURS' &&
+      offerIneligibilityReason(
+        request,
+        availability,
+        vehicles,
+        new Date(),
+        true,
+      ) === null;
     return {
       ...this.toRequestDetailsResponse(
         request,
@@ -1970,7 +2007,14 @@ export class DriverService {
         distanceKm,
         offer?.status ?? null,
       ),
-      offerEligibility: { canSendOffer: reason === null, reason },
+      ...(outsideWorkingHours ? { outsideWorkingHours: true } : {}),
+      offerEligibility: {
+        canSendOffer: reason === null || outsideWorkingHours,
+        reason,
+        ...(outsideWorkingHours
+          ? { requiresOutsideWorkingHoursConfirmation: true }
+          : {}),
+      },
     };
   }
 
@@ -2046,6 +2090,7 @@ export class DriverService {
         availability,
         vehicles,
         new Date(),
+        input.acknowledgeOutsideWorkingHours === true,
       );
       if (reason) {
         throw new BadRequestException({
@@ -2237,6 +2282,7 @@ export class DriverService {
         availability,
         vehicles,
         new Date(),
+        input.acknowledgeOutsideWorkingHours === true,
       );
       if (reason) {
         throw new BadRequestException({

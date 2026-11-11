@@ -273,6 +273,7 @@ export function offerIneligibilityReason(
   availability: MatchingAvailability | null,
   vehicles: MatchingVehicle[],
   now = new Date(),
+  allowOutsideWorkingHours = false,
 ): RequestIneligibilityReason | null {
   return requestIneligibilityReason(
     request,
@@ -282,6 +283,7 @@ export function offerIneligibilityReason(
     false,
     undefined,
     false,
+    allowOutsideWorkingHours,
   );
 }
 
@@ -293,6 +295,7 @@ export function requestIneligibilityReason(
   requireOnline = true,
   routeCoverage?: { distanceKm: number; radiusKm: number; origin: Coordinate },
   enforceRadius = true,
+  allowOutsideWorkingHours = false,
 ): RequestIneligibilityReason | null {
   if (!a) return 'AVAILABILITY_REQUIRED';
   if (
@@ -343,12 +346,15 @@ export function requestIneligibilityReason(
   );
   if (!local) return 'LOCATION_UNAVAILABLE';
   const day = a.schedule.find((entry) => entry.dayOfWeek === local.day);
+  // A confirmed exception applies only to the driver's weekly hours.
+  // Vehicle working hours and every other eligibility rule still apply.
   if (
-    !day?.isAvailable ||
-    !day.startTime ||
-    !day.endTime ||
-    day.startTime > local.time ||
-    local.time >= day.endTime
+    !allowOutsideWorkingHours &&
+    (!day?.isAvailable ||
+      !day.startTime ||
+      !day.endTime ||
+      day.startTime > local.time ||
+      local.time >= day.endTime)
   )
     return 'OUTSIDE_WORKING_HOURS';
   return hasCompatibleVehicle(request, vehicles, local)

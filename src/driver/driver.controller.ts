@@ -61,6 +61,7 @@ import {
 } from './dto/driver-load-capacity.dto';
 import { UploadDriverVehicleDocumentsDto } from './dto/upload-driver-vehicle-documents.dto';
 import { SendDriverPriceOfferDto } from './dto/send-driver-price-offer.dto';
+import { AcceptDriverRequestAlertDto } from './dto/accept-driver-request-alert.dto';
 import {
   UpdateDriverAvailabilityDto,
   UpdateDriverOnlineStatusDto,
@@ -461,10 +462,12 @@ export class DriverController {
   async acceptRequestAlert(
     @Req() request: AuthenticatedRequest,
     @Param('requestId') requestId: string,
+    @Body() dto: AcceptDriverRequestAlertDto,
   ): Promise<DriverRequestAlertActionResponseDto> {
     return this.driverService.acceptDriverRequestAlert({
       userId: request.user.id,
       requestId,
+      acknowledgeOutsideWorkingHours: dto?.acknowledgeOutsideWorkingHours,
     });
   }
 
@@ -491,6 +494,7 @@ export class DriverController {
       userId: request.user.id,
       requestId,
       requestVersion: dto.requestVersion,
+      acknowledgeOutsideWorkingHours: dto.acknowledgeOutsideWorkingHours,
       price: dto.price,
       currency: dto.currency,
       estimatedPickupAt: dto.estimatedPickupAt

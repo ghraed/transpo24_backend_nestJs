@@ -5,6 +5,7 @@ function setup(isOnline = true) {
   const findMany = jest.fn().mockResolvedValue([]);
   const findUnique = jest.fn().mockResolvedValue({
     id: 'request',
+    photos: [],
     status: 'QUOTED',
     assignedDriverId: null,
     acceptedOfferId: null,
@@ -279,6 +280,42 @@ describe('unresolved driver job requests', () => {
     },
   );
 
+  it('requires an explicit outside-hours confirmation before accepting', async () => {
+    const { service, update } = setup();
+    const prisma = (service as any).prisma;
+    const availability = await prisma.driverAvailability.findUnique();
+    availability.schedule.forEach((day) => {
+      day.isAvailable = false;
+    });
+    Object.assign(service, {
+      ensureDriverRequestAlert: jest.fn().mockResolvedValue({
+        id: 'alert',
+        requestId: 'request',
+        status: 'SEEN',
+      }),
+    });
+    update.mockResolvedValue({
+      id: 'alert',
+      requestId: 'request',
+      status: 'ACCEPTED',
+    });
+
+    await expect(
+      service.acceptDriverRequestAlert({
+        userId: 'user',
+        requestId: 'request',
+        acknowledgeOutsideWorkingHours: true,
+      }),
+    ).resolves.toMatchObject({ alertStatus: 'ACCEPTED' });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'ACCEPTED',
+        }),
+      }),
+    );
+  });
+
   it('accepts a manually selected pickup beyond the notification radius', async () => {
     const { service, update } = setup();
     const prisma = (service as any).prisma;
@@ -365,6 +402,7 @@ describe('job navigation and assignment access', () => {
     ).prisma;
     db.transportRequest.findUnique.mockResolvedValue({
       id: 'request',
+      photos: [],
       status: 'PENDING_QUOTES',
       isImmediate: true,
       pickupLatitude: 45,
