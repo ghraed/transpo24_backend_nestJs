@@ -3742,6 +3742,16 @@ export class CustomerRequestsService {
             : 'CANCELLED',
         },
       });
+      await tx.customerNotification.deleteMany({
+        where: {
+          userId: input.customerId,
+          OR: [
+            { data: { path: ['requestId'], equals: request.id } },
+            { data: { path: ['tripId'], equals: request.id } },
+            { data: { path: ['transportRequestId'], equals: request.id } },
+          ],
+        },
+      });
       return true;
     });
     if (!changed) return;
