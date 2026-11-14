@@ -69,6 +69,15 @@ describe('driver location acknowledgement', () => {
     expect(offer.driverName).toBe('Private Driver');
   });
 
+  it('broadcasts accepted job closure to every connected driver', () => {
+    const { gateway, emit } = setup();
+    gateway.emitRequestClosedToDrivers('request');
+    expect(gateway.server.to).toHaveBeenCalledWith('driver_jobs');
+    expect(emit).toHaveBeenCalledWith('requestDeleted', {
+      requestId: 'request',
+    });
+  });
+
   it('acknowledges only after saving and emitting the existing customer update', async () => {
     const { gateway, service, emit, socket, location } = setup();
     await expect(

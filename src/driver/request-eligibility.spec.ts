@@ -5,6 +5,7 @@ import {
   immediateReference,
   isEligibleRequest,
   requestIneligibilityReason,
+  savedCoverageNotificationDistance,
   offerIneligibilityReason,
   LIVE_LOCATION_MAX_AGE_MS,
   MatchingAvailability,
@@ -76,6 +77,37 @@ const vehicles: MatchingVehicle[] = [
 ];
 
 describe('shared request eligibility', () => {
+  it('uses saved coverage for online job alerts only after GPS expires', () => {
+    const a = availability();
+    a.liveLocationAt = new Date(now.getTime() - LIVE_LOCATION_MAX_AGE_MS - 1);
+    expect(isEligibleRequest(request(), a, vehicles, now)).toBe(false);
+    expect(
+      savedCoverageNotificationDistance(request(), a, vehicles, now),
+    ).toBeLessThan(1);
+    expect(
+      savedCoverageNotificationDistance(
+        { ...request(), pickupLatitude: 48.8566, pickupLongitude: 2.3522 },
+        a,
+        vehicles,
+        now,
+      ),
+    ).toBeNull();
+    a.baseLatitude = 0;
+    a.baseLongitude = 0;
+    expect(
+      savedCoverageNotificationDistance(request(), a, vehicles, now),
+    ).toBeLessThan(1);
+    expect(savedCoverageNotificationDistance(request(), a, [], now)).toBeNull();
+    a.isOnline = false;
+    expect(
+      savedCoverageNotificationDistance(request(), a, vehicles, now),
+    ).toBeNull();
+    a.isOnline = true;
+    a.liveLocationAt = now;
+    expect(
+      savedCoverageNotificationDistance(request(), a, vehicles, now),
+    ).toBeNull();
+  });
   it('permits only the driver-hours exception after confirmation', () => {
     const a = availability();
     a.schedule = [];
@@ -893,15 +925,17 @@ describe('current-location request delivery regressions', () => {
   );
 
   it.each([true, false])(
-    'stops delivery after GPS expiry and resumes after a new fix (immediate: %s)',
+    'uses saved coverage for alerts after GPS expiry and resumes live matching after a new fix (immediate: %s)',
     async (isImmediate) => {
       const { rows, driver, dispatch, gateway } = setup(isImmediate);
       jest.setSystemTime(new Date(now.getTime() + LIVE_LOCATION_MAX_AGE_MS));
       expect((await dispatch(rows[0])).driverNotifications).toHaveLength(1);
       jest.setSystemTime(new Date(Date.now() + 1));
       gateway.emitRequestNew.mockClear();
-      expect((await dispatch(rows[0])).driverNotifications).toEqual([]);
-      expect(gateway.emitRequestNew).not.toHaveBeenCalled();
+      expect((await dispatch(rows[0])).driverNotifications).toEqual([
+        expect.objectContaining({ requestId: 'zurich-pickup', distanceKm: 0 }),
+      ]);
+      expect(gateway.emitRequestNew).toHaveBeenCalledTimes(1);
       expect(await driver.getDriverRequestAlerts({ userId: 'user' })).toEqual({
         alerts: [],
         locationReference: 'NONE',

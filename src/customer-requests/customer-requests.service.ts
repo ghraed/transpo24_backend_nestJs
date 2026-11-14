@@ -29,6 +29,8 @@ import {
   MatchingAvailability,
   coverageDistance,
   isEligibleRequest,
+  requestIneligibilityReason,
+  savedCoverageNotificationDistance,
 } from '../driver/request-eligibility';
 import {
   BadRequestException,
@@ -2752,7 +2754,17 @@ export class CustomerRequestsService {
     }
 
     const reserved = await this.furnitureReservations?.tryReserve(input);
-    if (reserved) return reserved;
+    if (reserved) {
+      try {
+        this.tripsGateway.emitRequestClosedToDrivers(input.requestId);
+      } catch (error) {
+        this.logger.error(
+          `Failed to notify drivers about reserved request ${input.requestId}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+      return reserved;
+    }
 
     if (!input.paymentMethod) {
       throw new BadRequestException('paymentMethod is required.');
@@ -3426,6 +3438,7 @@ export class CustomerRequestsService {
 
     if (alreadyAssigned) return response;
     try {
+      this.tripsGateway.emitRequestClosedToDrivers(result.updatedRequest.id);
       this.tripsGateway.emitOfferAccepted(
         {
           tripId: result.updatedRequest.id,
@@ -4437,9 +4450,32 @@ export class CustomerRequestsService {
       },
     });
 
-    const filteredDrivers = eligibleDrivers.filter((driver) =>
-      this.isEligibleForRealtimeDispatch(request, driver),
-    );
+    const rejectionCounts: Record<string, number> = {};
+    const notificationDistances = new Map<string, number>();
+    const filteredDrivers = eligibleDrivers.filter((driver) => {
+      if (this.isEligibleForRealtimeDispatch(request, driver)) return true;
+      const reason = requestIneligibilityReason(
+        request,
+        driver.availability,
+        driver.vehicles,
+      );
+      const savedDistance = savedCoverageNotificationDistance(
+        request,
+        driver.availability,
+        driver.vehicles,
+      );
+      if (savedDistance !== null) {
+        notificationDistances.set(driver.id, savedDistance);
+        return true;
+      }
+      if (reason) rejectionCounts[reason] = (rejectionCounts[reason] ?? 0) + 1;
+      return false;
+    });
+    if (filteredDrivers.length === 0) {
+      this.logger.warn(
+        `Request ${request.id} matched no drivers: ${JSON.stringify({ candidates: eligibleDrivers.length, reasons: rejectionCounts })}`,
+      );
+    }
     const driverNotifications: DispatchResult['driverNotifications'] = [];
 
     const existingAlerts = await db.driverRequestAlert.findMany({
@@ -4501,9 +4537,11 @@ export class CustomerRequestsService {
         alertsCreatedCount += 1;
       }
 
-      const distanceKm = driver.availability
-        ? coverageDistance(request, driver.availability)
-        : null;
+      const distanceKm =
+        notificationDistances.get(driver.id) ??
+        (driver.availability
+          ? coverageDistance(request, driver.availability)
+          : null);
 
       driverNotifications.push({
         userId: driver.userId,

@@ -137,6 +137,56 @@ export function coverageDistance(
   });
 }
 
+// A backgrounded app cannot keep a two-minute GPS fix fresh. Use configured
+// coverage only for new-job alerts; offering still requires current GPS.
+export function savedCoverageNotificationDistance(
+  request: MatchingRequest,
+  a: MatchingAvailability | null,
+  vehicles: MatchingVehicle[],
+  now = new Date(),
+): number | null {
+  if (
+    !a?.isOnline ||
+    immediateReference(a, now).coordinate ||
+    !validCoordinate(a.liveLatitude, a.liveLongitude) ||
+    !a.liveLocationAt ||
+    now.getTime() - a.liveLocationAt.getTime() <= LIVE_LOCATION_MAX_AGE_MS ||
+    !validCoordinate(request.pickupLatitude, request.pickupLongitude)
+  )
+    return null;
+
+  const pickup = {
+    latitude: request.pickupLatitude!,
+    longitude: request.pickupLongitude!,
+  };
+  const origins: Coordinate[] = parseCoveragePins(a.cityCoverage).map(
+    (pin) => ({
+      latitude: pin.latitude,
+      longitude: pin.longitude,
+    }),
+  );
+  if (validCoordinate(a.baseLatitude, a.baseLongitude)) {
+    origins.push({ latitude: a.baseLatitude!, longitude: a.baseLongitude! });
+  }
+
+  const distances = origins
+    .map((origin) => ({
+      origin,
+      distanceKm: distanceKm(origin, pickup),
+    }))
+    .sort((left, right) => left.distanceKm - right.distanceKm);
+  for (const coverage of distances) {
+    if (
+      isEligibleRequest(request, a, vehicles, now, true, {
+        ...coverage,
+        radiusKm: a.serviceRadiusKm,
+      })
+    )
+      return coverage.distanceKm;
+  }
+  return null;
+}
+
 function localTime(
   date: Date,
   coordinate: Coordinate,

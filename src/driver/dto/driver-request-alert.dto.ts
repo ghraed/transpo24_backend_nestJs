@@ -24,6 +24,7 @@ export interface DriverRequestAlertSummaryDto {
   alertId: string;
   requestId: string;
   alertStatus: DriverRequestAlertStatus;
+  offerStatus?: DriverOfferStatus | null;
   requestStatus: TransportRequestStatus;
   service: DriverRequestAlertServiceDto | null;
   pickup: {

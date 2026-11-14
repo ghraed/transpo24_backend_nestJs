@@ -1695,6 +1695,7 @@ export class DriverService {
           status: { in: ['PENDING_QUOTES', 'QUOTED'] },
           assignedDriverId: null,
           acceptedOfferId: null,
+          offers: { none: { driverId: profile.id } },
           pickupLatitude: { not: null },
           pickupLongitude: { not: null },
         },
@@ -1750,20 +1751,9 @@ export class DriverService {
 
     const requests = await this.prisma.transportRequest.findMany({
       where: {
-        OR: [
-          {
-            status: { in: ['PENDING_QUOTES', 'QUOTED'] },
-            assignedDriverId: null,
-            acceptedOfferId: null,
-          },
-          {
-            service: { key: 'FURNITURE_TRANSPORT' },
-            deferredPaymentState: {
-              in: ['WAITING', 'CONFIRMATION_DUE', 'PAYMENT_PENDING', 'PAID'],
-            },
-            status: { notIn: ['CANCELLED', 'DELIVERED', 'COMPLETED'] },
-          },
-        ],
+        status: { in: ['PENDING_QUOTES', 'QUOTED'] },
+        assignedDriverId: null,
+        acceptedOfferId: null,
         pickupLatitude: { not: null },
         pickupLongitude: { not: null },
         dropoffLatitude: { not: null },
@@ -1774,14 +1764,20 @@ export class DriverService {
           { OR: [{ isImmediate: true }, { scheduledPickupAt: { not: null } }] },
         ],
       },
-      select: DRIVER_REQUEST_DETAILS_SELECT,
+      select: {
+        ...DRIVER_REQUEST_DETAILS_SELECT,
+        offers: {
+          where: { driverId: profile.id },
+          select: { status: true },
+        },
+      },
       orderBy: { submittedAt: 'desc' },
     });
 
     const vehicles = await this.getApprovedDriverVehicles(profile.id);
     const alerts: DriverRequestAlertSummaryDto[] = [];
 
-    for (const request of requests as RequestDetailsSource[]) {
+    for (const request of requests) {
       const routeDistance =
         input.route &&
         validCoordinate(request.pickupLatitude, request.pickupLongitude)
@@ -1797,17 +1793,6 @@ export class DriverService {
       const existingAlert = request.driverAlerts.find(
         (alert) => alert.driverId === profile.id,
       );
-      const lockedFurniture =
-        request.service?.key === 'FURNITURE_TRANSPORT' &&
-        !!request.deferredPaymentState;
-      const matchingRequest = lockedFurniture
-        ? {
-            ...request,
-            status: 'PENDING_QUOTES',
-            assignedDriverId: null,
-            acceptedOfferId: null,
-          }
-        : request;
       const routeCoverage = input.route
         ? {
             distanceKm: routeDistance,
@@ -1817,35 +1802,34 @@ export class DriverService {
         : undefined;
       const checkedAt = new Date();
       const eligible = isEligibleRequest(
-        matchingRequest,
+        request,
         availability,
         vehicles,
         checkedAt,
-        !lockedFurniture,
+        true,
         routeCoverage,
       );
       const outsideWorkingHours =
         !eligible &&
         requestIneligibilityReason(
-          matchingRequest,
+          request,
           availability,
           vehicles,
           checkedAt,
-          !lockedFurniture,
+          true,
           routeCoverage,
         ) === 'OUTSIDE_WORKING_HOURS' &&
         isEligibleRequest(
-          matchingRequest,
+          request,
           availability,
           vehicles,
           checkedAt,
-          !lockedFurniture,
+          true,
           routeCoverage,
           true,
           true,
         );
       if (input.route && !eligible && !outsideWorkingHours) continue;
-      if (lockedFurniture && !eligible && !outsideWorkingHours) continue;
       if (!existingAlert && !eligible && !outsideWorkingHours) continue;
       const distanceKm = input.route
         ? routeDistance
@@ -1858,8 +1842,8 @@ export class DriverService {
 
       alerts.push({
         ...this.toRequestAlertSummary(request, alert, distanceKm),
-        isCurrentlyEligible:
-          (eligible || outsideWorkingHours) && !lockedFurniture,
+        offerStatus: request.offers?.[0]?.status ?? null,
+        isCurrentlyEligible: eligible || outsideWorkingHours,
         ...(outsideWorkingHours ? { outsideWorkingHours: true } : {}),
       });
     }

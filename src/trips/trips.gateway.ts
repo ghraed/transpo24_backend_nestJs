@@ -160,6 +160,7 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       `Socket connected: socketId=${client.id}, userId=${user.id}, role=${user.role}`,
     );
     void client.join(this.getUserRoom(user));
+    if (user.role === UserRole.DRIVER) await client.join('driver_jobs');
     // Remove idle subscribers after token expiry, deletion or driver suspension.
     const authorizationCheck = setInterval(() => {
       void this.getAuthenticatedSocketUser(client).catch(() => undefined);
@@ -391,6 +392,10 @@ export class TripsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server
       .to(this.getDriverRoom(driverId))
       .emit('requestDeleted', payload);
+  }
+
+  emitRequestClosedToDrivers(requestId: string): void {
+    this.server.to('driver_jobs').emit('requestDeleted', { requestId });
   }
 
   emitOfferNew(customerId: string, payload: OfferNewPayload): void {
