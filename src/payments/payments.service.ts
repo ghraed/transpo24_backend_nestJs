@@ -4,10 +4,14 @@ import {
   delayedBookingsEnabled,
   directChargesEnabled,
   paymentPolicy,
+  IMMEDIATE_PAYMENT_POLICY_VERSION,
   requirePaymentPolicy,
   type ConfirmationFields,
 } from './payment-policy';
-import { cancellationFeeRate } from './booking-policy';
+import {
+  cancellationFeeRate,
+  customerCancellationAmounts,
+} from './booking-policy';
 import { calculateCustomerPricing } from './customer-pricing';
 import {
   BadRequestException,
@@ -304,7 +308,6 @@ const SUCCESSFUL_COLLECTION_STATUSES = new Set<PaymentStatus>([
   PaymentStatus.PAYMENT_REFUNDED,
 ]);
 const ADDITIONAL_CHARGE_APP_FEE_PERCENTAGE = new Prisma.Decimal(0);
-const DRIVER_CANCELLATION_SHARE_RATE = new Prisma.Decimal(0.5);
 const STALE_PAYOUT_TRANSFER_MINUTES = 15;
 const DRIVER_PAYOUT_RETRY_DELAYS_MINUTES = [5, 30, 120, 360, 720, 1440];
 const SUPPORTED_ADDITIONAL_CHARGE_CURRENCIES = new Set([
@@ -394,6 +397,7 @@ export class PaymentsService {
     if (input.paymentMethod === PaymentMethod.APP_WALLET) {
       return this.createWalletHold(tx, {
         ...input,
+        policyVersion: input.policyVersion ?? IMMEDIATE_PAYMENT_POLICY_VERSION,
         amount: pricing.totalAmount,
         customerPlatformFeeAmount: pricing.customerPlatformFeeAmount,
         currency,
@@ -402,6 +406,7 @@ export class PaymentsService {
 
     return this.createStripeHold(tx, {
       ...input,
+      policyVersion: input.policyVersion ?? IMMEDIATE_PAYMENT_POLICY_VERSION,
       amount: pricing.totalAmount,
       customerPlatformFeeAmount: pricing.customerPlatformFeeAmount,
       currency,
@@ -943,6 +948,8 @@ export class PaymentsService {
         acceptedOfferId: true,
         assignedDriverId: true,
         itemPickedUpAt: true,
+        scheduledPickupAt: true,
+        isImmediate: true,
         paymentHold: {
           select: PAYMENT_HOLD_SELECT,
         },
@@ -1008,15 +1015,29 @@ export class PaymentsService {
       );
     }
 
-    const refundableAmount = fullRefund
-      ? request.paymentSettlement.collectedAmount
-      : this.calculateCustomerCancellationRefund(
-          request.paymentSettlement.collectedAmount,
-          request.paymentHold.capturedAt,
-        );
-    const retainedAmount = request.paymentSettlement.collectedAmount
-      .sub(refundableAmount)
-      .toDecimalPlaces(2);
+    const newPolicy =
+      request.paymentHold.policyVersion === 'immediate-cancellation-v2';
+    const amounts = customerCancellationAmounts(
+      request.paymentSettlement.collectedAmount,
+      request.paymentHold.customerPlatformFeeAmount,
+      request.scheduledPickupAt,
+      request.isImmediate,
+      Date.now(),
+      fullRefund || !request.assignedDriverId,
+    );
+    const refundableAmount = newPolicy
+      ? amounts.refund
+      : fullRefund
+        ? request.paymentSettlement.collectedAmount
+        : request.paymentSettlement.collectedAmount
+            .mul(
+              new Prisma.Decimal(1).sub(
+                cancellationFeeRate(request.paymentHold.capturedAt),
+              ),
+            )
+            .toDecimalPlaces(2);
+    const retainedAmount =
+      request.paymentSettlement.collectedAmount.sub(refundableAmount);
     if (
       expectedRetainedAmount !== undefined &&
       !retainedAmount.eq(this.toMoneyDecimal(expectedRetainedAmount))
@@ -1024,13 +1045,12 @@ export class PaymentsService {
       throw new ConflictException(
         'The cancellation fee changed. Refresh and review the current fee before confirming.',
       );
-    const driverShareAmount =
-      request.acceptedOfferId && request.assignedDriverId
-        ? retainedAmount.mul(DRIVER_CANCELLATION_SHARE_RATE).toDecimalPlaces(2)
-        : new Prisma.Decimal(0);
-    const platformShareAmount = retainedAmount
-      .sub(driverShareAmount)
-      .toDecimalPlaces(2);
+    const driverShareAmount = request.assignedDriverId
+      ? newPolicy
+        ? amounts.driver
+        : retainedAmount.mul('0.5').toDecimalPlaces(2)
+      : new Prisma.Decimal(0);
+    const platformShareAmount = retainedAmount.sub(driverShareAmount);
 
     let refundId: string | null = null;
     if (request.paymentHold.provider === PaymentProvider.APP_WALLET) {
@@ -1065,6 +1085,9 @@ export class PaymentsService {
         paymentIntentId: request.paymentHold.stripePaymentIntentId,
         stripeAccountId: request.paymentHold.stripeAccountId,
         amount: this.toStripeMinorUnit(refundableAmount),
+        ...(newPolicy && !fullRefund && request.paymentHold.stripeAccountId
+          ? { applicationFeeRefundAmount: this.toStripeMinorUnit(request.paymentHold.customerPlatformFeeAmount) }
+          : {}),
         metadata: {
           requestId,
           kind: 'trip_cancellation_refund',
@@ -4006,15 +4029,6 @@ export class PaymentsService {
     return wallet.balance.sub(wallet.reservedBalance);
   }
 
-  private calculateCustomerCancellationRefund(
-    collectedAmount: Prisma.Decimal,
-    paidAt: Date | null,
-  ): Prisma.Decimal {
-    return collectedAmount
-      .mul(new Prisma.Decimal(1).sub(cancellationFeeRate(paidAt)))
-      .toDecimalPlaces(2);
-  }
-
   private async findOrCreateWalletForTopUpSuccess(
     tx: Prisma.TransactionClient,
     topUp: WalletTopUpRecord,
@@ -4197,7 +4211,10 @@ export class PaymentsService {
           ? Number(hold.amount)
           : 0,
       confirmation: confirmationSummary(hold),
-      policy: paymentPolicy(Boolean(hold.confirmationStartedAt)),
+      policy: paymentPolicy(
+        Boolean(hold.confirmationStartedAt),
+        hold.policyVersion,
+      ),
       capturedAmount,
       currency: hold.currency,
       paymentMethod: hold.paymentMethod,

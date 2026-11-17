@@ -143,6 +143,28 @@ describe('late reservation payment refunds', () => {
         return model;
       }
       it.each([
+        [20, 90, 0, 15],
+        [7, 80, 10, 15],
+        [2, 55, 35, 15],
+      ])(
+        'applies the new policy %i days before pickup',
+        async (days, refund, driver, platform) => {
+          const model = commissionBooking();
+          model.hold.policyVersion = 'immediate-cancellation-v2';
+          model.row.scheduledPickupAt = new Date(Date.now() + days * 86400000);
+          model.row.isImmediate = false;
+          const result = await model.service.cancelCollectedTrip({
+            requestId: 'request',
+            customerId: 'customer',
+          });
+          expect(result.refundedAmount).toBe(refund);
+          expect(model.settlement.driverShareAmount.toNumber()).toBe(driver);
+          expect(model.settlement.platformShareAmount.toNumber()).toBe(
+            platform,
+          );
+        },
+      );
+      it.each([
         [600000, 105, 0],
         [600001, 89.25, 15.75],
         [86400000, 89.25, 15.75],

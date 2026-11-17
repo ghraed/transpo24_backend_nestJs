@@ -24,9 +24,31 @@ import {
   requirePaymentPolicy,
 } from './payment-policy';
 import { APPROVED_MATCHING_VEHICLE_WHERE } from '../driver/request-eligibility';
-import { FREE_CANCELLATION_MS } from './booking-policy';
+import {
+  FREE_CANCELLATION_MS,
+  customerCancellationAmounts,
+  isFreeCancellationWindow,
+} from './booking-policy';
 
 const zero = () => new Prisma.Decimal(0);
+const cancellationDriverShare = (
+  hold: PaymentHold,
+  amount: Prisma.Decimal,
+  assigned: boolean,
+) => {
+  if (!assigned || amount.isZero()) return zero();
+  if (hold.policyVersion !== PAYMENT_POLICY_VERSION)
+    return amount.mul('0.5').toDecimalPlaces(2);
+  return Prisma.Decimal.max(
+    zero(),
+    amount.sub(
+      hold.amount
+        .sub(hold.customerPlatformFeeAmount)
+        .mul('0.15')
+        .toDecimalPlaces(2),
+    ),
+  );
+};
 const minor = (amount: Prisma.Decimal) =>
   Number(amount.mul(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP));
 const pickedUp = (r: TransportRequest) =>
@@ -769,19 +791,38 @@ export class DelayedBookingPaymentsService {
           throw new ConflictException(
             'Automatic cancellation after pickup requires manual review.',
           );
-        const fee = hold.amount
-          .mul(
-            free
-              ? 0
-              : heldCancellationRate(
-                  hold,
-                  Boolean(request.assignedDriverId) &&
-                    request.status !== 'RESERVED' &&
-                    (!request.deferredPaymentState ||
-                      request.deferredPaymentState === 'PAID'),
-                ),
-          )
-          .toDecimalPlaces(2);
+        const newFee = customerCancellationAmounts(
+          hold.amount,
+          hold.customerPlatformFeeAmount,
+          request.scheduledPickupAt,
+          request.isImmediate,
+          Date.now(),
+          free ||
+            !request.assignedDriverId ||
+            request.status === 'RESERVED' ||
+            Boolean(
+              request.deferredPaymentState &&
+              request.deferredPaymentState !== 'PAID',
+            ) ||
+            isFreeCancellationWindow(
+              hold.confirmationStartedAt,
+              hold.authorizedAt,
+            ),
+        ).retained;
+        const fee =
+          hold.policyVersion === PAYMENT_POLICY_VERSION
+            ? newFee
+            : hold.amount
+                .mul(
+                  heldCancellationRate(
+                    hold,
+                    Boolean(request.assignedDriverId) &&
+                      request.status !== 'RESERVED' &&
+                      (!request.deferredPaymentState ||
+                        request.deferredPaymentState === 'PAID'),
+                  ),
+                )
+                .toDecimalPlaces(2);
         if (
           (!free && fee.gt(0) && !quote) ||
           (quote &&
@@ -1208,9 +1249,11 @@ export class DelayedBookingPaymentsService {
                   ? minor(
                       hold.operationKind === 'CANCEL'
                         ? amount.sub(
-                            request.assignedDriverId
-                              ? amount.mul(0.5).toDecimalPlaces(2)
-                              : zero(),
+                            cancellationDriverShare(
+                              hold,
+                              amount,
+                              Boolean(request.assignedDriverId),
+                            ),
                           )
                         : directApplicationFee(
                             hold.amount,
@@ -1222,9 +1265,11 @@ export class DelayedBookingPaymentsService {
         const expectedApplicationFee =
           hold.operationKind === 'CANCEL'
             ? amount.sub(
-                request.assignedDriverId
-                  ? amount.mul(0.5).toDecimalPlaces(2)
-                  : zero(),
+                cancellationDriverShare(
+                  hold,
+                  amount,
+                  Boolean(request.assignedDriverId),
+                ),
               )
             : directApplicationFee(hold.amount, hold.customerPlatformFeeAmount);
         if (
@@ -1298,10 +1343,9 @@ export class DelayedBookingPaymentsService {
       }
     } else if (!(await this.releaseOrReconcile(tx, hold, request))) return;
     const cancelling = hold.operationKind === 'CANCEL';
-    const driverShare =
-      cancelling && request.assignedDriverId
-        ? amount.mul(0.5).toDecimalPlaces(2)
-        : zero();
+    const driverShare = cancelling
+      ? cancellationDriverShare(hold, amount, Boolean(request.assignedDriverId))
+      : zero();
     await tx.tripPaymentSettlement.upsert({
       where: { requestId: request.id },
       update: {

@@ -10,6 +10,8 @@ import {
 } from '../payments/customer-pricing';
 import {
   cancellationFeeRate,
+  customerCancellationAmounts,
+  isFreeCancellationWindow,
   driverDetailsAvailable,
   driverTrackingAvailable,
 } from '../payments/booking-policy';
@@ -4075,6 +4077,8 @@ export class CustomerRequestsService {
         request.paymentHold
           ? Boolean(request.paymentHold.confirmationStartedAt)
           : undefined,
+        request.paymentHold?.policyVersion ??
+          (request.paymentHold ? 'immediate-capture-v1' : undefined),
       ),
       confirmation: request.paymentHold
         ? confirmationSummary(request.paymentHold)
@@ -4154,14 +4158,35 @@ export class CustomerRequestsService {
 
     if (request.paymentHold?.confirmationStartedAt) {
       const hold = request.paymentHold;
-      const fee = hold.amount
-        .mul(
-          heldCancellationRate(
-            hold,
-            Boolean(request.assignedDriverId) && request.status !== 'RESERVED',
+      const newFee = customerCancellationAmounts(
+        hold.amount,
+        hold.customerPlatformFeeAmount,
+        request.scheduledPickupAt,
+        request.isImmediate,
+        Date.now(),
+        !request.assignedDriverId ||
+          request.status === 'RESERVED' ||
+          Boolean(
+            request.deferredPaymentState &&
+            request.deferredPaymentState !== 'PAID',
+          ) ||
+          isFreeCancellationWindow(
+            hold.confirmationStartedAt,
+            hold.authorizedAt,
           ),
-        )
-        .toDecimalPlaces(2);
+      ).retained;
+      const fee =
+        hold.policyVersion === 'delayed-cancellation-v2'
+          ? newFee
+          : hold.amount
+              .mul(
+                heldCancellationRate(
+                  hold,
+                  Boolean(request.assignedDriverId) &&
+                    request.status !== 'RESERVED',
+                ),
+              )
+              .toDecimalPlaces(2);
       return {
         canCancelCollectedTrip: true,
         reason: null,
@@ -4192,13 +4217,24 @@ export class CustomerRequestsService {
       CANCELLABLE_COLLECTED_PAYMENT_STATUSES.has(request.paymentHold.status)
     ) {
       const collectedAmount = request.paymentSettlement.collectedAmount;
-      const refunded = collectedAmount
-        .mul(
-          new Prisma.Decimal(1).sub(
-            cancellationFeeRate(request.paymentHold.capturedAt),
-          ),
-        )
-        .toDecimalPlaces(2);
+      const newRefund = customerCancellationAmounts(
+        collectedAmount,
+        request.paymentHold.customerPlatformFeeAmount,
+        request.scheduledPickupAt,
+        request.isImmediate,
+        Date.now(),
+        !request.assignedDriverId,
+      ).refund;
+      const refunded =
+        request.paymentHold.policyVersion === 'immediate-cancellation-v2'
+          ? newRefund
+          : collectedAmount
+              .mul(
+                new Prisma.Decimal(1).sub(
+                  cancellationFeeRate(request.paymentHold.capturedAt),
+                ),
+              )
+              .toDecimalPlaces(2);
       const refundedAmount = Number(refunded);
       const retainedAmount = Number(
         collectedAmount.sub(refunded).toDecimalPlaces(2),
@@ -4308,7 +4344,10 @@ export class CustomerRequestsService {
       amount: Number(hold.amount),
       customerPlatformFeeAmount: Number(hold.customerPlatformFeeAmount),
       confirmation: confirmationSummary(hold),
-      policy: paymentPolicy(Boolean(hold.confirmationStartedAt)),
+      policy: paymentPolicy(
+        Boolean(hold.confirmationStartedAt),
+        hold.policyVersion,
+      ),
       heldAmount: hold.confirmationStartedAt
         ? hold.status === 'PAYMENT_HELD'
           ? Number(hold.amount)

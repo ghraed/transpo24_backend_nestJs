@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ConflictException,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -667,20 +668,37 @@ export class StripeService {
     stripeAccountId?: string | null;
     paymentIntentId: string;
     amount?: number;
+    applicationFeeRefundAmount?: number;
     metadata?: Record<string, string>;
     idempotencyKey: string;
   }) {
     const directIntent = input.stripeAccountId
-      ? await this.retrievePaymentIntent(
-          input.paymentIntentId,
-          input.stripeAccountId,
+      ? await this.runStripe(() =>
+          this.getClient().paymentIntents.retrieve(
+            input.paymentIntentId,
+            input.applicationFeeRefundAmount
+              ? { expand: ['latest_charge.application_fee'] }
+              : {},
+            this.accountOptions(input.stripeAccountId),
+          ),
         )
       : null;
-    return this.runStripe(() =>
+    const fee =
+      typeof directIntent?.latest_charge === 'object' &&
+      directIntent.latest_charge
+        ? directIntent.latest_charge.application_fee
+        : null;
+    const feeId = typeof fee === 'string' ? fee : fee?.id;
+    if (input.applicationFeeRefundAmount && !feeId)
+      throw new ConflictException(
+        'The direct charge application fee could not be verified for this refund.',
+      );
+    const refund = await this.runStripe(() =>
       this.getClient().refunds.create(
         {
           payment_intent: input.paymentIntentId,
-          ...(directIntent?.application_fee_amount
+          ...(directIntent?.application_fee_amount &&
+          input.applicationFeeRefundAmount === undefined
             ? { refund_application_fee: true }
             : {}),
           ...(typeof input.amount === 'number' ? { amount: input.amount } : {}),
@@ -689,6 +707,15 @@ export class StripeService {
         this.accountOptions(input.stripeAccountId, input.idempotencyKey),
       ),
     );
+    if (input.applicationFeeRefundAmount && feeId)
+      await this.runStripe(() =>
+        this.getClient().applicationFees.createRefund(
+          feeId,
+          { amount: input.applicationFeeRefundAmount },
+          { idempotencyKey: `${input.idempotencyKey}_service_fee` },
+        ),
+      );
+    return refund;
   }
 
   async listRefundsForPaymentIntent(

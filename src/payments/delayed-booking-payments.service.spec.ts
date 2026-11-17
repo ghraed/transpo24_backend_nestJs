@@ -505,9 +505,9 @@ describe('delayed booking money lifecycle', () => {
   });
 
   it.each([
-    [600000, 15.75],
-    [86400000, 15.75],
-    [86400001, 52.5],
+    [600000, 0],
+    [86400000, 50],
+    [86400001, 50],
   ])('captures only the cancellation fee at %i ms', async (elapsed, fee) => {
     const x = setup();
     await x.authorize();
@@ -977,23 +977,23 @@ describe('direct booking authorization and release', () => {
     expect(x.state.hold.status).toBe('PAYMENT_CAPTURED');
   });
 
-  it('captures the existing cancellation fee and splits it 50/50 on the direct account', async () => {
+  it('captures the immediate cancellation allocation on the direct account', async () => {
     const x = directFixture();
     await x.authorize();
     x.state.request.assignedDriverId = 'driver';
     x.state.hold.operationKind = 'CANCEL';
-    x.state.hold.operationAmount = D('15.75');
+    x.state.hold.operationAmount = D('50');
     x.state.hold.confirmationState = 'CANCELLING';
     await x.service.process('request');
     expect(x.stripe.captureAuthorization).toHaveBeenCalledWith(
       expect.any(String),
-      1575,
+      5000,
       'booking_CANCEL_hold',
       'acct_original',
-      787,
+      1500,
     );
-    expect(x.state.settlement.driverShareAmount.toFixed(2)).toBe('7.88');
-    expect(x.state.settlement.platformShareAmount.toFixed(2)).toBe('7.87');
+    expect(x.state.settlement.driverShareAmount.toFixed(2)).toBe('35.00');
+    expect(x.state.settlement.platformShareAmount.toFixed(2)).toBe('15.00');
   });
 
   it.each(['DRIVER_GOING_TO_PICKUP', 'IN_TRANSIT', 'CANCELLED'])(

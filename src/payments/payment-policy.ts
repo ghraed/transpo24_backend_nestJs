@@ -12,7 +12,8 @@ import {
   cancellationFeeRate,
 } from './booking-policy';
 
-export const PAYMENT_POLICY_VERSION = 'delayed-authorization-v1';
+export const PAYMENT_POLICY_VERSION = 'delayed-cancellation-v2';
+export const IMMEDIATE_PAYMENT_POLICY_VERSION = 'immediate-cancellation-v2';
 export const BANK_APPROVAL_MS = 5 * 60 * 1000;
 export const RENEWAL_LEAD_MS = 6 * 60 * 60 * 1000;
 export const directChargesEnabled = () =>
@@ -25,15 +26,24 @@ export function requirePaymentPolicy(
   version?: string,
   delayed = delayedBookingsEnabled(),
 ) {
-  if (version !== (delayed ? PAYMENT_POLICY_VERSION : 'immediate-capture-v1'))
+  if (
+    version !==
+    (delayed ? PAYMENT_POLICY_VERSION : IMMEDIATE_PAYMENT_POLICY_VERSION)
+  )
     throw new ConflictException(
       'Payment terms changed. Review the current payment rules and confirm again.',
     );
 }
 
-export function paymentPolicy(delayed = delayedBookingsEnabled()) {
+export function paymentPolicy(
+  delayed = delayedBookingsEnabled(),
+  existingVersion?: string | null,
+) {
+  const version =
+    existingVersion ??
+    (delayed ? PAYMENT_POLICY_VERSION : IMMEDIATE_PAYMENT_POLICY_VERSION);
   return {
-    version: delayed ? PAYMENT_POLICY_VERSION : 'immediate-capture-v1',
+    version,
     directCharges: directChargesEnabled(),
     booking: {
       authorization: delayed
@@ -44,16 +54,48 @@ export function paymentPolicy(delayed = delayedBookingsEnabled()) {
       capture: delayed
         ? ('CUSTOMER_CONFIRMS_DELIVERY' as const)
         : ('ON_CONFIRMATION' as const),
-      cancellationClock: delayed
-        ? ('COUNTDOWN_START' as const)
-        : ('PAYMENT_CAPTURE' as const),
-      cancellationTiers: [
-        {
-          afterSeconds: FREE_CANCELLATION_MS / 1000,
-          feeRate: AFTER_GRACE_FEE_RATE,
-        },
-        { afterSeconds: DAY_MS / 1000, feeRate: AFTER_DAY_FEE_RATE },
-      ],
+      cancellationClock: version.endsWith('cancellation-v2')
+        ? ('PICKUP_TIME' as const)
+        : delayed
+          ? ('COUNTDOWN_START' as const)
+          : ('PAYMENT_CAPTURE' as const),
+      cancellationTiers: version.endsWith('cancellation-v2')
+        ? []
+        : [
+            {
+              afterSeconds: FREE_CANCELLATION_MS / 1000,
+              feeRate: AFTER_GRACE_FEE_RATE,
+            },
+            { afterSeconds: DAY_MS / 1000, feeRate: AFTER_DAY_FEE_RATE },
+          ],
+      cancellationBeforePickup: version.endsWith('cancellation-v2')
+        ? [
+            {
+              minimumRemainingSeconds: (20 * DAY_MS) / 1000,
+              refundRate: 0.85,
+              driverRate: 0,
+              platformRate: 0.15,
+            },
+            {
+              minimumRemainingSeconds: (7 * DAY_MS) / 1000,
+              refundRate: 0.75,
+              driverRate: 0.1,
+              platformRate: 0.15,
+            },
+            {
+              moreThanRemainingSeconds: 48 * 60 * 60,
+              refundRate: 0.65,
+              driverRate: 0.2,
+              platformRate: 0.15,
+            },
+            {
+              minimumRemainingSeconds: 0,
+              refundRate: 0.5,
+              driverRate: 0.35,
+              platformRate: 0.15,
+            },
+          ]
+        : undefined,
       cancellationBeforeAssignment: 'FREE',
       cancellationAfterPickup: 'MANUAL_REVIEW',
       renewal: delayed ? 'REAUTHORIZE_BEFORE_EXPIRY' : 'NOT_APPLICABLE',
@@ -111,7 +153,7 @@ export function confirmationSummary(hold: ConfirmationFields) {
             : /approval/i.test(hold.failureReason)
               ? 'APPROVAL_FAILED'
               : 'PAYMENT_FAILED',
-    policy: paymentPolicy(true),
+    policy: paymentPolicy(true, hold.policyVersion),
   };
 }
 

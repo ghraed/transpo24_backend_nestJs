@@ -74,9 +74,9 @@ describe('customer booking disclosure', () => {
     return { row, service, db };
   }
   it.each([
-    ['true', 'false', 'delayed-authorization-v1'],
-    ['false', 'true', 'delayed-authorization-v1'],
-    ['false', 'false', 'immediate-capture-v1'],
+    ['true', 'false', 'delayed-cancellation-v2'],
+    ['false', 'true', 'delayed-cancellation-v2'],
+    ['false', 'false', 'immediate-cancellation-v2'],
   ])(
     'unpaid requests use the current policy with direct charges=%s and delayed bookings=%s',
     (directCharges, delayed, version) => {

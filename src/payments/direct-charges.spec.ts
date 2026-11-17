@@ -55,6 +55,9 @@ function stripeFixture() {
         .mockResolvedValue({ id: 'pi_direct', status: 'canceled' }),
     },
     refunds: { create: jest.fn().mockResolvedValue({ id: 're_direct' }) },
+    applicationFees: {
+      createRefund: jest.fn().mockResolvedValue({ id: 'fr_service' }),
+    },
   };
   const service = new StripeService();
   Object.defineProperty(service, 'getClient', { value: () => api });
@@ -62,6 +65,30 @@ function stripeFixture() {
 }
 
 describe('Direct Stripe charges', () => {
+  it('refunds only the CHF 5 service portion of the application fee on a CHF 55 cancellation refund', async () => {
+    const { service, api } = stripeFixture();
+    api.paymentIntents.retrieve.mockResolvedValue({
+      id: 'pi_direct',
+      application_fee_amount: 2000,
+      latest_charge: { application_fee: 'fee_20' },
+    });
+    await service.createRefund({
+      paymentIntentId: 'pi_direct',
+      stripeAccountId: account,
+      amount: 5500,
+      applicationFeeRefundAmount: 500,
+      idempotencyKey: 'cancel_request',
+    });
+    expect(api.refunds.create).toHaveBeenCalledWith(
+      { payment_intent: 'pi_direct', amount: 5500 },
+      { stripeAccount: account, idempotencyKey: 'cancel_request' },
+    );
+    expect(api.applicationFees.createRefund).toHaveBeenCalledWith(
+      'fee_20',
+      { amount: 500 },
+      { idempotencyKey: 'cancel_request_service_fee' },
+    );
+  });
   it('keeps the existing 5% customer and 15% driver commissions with money rounded to cents', () => {
     expect(directApplicationFee(D('6.30'), D('.30')).toFixed(2)).toBe('1.20');
     expect(directApplicationFee(D('5.25'), D('.25')).toFixed(2)).toBe('1.00');
