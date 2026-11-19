@@ -977,6 +977,17 @@ export class DriverController {
     return this.driverService.startReservedPickup(request.user.id, tripId);
   }
 
+  @Post('jobs/:requestId/cancel')
+  async cancelAssignedJob(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.paymentsService.cancelAssignedJobByDriver(
+      request.user.id,
+      requestId,
+    );
+  }
+
   @UseGuards(ApprovedDriverGuard)
   @Patch('trips/:tripId/start-delivery')
   async startDelivery(

@@ -135,6 +135,7 @@ export class NotificationsService {
           'ITEM_DELIVERED',
           'CUSTOMER_DELIVERY_CONFIRMED',
           'TRIP_CANCELLED',
+          'DRIVER_CANCELLED',
           'TRIP_FUNDS_TRANSFERRED',
         ]);
         const eventId =
@@ -361,6 +362,10 @@ export class NotificationsService {
       TRIP_CANCELLED: [
         'Job cancelled',
         'Your job was cancelled. Open the job to review the cancellation and payment details.',
+      ],
+      DRIVER_CANCELLED: [
+        'Driver cancelled the job',
+        'Your driver cancelled the job. Your booking payment has been refunded in full or its reservation released.',
       ],
     };
     const message = copy[type];

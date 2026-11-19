@@ -91,8 +91,109 @@ describe('late reservation payment refunds', () => {
       .spyOn(service, 'queueDriverPayoutForTrip')
       .mockResolvedValue(undefined as never);
     (service as any).ensureWallet = jest.fn(async () => wallet);
-    return { service, stripe, tx, hold, row, settlement, wallet };
+    return {
+      service,
+      stripe,
+      tx,
+      hold,
+      row,
+      settlement,
+      wallet,
+      notifications,
+    };
   }
+  it.each(['STRIPE', 'APP_WALLET'])(
+    'driver cancellation refunds the entire %s payment and notifies the customer',
+    async (provider) => {
+      const model = setup(provider);
+      model.row.status = 'DRIVER_ASSIGNED';
+      model.row.assignedDriverId = 'driver';
+      model.row.assignedDriver = { userId: 'driver-user' };
+      model.hold.amount = new Prisma.Decimal(105);
+      model.hold.customerPlatformFeeAmount = new Prisma.Decimal(5);
+      model.settlement.collectedAmount = new Prisma.Decimal(105);
+      const result = await model.service.cancelAssignedJobByDriver(
+        'driver-user',
+        'request',
+      );
+      expect(result.refundedAmount).toBe(105);
+      expect(model.settlement.driverShareAmount.toNumber()).toBe(0);
+      expect(model.settlement.platformShareAmount.toNumber()).toBe(0);
+      expect(model.notifications.notifyCustomerTripUpdate).toHaveBeenCalledWith(
+        'request',
+        'DRIVER_CANCELLED',
+      );
+      const retried = await model.service.cancelAssignedJobByDriver(
+        'driver-user',
+        'request',
+      );
+      expect(retried.refundedAmount).toBe(105);
+      expect(
+        model.notifications.notifyCustomerTripUpdate,
+      ).toHaveBeenCalledTimes(1);
+      expect(model.stripe.createRefund).toHaveBeenCalledTimes(
+        provider === 'STRIPE' ? 1 : 0,
+      );
+    },
+  );
+  it('rejects another driver and cancellation after pickup without refunding', async () => {
+    const model = setup();
+    model.row.status = 'DRIVER_ASSIGNED';
+    model.row.assignedDriver = { userId: 'driver-user' };
+    await expect(
+      model.service.cancelAssignedJobByDriver('stranger', 'request'),
+    ).rejects.toThrow('not assigned');
+    model.row.status = 'ITEM_PICKED_UP';
+    model.row.itemPickedUpAt = new Date();
+    await expect(
+      model.service.cancelAssignedJobByDriver('driver-user', 'request'),
+    ).rejects.toThrow('after pickup');
+    expect(model.stripe.createRefund).not.toHaveBeenCalled();
+    expect(model.notifications.notifyCustomerTripUpdate).not.toHaveBeenCalled();
+  });
+  it('releases a delayed booking without charging a cancellation fee', async () => {
+    const model = setup();
+    model.row.status = 'DRIVER_ASSIGNED';
+    model.row.assignedDriver = { userId: 'driver-user' };
+    model.hold.confirmationStartedAt = new Date();
+    const cancel = jest
+      .fn()
+      .mockResolvedValue({
+        refundedAmount: 0,
+        retainedAmount: 0,
+        releasedAmount: 105,
+        currency: 'CHF',
+      });
+    (model.service as any).delayedBookings = { cancel };
+    const result = await model.service.cancelAssignedJobByDriver(
+      'driver-user',
+      'request',
+    );
+    expect(cancel).toHaveBeenCalledWith(
+      'customer',
+      'request',
+      true,
+      undefined,
+      'driver-user',
+    );
+    expect(result.refundedAmount).toBe(0);
+    expect(model.stripe.createRefund).not.toHaveBeenCalled();
+    expect(model.notifications.notifyCustomerTripUpdate).toHaveBeenCalledWith(
+      'request',
+      'DRIVER_CANCELLED',
+    );
+  });
+  it('checks platform fee responsibility before refunding a direct charge', async () => {
+    const model = setup();
+    model.row.status = 'DRIVER_ASSIGNED';
+    model.row.assignedDriver = { userId: 'driver-user' };
+    model.row.assignedDriverId = 'driver';
+    model.hold.stripeAccountId = 'acct_driver';
+    model.stripe.requirePlatformProcessingFees = jest.fn().mockResolvedValue(undefined);
+    await model.service.cancelAssignedJobByDriver('driver-user', 'request');
+    expect(model.stripe.requirePlatformProcessingFees).toHaveBeenCalledWith('acct_driver');
+    expect(model.stripe.createRefund).toHaveBeenCalledWith(expect.objectContaining({ amount: 10000, stripeAccountId: 'acct_driver' }));
+  });
   it.each(['STRIPE', 'APP_WALLET'])(
     '%s cancellation applies the existing refund policy to the total including client commission',
     async (provider) => {

@@ -216,6 +216,7 @@ describe('Customer Alerts history', () => {
     'DRIVER_NEAR_DELIVERY',
     'CUSTOMER_DELIVERY_CONFIRMED',
     'TRIP_CANCELLED',
+    'DRIVER_CANCELLED',
   ])('addresses %s to the trip owner', async (type) => {
     const { service, customerNotification } = setup();
     await service.notifyCustomerTripUpdate('trip1', type);

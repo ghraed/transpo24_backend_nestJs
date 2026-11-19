@@ -737,6 +737,7 @@ export class DelayedBookingPaymentsService {
     requestId: string,
     free = false,
     quote?: { expectedRetainedAmount: number; policyVersion?: string },
+    driverUserId?: string,
   ) {
     // Persist the operation before contacting Stripe. A timeout/crash can then be retried
     // with the same capture key even when Stripe succeeded but the response was lost.
@@ -759,14 +760,22 @@ export class DelayedBookingPaymentsService {
         await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${requestId} FOR UPDATE`;
         const request = await tx.transportRequest.findUniqueOrThrow({
           where: { id: requestId },
-          include: { paymentHold: true },
+          include: { paymentHold: true, assignedDriver: true },
         });
         if (request.customerId !== customerId)
           throw new BadRequestException('This payment does not belong to you.');
+        if (driverUserId && request.assignedDriver?.userId !== driverUserId)
+          throw new BadRequestException('This job is not assigned to you.');
         let hold = request.paymentHold!;
         if (!hold?.confirmationStartedAt)
           throw new ConflictException('This is not a delayed booking.');
-        if (hold.operationKind === 'CANCEL') return;
+        if (hold.operationKind === 'CANCEL') {
+          if (free && hold.operationAmount?.gt(0))
+            throw new ConflictException(
+              'A paid cancellation is already in progress.',
+            );
+          return;
+        }
         if (hold.operationKind)
           throw new ConflictException(
             'A payment operation is already in progress.',

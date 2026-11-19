@@ -691,6 +691,137 @@ export class PaymentsService {
       });
   }
 
+  async cancelAssignedJobByDriver(driverUserId: string, requestId: string) {
+    const request = await this.prisma.transportRequest.findUnique({
+      where: { id: requestId },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+        itemPickedUpAt: true,
+        assignedDriver: { select: { userId: true } },
+        paymentHold: { select: { confirmationStartedAt: true } },
+        paymentSettlement: { select: { refundedAmount: true, currency: true } },
+      },
+    });
+    if (!request || request.assignedDriver?.userId !== driverUserId)
+      throw new ForbiddenException('This job is not assigned to you.');
+    if (request.status === TransportRequestStatus.CANCELLED) {
+      return {
+        requestStatus: TransportRequestStatus.CANCELLED,
+        refundedAmount: Number(request.paymentSettlement?.refundedAmount ?? 0),
+        currency: request.paymentSettlement?.currency ?? null,
+      };
+    }
+    if (
+      request.itemPickedUpAt ||
+      [
+        TransportRequestStatus.ITEM_PICKED_UP,
+        TransportRequestStatus.PICKUP_IN_PROGRESS,
+        TransportRequestStatus.IN_TRANSIT,
+        TransportRequestStatus.DRIVER_GOING_TO_DROPOFF,
+        TransportRequestStatus.DELIVERED,
+        TransportRequestStatus.COMPLETED,
+      ].some((status) => status === request.status)
+    )
+      throw new ConflictException(
+        'Driver cancellation after pickup requires manual review.',
+      );
+
+    let result: {
+      requestStatus: TransportRequestStatus;
+      refundedAmount: number;
+      currency: string | null;
+    };
+    if (request.paymentHold?.confirmationStartedAt) {
+      if (!this.delayedBookings)
+        throw new ServiceUnavailableException(
+          'Booking cancellation is unavailable.',
+        );
+      const cancelled = await this.delayedBookings.cancel(
+        request.customerId,
+        requestId,
+        true,
+        undefined,
+        driverUserId,
+      );
+      result = {
+        requestStatus: TransportRequestStatus.CANCELLED,
+        refundedAmount: cancelled.refundedAmount,
+        currency: cancelled.currency,
+      };
+    } else {
+      result = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM transport_requests WHERE id = ${requestId} FOR UPDATE`;
+        const current = await tx.transportRequest.findUniqueOrThrow({
+          where: { id: requestId },
+          include: {
+            assignedDriver: true,
+            paymentHold: true,
+            paymentSettlement: true,
+          },
+        });
+        if (current.assignedDriver?.userId !== driverUserId)
+          throw new ForbiddenException('This job is not assigned to you.');
+        if (
+          current.itemPickedUpAt ||
+          [
+            'PICKUP_IN_PROGRESS',
+            'ITEM_PICKED_UP',
+            'IN_TRANSIT',
+            'DRIVER_GOING_TO_DROPOFF',
+            'DELIVERED',
+            'COMPLETED',
+          ].includes(current.status)
+        )
+          throw new ConflictException(
+            'Driver cancellation after pickup requires manual review.',
+          );
+        if (current.status === TransportRequestStatus.CANCELLED)
+          return {
+            requestStatus: TransportRequestStatus.CANCELLED,
+            refundedAmount: Number(
+              current.paymentSettlement?.refundedAmount ?? 0,
+            ),
+            currency: current.paymentSettlement?.currency ?? null,
+          };
+        if (current.paymentSettlement && current.paymentHold) {
+          if (current.paymentHold.stripeAccountId)
+            await this.stripeService.requirePlatformProcessingFees(
+              current.paymentHold.stripeAccountId,
+            );
+          const refunded = await this.cancelCollectedTripTx(
+            tx,
+            requestId,
+            current.customerId,
+            true,
+          );
+          return {
+            requestStatus: TransportRequestStatus.CANCELLED,
+            refundedAmount: refunded.refundedAmount,
+            currency: refunded.currency,
+          };
+        }
+        if (current.paymentHold)
+          await this.cancelRequestPaymentTx(tx, requestId);
+        await tx.transportRequest.update({
+          where: { id: requestId },
+          data: { status: TransportRequestStatus.CANCELLED },
+        });
+        return {
+          requestStatus: TransportRequestStatus.CANCELLED,
+          refundedAmount: 0,
+          currency: current.paymentHold?.currency ?? null,
+        };
+      });
+    }
+    await this.notificationsService.notifyCustomerTripUpdate(
+      requestId,
+      'DRIVER_CANCELLED',
+    );
+    return result;
+  }
+
   async refundUnpaidReservation(input: CancelPaymentInput) {
     return this.prisma.$transaction(
       async (tx) => {
@@ -1086,7 +1217,11 @@ export class PaymentsService {
         stripeAccountId: request.paymentHold.stripeAccountId,
         amount: this.toStripeMinorUnit(refundableAmount),
         ...(newPolicy && !fullRefund && request.paymentHold.stripeAccountId
-          ? { applicationFeeRefundAmount: this.toStripeMinorUnit(request.paymentHold.customerPlatformFeeAmount) }
+          ? {
+              applicationFeeRefundAmount: this.toStripeMinorUnit(
+                request.paymentHold.customerPlatformFeeAmount,
+              ),
+            }
           : {}),
         metadata: {
           requestId,
