@@ -747,12 +747,8 @@ export class DelayedBookingPaymentsService {
     if (initial.customerId !== customerId)
       throw new BadRequestException('This payment does not belong to you.');
     if (pickedUp(initial)) {
-      await this.prisma.tripPaymentSettlement.updateMany({
-        where: { requestId },
-        data: { requiresManualReview: true, status: 'MANUAL_REVIEW' },
-      });
       throw new ConflictException(
-        'Automatic cancellation after pickup requires manual review.',
+        'Cancellation after pickup is unavailable. Complete delivery normally; the full fare remains payable.',
       );
     }
     await this.prisma
@@ -798,7 +794,7 @@ export class DelayedBookingPaymentsService {
         }
         if (pickedUp(request))
           throw new ConflictException(
-            'Automatic cancellation after pickup requires manual review.',
+            'Cancellation after pickup is unavailable. Complete delivery normally; the full fare remains payable.',
           );
         const newFee = customerCancellationAmounts(
           hold.amount,

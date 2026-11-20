@@ -322,7 +322,7 @@ describe('late reservation payment refunds', () => {
           provider === 'APP_WALLET' ? 115 : 10,
         );
       });
-      it('does not refund the client commission after pickup', async () => {
+      it('keeps the full payment and normal payout eligible after a customer cancellation attempt following pickup', async () => {
         const model = commissionBooking();
         model.row.itemPickedUpAt = new Date();
         model.row.status = 'ITEM_PICKED_UP';
@@ -331,10 +331,12 @@ describe('late reservation payment refunds', () => {
             requestId: 'request',
             customerId: 'customer',
           }),
-        ).rejects.toThrow('manual review');
+        ).rejects.toThrow('full fare remains payable');
         expect(model.stripe.createRefund).not.toHaveBeenCalled();
         expect(model.tx.customerWallet.update).not.toHaveBeenCalled();
         expect(model.tx.driverEarning.upsert).not.toHaveBeenCalled();
+        expect(model.row.status).toBe('ITEM_PICKED_UP');
+        expect(model.settlement.requiresManualReview).not.toBe(true);
       });
     },
   );

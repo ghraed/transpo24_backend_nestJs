@@ -629,9 +629,8 @@ export class PaymentsService {
       request.status === TransportRequestStatus.DELIVERED ||
       request.status === TransportRequestStatus.COMPLETED
     ) {
-      await this.markSettlementManualReview(input.requestId);
       throw new ConflictException(
-        'Automatic cancellation after pickup requires manual review.',
+        'Cancellation after pickup is unavailable. Complete delivery normally; the full fare remains payable.',
       );
     }
 
@@ -1127,16 +1126,8 @@ export class PaymentsService {
       request.status === TransportRequestStatus.DELIVERED ||
       request.status === TransportRequestStatus.COMPLETED
     ) {
-      const settlement = await tx.tripPaymentSettlement.update({
-        where: { requestId },
-        data: {
-          status: TripPaymentSettlementStatus.MANUAL_REVIEW,
-          requiresManualReview: true,
-        },
-        select: TRIP_PAYMENT_SETTLEMENT_SELECT,
-      });
       throw new ConflictException(
-        `Automatic cancellation after pickup requires manual review. Settlement ${settlement.id} flagged.`,
+        'Cancellation after pickup is unavailable. Complete delivery normally; the full fare remains payable.',
       );
     }
 
@@ -3766,17 +3757,6 @@ export class PaymentsService {
               : topUp.failureReason,
         },
       });
-    });
-  }
-
-  private async markSettlementManualReview(requestId: string): Promise<void> {
-    await this.prisma.tripPaymentSettlement.updateMany({
-      where: { requestId },
-      data: {
-        status: TripPaymentSettlementStatus.MANUAL_REVIEW,
-        requiresManualReview: true,
-        nextPayoutRetryAt: null,
-      },
     });
   }
 

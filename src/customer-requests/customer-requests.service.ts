@@ -4142,15 +4142,20 @@ export class CustomerRequestsService {
       };
     }
 
-    if (
-      request.itemPickedUpAt ||
-      POST_PICKUP_REQUEST_STATUSES.has(request.status) ||
-      request.paymentSettlement?.requiresManualReview
-    ) {
+    if (request.paymentSettlement?.requiresManualReview) {
+      return {
+        canCancelCollectedTrip: false,
+        reason: 'This trip requires manual review.',
+        refundPreview: null,
+        action: 'NONE',
+      };
+    }
+
+    if (request.itemPickedUpAt || POST_PICKUP_REQUEST_STATUSES.has(request.status)) {
       return {
         canCancelCollectedTrip: false,
         reason:
-          'Automatic cancellation after pickup is unavailable. This trip requires manual review.',
+          'Cancellation after pickup is unavailable. The trip continues to delivery and the full fare remains payable.',
         refundPreview: null,
         action: 'NONE',
       };

@@ -731,14 +731,15 @@ describe('delayed booking money lifecycle', () => {
     expect(x.state.settlement.driverPayoutState).toBe('EARNING_CREATED');
   });
 
-  it('flags cancellation after pickup for review without releasing held funds', async () => {
+  it('keeps the normal payment and payout path after a customer cancellation attempt following pickup', async () => {
     const x = setup();
     await x.authorize();
     x.state.request.itemPickedUpAt = new Date();
     await expect(x.service.cancel('customer', 'request')).rejects.toThrow(
-      'manual review',
+      'full fare remains payable',
     );
-    expect(x.state.settlement.requiresManualReview).toBe(true);
+    expect(x.state.settlement.requiresManualReview).not.toBe(true);
+    expect(x.state.request.status).not.toBe('CANCELLED');
     expect(x.state.wallet.reservedBalance.toNumber()).toBe(105);
   });
 
