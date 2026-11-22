@@ -14,14 +14,20 @@ describe('deleting a customer request', () => {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       transportRequest: {
-        findUnique: jest.fn().mockResolvedValue({ ...request, deletedByCustomerAt: null }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ ...request, deletedByCustomerAt: null }),
         update: jest.fn().mockResolvedValue(request),
       },
-      customerNotification: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
+      customerNotification: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
     };
     const prisma = {
       transportRequest: { findUnique: jest.fn().mockResolvedValue(request) },
-      $transaction: jest.fn((callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
+      $transaction: jest.fn(
+        (callback: (value: typeof tx) => Promise<unknown>) => callback(tx),
+      ),
     };
     const gateway = { emitRequestDeleted: jest.fn() };
     const service = new CustomerRequestsService(
@@ -37,7 +43,10 @@ describe('deleting a customer request', () => {
   it('removes only the owner’s alerts for the deleted request in the same transaction', async () => {
     const { service, tx, gateway } = setup();
 
-    await service.deleteCustomerRequest({ customerId: 'owner-1', requestId: 'request-1' });
+    await service.deleteCustomerRequest({
+      customerId: 'owner-1',
+      requestId: 'request-1',
+    });
 
     expect(tx.transportRequest.update).toHaveBeenCalledWith({
       where: { id: 'request-1' },
@@ -62,7 +71,10 @@ describe('deleting a customer request', () => {
     const { service, prisma, tx } = setup();
 
     await expect(
-      service.deleteCustomerRequest({ customerId: 'other-1', requestId: 'request-1' }),
+      service.deleteCustomerRequest({
+        customerId: 'other-1',
+        requestId: 'request-1',
+      }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.customerNotification.deleteMany).not.toHaveBeenCalled();

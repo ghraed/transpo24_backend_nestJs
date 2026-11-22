@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { requestGooglePlaces } from './google-places.transport';
 import {
   PlaceAutocompleteDto,
+  PlaceCountryDto,
   PlaceDetailsDto,
   PlaceReverseDto,
 } from './places.dto';
@@ -47,12 +48,37 @@ export class PlacesService {
   async autocomplete(dto: PlaceAutocompleteDto) {
     const data = await this.provider<{
       suggestions?: {
-        placePrediction?: { placeId?: string; text?: { text?: string } };
+        placePrediction?: {
+          placeId?: string;
+          text?: { text?: string };
+          distanceMeters?: number;
+        };
       }[];
     }>(
       new URL('https://places.googleapis.com/v1/places:autocomplete'),
-      'suggestions.placePrediction.placeId,suggestions.placePrediction.text.text',
-      { input: dto.input.trim(), languageCode: dto.languageCode ?? 'en' },
+      'suggestions.placePrediction.placeId,suggestions.placePrediction.text.text,suggestions.placePrediction.distanceMeters',
+      {
+        input: dto.input.trim(),
+        languageCode: dto.languageCode ?? 'en',
+        ...(dto.sessionToken ? { sessionToken: dto.sessionToken } : {}),
+        ...(dto.location
+          ? {
+              origin: {
+                latitude: dto.location.latitude,
+                longitude: dto.location.longitude,
+              },
+              locationBias: {
+                circle: {
+                  center: {
+                    latitude: dto.location.latitude,
+                    longitude: dto.location.longitude,
+                  },
+                  radius: 50000,
+                },
+              },
+            }
+          : {}),
+      },
     );
     if (data.suggestions !== undefined && !Array.isArray(data.suggestions)) {
       throw new BadGatewayException('Place service unavailable.');
@@ -61,7 +87,16 @@ export class PlacesService {
       const prediction = item?.placePrediction;
       return typeof prediction?.placeId === 'string' &&
         typeof prediction.text?.text === 'string'
-        ? [{ place_id: prediction.placeId, description: prediction.text.text }]
+        ? [
+            {
+              place_id: prediction.placeId,
+              description: prediction.text.text,
+              ...(typeof prediction.distanceMeters === 'number' &&
+              Number.isFinite(prediction.distanceMeters)
+                ? { distance_meters: prediction.distanceMeters }
+                : {}),
+            },
+          ]
         : [];
     });
     return { status: predictions.length ? 'OK' : 'ZERO_RESULTS', predictions };
@@ -72,6 +107,8 @@ export class PlacesService {
       `https://places.googleapis.com/v1/places/${encodeURIComponent(dto.placeId)}`,
     );
     url.searchParams.set('languageCode', dto.languageCode ?? 'en');
+    if (dto.sessionToken)
+      url.searchParams.set('sessionToken', dto.sessionToken);
     const data = await this.provider<{
       formattedAddress?: string;
       location?: { latitude?: number; longitude?: number };
@@ -129,6 +166,35 @@ export class PlacesService {
             global_code: data.plus_code.global_code,
           }
         : undefined,
+    };
+  }
+
+  async countryCenter(dto: PlaceCountryDto) {
+    const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+    url.searchParams.set(
+      'components',
+      `country:${dto.countryCode.toUpperCase()}`,
+    );
+    const data = await this.provider<{
+      status?: string;
+      results?: { geometry?: { location?: { lat?: number; lng?: number } } }[];
+    }>(url);
+    if (
+      !['OK', 'ZERO_RESULTS'].includes(data.status ?? '') ||
+      (data.results !== undefined && !Array.isArray(data.results))
+    ) {
+      throw new BadGatewayException('Place service unavailable.');
+    }
+    const point = data.results?.[0]?.geometry?.location;
+    const valid =
+      typeof point?.lat === 'number' &&
+      Number.isFinite(point.lat) &&
+      Math.abs(point.lat) <= 90 &&
+      typeof point.lng === 'number' &&
+      Number.isFinite(point.lng) &&
+      Math.abs(point.lng) <= 180;
+    return {
+      location: valid ? { latitude: point.lat!, longitude: point.lng! } : null,
     };
   }
 }

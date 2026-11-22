@@ -18,6 +18,16 @@ type GoogleRoute = {
 export class RoutesService {
   constructor(private readonly config: ConfigService) {}
 
+  async distance(dto: ComputeDriverRouteDto) {
+    const result = await this.compute(dto);
+    const distanceMeters = result.routes[0]?.legs[0]?.distance.value;
+    return {
+      status: result.status,
+      distanceMeters:
+        typeof distanceMeters === 'number' ? distanceMeters : null,
+    };
+  }
+
   async compute(dto: ComputeDriverRouteDto) {
     const key =
       this.config.get<string>('GOOGLE_MAPS_SERVER_API_KEY')?.trim() ||

@@ -11,9 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DriverAuthGuard } from '../auth/guards/driver-auth.guard';
+import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
 import { TranslationCacheService } from '../translations/translation-cache.service';
 import {
   PlaceAutocompleteDto,
+  PlaceCountryDto,
   PlaceDetailsDto,
   PlaceReverseDto,
 } from './places.dto';
@@ -55,5 +57,31 @@ export class PlacesController {
   @Post('reverse')
   reverse(@Body() dto: PlaceReverseDto) {
     return this.places.reverse(dto);
+  }
+}
+
+@Controller('customer/maps/places')
+@UseGuards(CustomerAuthGuard, PlacesRateLimitGuard)
+export class CustomerMapsPlacesController {
+  constructor(private readonly places: PlacesService) {}
+
+  @Post('autocomplete')
+  autocomplete(@Body() dto: PlaceAutocompleteDto) {
+    return this.places.autocomplete(dto);
+  }
+
+  @Post('details')
+  details(@Body() dto: PlaceDetailsDto) {
+    return this.places.details(dto);
+  }
+
+  @Post('reverse')
+  reverse(@Body() dto: PlaceReverseDto) {
+    return this.places.reverse(dto);
+  }
+
+  @Post('country-center')
+  countryCenter(@Body() dto: PlaceCountryDto) {
+    return this.places.countryCenter(dto);
   }
 }

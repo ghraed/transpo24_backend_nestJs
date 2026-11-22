@@ -7,8 +7,13 @@ import request from 'supertest';
 import type { Server } from 'node:http';
 import { AuthService } from '../auth/auth.service';
 import { DriverAuthGuard } from '../auth/guards/driver-auth.guard';
+import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
 import { TranslationCacheService } from '../translations/translation-cache.service';
-import { PlacesController, PlacesRateLimitGuard } from './places.controller';
+import {
+  CustomerMapsPlacesController,
+  PlacesController,
+  PlacesRateLimitGuard,
+} from './places.controller';
 import { PlacesService } from './places.service';
 
 let app: INestApplication;
@@ -16,11 +21,12 @@ const counters = { incrementRateLimitCounter: jest.fn().mockResolvedValue(1) };
 const payload = { input: 'Steinweg Basel', languageCode: 'de' };
 beforeAll(async () => {
   const module = await Test.createTestingModule({
-    controllers: [PlacesController],
+    controllers: [PlacesController, CustomerMapsPlacesController],
     providers: [
       PlacesService,
       PlacesRateLimitGuard,
       DriverAuthGuard,
+      CustomerAuthGuard,
       { provide: ConfigService, useValue: { get: () => 'private-key' } },
       { provide: TranslationCacheService, useValue: counters },
       {
@@ -125,6 +131,53 @@ it('rejects excessive requests before calling Google', async () => {
     .post('/driver/places/autocomplete')
     .set('Authorization', 'Bearer driver')
     .send(payload)
+    .expect(429);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it('allows only authenticated customers to use the server-side search', async () => {
+  const fetcher = jest
+    .spyOn(transport, 'requestGooglePlaces')
+    .mockResolvedValue({ suggestions: [] });
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/places/autocomplete')
+    .send(payload)
+    .expect(401);
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/places/autocomplete')
+    .set('Authorization', 'Bearer driver')
+    .send(payload)
+    .expect(403);
+  expect(fetcher).not.toHaveBeenCalled();
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/places/autocomplete')
+    .set('Authorization', 'Bearer customer')
+    .send({
+      ...payload,
+      location: { latitude: 47.56, longitude: 7.59 },
+      sessionToken: 'session-123',
+    })
+    .expect(201);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('rejects untrusted customer Maps input and rate-limits before Google', async () => {
+  const fetcher = jest.spyOn(transport, 'requestGooglePlaces');
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/places/autocomplete')
+    .set('Authorization', 'Bearer customer')
+    .send({ ...payload, key: 'untrusted' })
+    .expect(400);
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/places/autocomplete')
+    .set('Authorization', 'Bearer customer')
+    .send({ ...payload, location: { latitude: 120, longitude: 7 } })
+    .expect(400);
+  counters.incrementRateLimitCounter.mockResolvedValue(121);
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/places/country-center')
+    .set('Authorization', 'Bearer customer')
+    .send({ countryCode: 'CH' })
     .expect(429);
   expect(fetcher).not.toHaveBeenCalled();
 });

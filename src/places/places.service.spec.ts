@@ -60,9 +60,42 @@ it('uses server-authenticated Places New search and returns only predictions', a
   expect(headers).toEqual({
     'X-Goog-Api-Key': 'server-secret',
     'X-Goog-FieldMask':
-      'suggestions.placePrediction.placeId,suggestions.placePrediction.text.text',
+      'suggestions.placePrediction.placeId,suggestions.placePrediction.text.text,suggestions.placePrediction.distanceMeters',
   });
   expect(body).toEqual({ input: 'Steinweg', languageCode: 'de' });
+});
+
+it('preserves location bias, distance and a billing session for customer search', async () => {
+  provider.mockResolvedValue({
+    suggestions: [
+      {
+        placePrediction: {
+          placeId: 'basel-id',
+          text: { text: 'Basel' },
+          distanceMeters: 1234,
+        },
+      },
+    ],
+  });
+  await expect(
+    service.autocomplete({
+      input: 'Basel',
+      location: { latitude: 47.56, longitude: 7.59 },
+      sessionToken: 'session-123',
+    }),
+  ).resolves.toEqual({
+    status: 'OK',
+    predictions: [
+      { place_id: 'basel-id', description: 'Basel', distance_meters: 1234 },
+    ],
+  });
+  expect(provider.mock.calls[0][2]).toMatchObject({
+    sessionToken: 'session-123',
+    origin: { latitude: 47.56, longitude: 7.59 },
+    locationBias: {
+      circle: { center: { latitude: 47.56, longitude: 7.59 }, radius: 50000 },
+    },
+  });
 });
 
 it('supports empty search results and rejects malformed predictions', async () => {
@@ -98,6 +131,43 @@ it('converts details to the existing mobile location contract', async () => {
   expect(provider.mock.calls[0][1]['X-Goog-FieldMask']).toBe(
     'formattedAddress,location',
   );
+});
+
+it('completes Place Details in the same billing session', async () => {
+  provider.mockResolvedValue({
+    formattedAddress: 'Basel',
+    location: { latitude: 47.56, longitude: 7.59 },
+  });
+  await service.details({ placeId: 'basel-id', sessionToken: 'session-123' });
+  expect(provider.mock.calls[0][0].searchParams.get('sessionToken')).toBe(
+    'session-123',
+  );
+});
+
+it('returns a validated country center without exposing provider data', async () => {
+  provider.mockResolvedValueOnce({
+    status: 'OK',
+    results: [
+      { geometry: { location: { lat: 47.56, lng: 7.59 } }, private: true },
+    ],
+  });
+  await expect(service.countryCenter({ countryCode: 'ch' })).resolves.toEqual({
+    location: { latitude: 47.56, longitude: 7.59 },
+  });
+  expect(provider.mock.calls[0][0].searchParams.get('components')).toBe(
+    'country:CH',
+  );
+  provider.mockResolvedValueOnce({ status: 'ZERO_RESULTS', results: [] });
+  await expect(service.countryCenter({ countryCode: 'ZZ' })).resolves.toEqual({
+    location: null,
+  });
+  provider.mockResolvedValueOnce({
+    status: 'OK',
+    results: [{ geometry: { location: { lat: 120, lng: 7 } } }],
+  });
+  await expect(service.countryCenter({ countryCode: 'CH' })).resolves.toEqual({
+    location: null,
+  });
 });
 
 it.each([

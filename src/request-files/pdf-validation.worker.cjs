@@ -1,5 +1,15 @@
 const { parentPort, workerData } = require('node:worker_threads');
 const { pathToFileURL } = require('node:url');
+// pdfjs-dist uses Promise.withResolvers, which is unavailable on Node 20.
+Promise.withResolvers ??= function withResolvers() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
 (async () => {
   const { getDocument } = await import(pathToFileURL(require.resolve('pdfjs-dist/legacy/build/pdf.mjs')).href);
   const loading = getDocument({

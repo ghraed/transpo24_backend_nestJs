@@ -67,6 +67,30 @@ it('preserves alternatives and metrics without returning the private key', async
   );
   expect(JSON.stringify(result)).not.toContain('server-only-key');
 });
+
+it('returns only road distance to customer callers and handles no route', async () => {
+  const call = jest
+    .spyOn(transport, 'requestGoogleRoutes')
+    .mockResolvedValueOnce({
+      routes: [
+        {
+          distanceMeters: 250,
+          duration: '30s',
+          polyline: { encodedPolyline: 'route' },
+        },
+      ],
+    })
+    .mockResolvedValueOnce({ routes: [] });
+  await expect(service.distance(input)).resolves.toEqual({
+    status: 'OK',
+    distanceMeters: 250,
+  });
+  await expect(service.distance(input)).resolves.toEqual({
+    status: 'ZERO_RESULTS',
+    distanceMeters: null,
+  });
+  expect(call).toHaveBeenCalledTimes(2);
+});
 it('returns zero results distinctly and hides provider errors', async () => {
   const call = jest
     .spyOn(transport, 'requestGoogleRoutes')

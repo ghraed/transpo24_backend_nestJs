@@ -156,14 +156,12 @@ describe('late reservation payment refunds', () => {
     model.row.status = 'DRIVER_ASSIGNED';
     model.row.assignedDriver = { userId: 'driver-user' };
     model.hold.confirmationStartedAt = new Date();
-    const cancel = jest
-      .fn()
-      .mockResolvedValue({
-        refundedAmount: 0,
-        retainedAmount: 0,
-        releasedAmount: 105,
-        currency: 'CHF',
-      });
+    const cancel = jest.fn().mockResolvedValue({
+      refundedAmount: 0,
+      retainedAmount: 0,
+      releasedAmount: 105,
+      currency: 'CHF',
+    });
     (model.service as any).delayedBookings = { cancel };
     const result = await model.service.cancelAssignedJobByDriver(
       'driver-user',
@@ -189,10 +187,19 @@ describe('late reservation payment refunds', () => {
     model.row.assignedDriver = { userId: 'driver-user' };
     model.row.assignedDriverId = 'driver';
     model.hold.stripeAccountId = 'acct_driver';
-    model.stripe.requirePlatformProcessingFees = jest.fn().mockResolvedValue(undefined);
+    model.stripe.requirePlatformProcessingFees = jest
+      .fn()
+      .mockResolvedValue(undefined);
     await model.service.cancelAssignedJobByDriver('driver-user', 'request');
-    expect(model.stripe.requirePlatformProcessingFees).toHaveBeenCalledWith('acct_driver');
-    expect(model.stripe.createRefund).toHaveBeenCalledWith(expect.objectContaining({ amount: 10000, stripeAccountId: 'acct_driver' }));
+    expect(model.stripe.requirePlatformProcessingFees).toHaveBeenCalledWith(
+      'acct_driver',
+    );
+    expect(model.stripe.createRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 10000,
+        stripeAccountId: 'acct_driver',
+      }),
+    );
   });
   it.each(['STRIPE', 'APP_WALLET'])(
     '%s cancellation applies the existing refund policy to the total including client commission',

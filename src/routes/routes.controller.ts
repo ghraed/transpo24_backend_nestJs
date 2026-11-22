@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DriverAuthGuard } from '../auth/guards/driver-auth.guard';
+import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
 import { TranslationCacheService } from '../translations/translation-cache.service';
 import { ComputeDriverRouteDto } from './routes.dto';
 import { RoutesService } from './routes.service';
@@ -44,5 +45,21 @@ export class RoutesController {
   @Post('compute')
   compute(@Body() dto: ComputeDriverRouteDto) {
     return this.routes.compute(dto);
+  }
+}
+
+@Controller('customer/maps/routes')
+@UseGuards(CustomerAuthGuard, RoutesRateLimitGuard)
+export class CustomerMapsRoutesController {
+  constructor(private readonly routes: RoutesService) {}
+
+  @Post('compute')
+  compute(@Body() dto: ComputeDriverRouteDto) {
+    return this.routes.compute(dto);
+  }
+
+  @Post('distance')
+  distance(@Body() dto: ComputeDriverRouteDto) {
+    return this.routes.distance(dto);
   }
 }

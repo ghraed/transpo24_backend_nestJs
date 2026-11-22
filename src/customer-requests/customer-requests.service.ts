@@ -4151,7 +4151,10 @@ export class CustomerRequestsService {
       };
     }
 
-    if (request.itemPickedUpAt || POST_PICKUP_REQUEST_STATUSES.has(request.status)) {
+    if (
+      request.itemPickedUpAt ||
+      POST_PICKUP_REQUEST_STATUSES.has(request.status)
+    ) {
       return {
         canCancelCollectedTrip: false,
         reason:

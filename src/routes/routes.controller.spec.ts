@@ -7,8 +7,13 @@ import request from 'supertest';
 import type { Server } from 'node:http';
 import { AuthService } from '../auth/auth.service';
 import { DriverAuthGuard } from '../auth/guards/driver-auth.guard';
+import { CustomerAuthGuard } from '../auth/guards/customer-auth.guard';
 import { TranslationCacheService } from '../translations/translation-cache.service';
-import { RoutesController, RoutesRateLimitGuard } from './routes.controller';
+import {
+  CustomerMapsRoutesController,
+  RoutesController,
+  RoutesRateLimitGuard,
+} from './routes.controller';
 import { RoutesService } from './routes.service';
 
 let app: INestApplication;
@@ -19,11 +24,12 @@ const payload = {
 };
 beforeAll(async () => {
   const module = await Test.createTestingModule({
-    controllers: [RoutesController],
+    controllers: [RoutesController, CustomerMapsRoutesController],
     providers: [
       RoutesService,
       RoutesRateLimitGuard,
       DriverAuthGuard,
+      CustomerAuthGuard,
       { provide: ConfigService, useValue: { get: () => 'private-key' } },
       { provide: TranslationCacheService, useValue: counters },
       {
@@ -105,6 +111,59 @@ it('rejects excessive requests before calling Google', async () => {
   await request(app.getHttpServer() as Server)
     .post('/driver/routes/compute')
     .set('Authorization', 'Bearer driver')
+    .send(payload)
+    .expect(429);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it('allows only authenticated customers to request road distance', async () => {
+  const fetcher = jest
+    .spyOn(transport, 'requestGoogleRoutes')
+    .mockResolvedValue({
+      routes: [
+        {
+          distanceMeters: 250,
+          duration: '30s',
+          polyline: { encodedPolyline: 'route' },
+        },
+      ],
+    });
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/routes/distance')
+    .send(payload)
+    .expect(401);
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/routes/distance')
+    .set('Authorization', 'Bearer driver')
+    .send(payload)
+    .expect(403);
+  expect(fetcher).not.toHaveBeenCalled();
+  const response = await request(app.getHttpServer() as Server)
+    .post('/customer/maps/routes/distance')
+    .set('Authorization', 'Bearer customer')
+    .send(payload)
+    .expect(201);
+  expect(response.body).toEqual({ status: 'OK', distanceMeters: 250 });
+  const route = await request(app.getHttpServer() as Server)
+    .post('/customer/maps/routes/compute')
+    .set('Authorization', 'Bearer customer')
+    .send(payload)
+    .expect(201);
+  expect(route.body.routes[0].overview_polyline.points).toBe('route');
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('rejects invalid customer coordinates and rate-limits before Google', async () => {
+  const fetcher = jest.spyOn(transport, 'requestGoogleRoutes');
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/routes/distance')
+    .set('Authorization', 'Bearer customer')
+    .send({ ...payload, origin: { latitude: 120, longitude: 8 } })
+    .expect(400);
+  counters.incrementRateLimitCounter.mockResolvedValue(31);
+  await request(app.getHttpServer() as Server)
+    .post('/customer/maps/routes/distance')
+    .set('Authorization', 'Bearer customer')
     .send(payload)
     .expect(429);
   expect(fetcher).not.toHaveBeenCalled();
