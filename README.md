@@ -23,6 +23,22 @@ WEB_PUSH_VAPID_SUBJECT=mailto:admin@transpo24.com
 
 Do not expose the private VAPID key to the frontend. Browser Web Push requires HTTPS in production.
 
+## Public website contact form
+
+`POST /contact` sends validated website messages to `info@transpo24.com` using
+Resend. Verify `transpo24.com` as a sending domain, then configure these values
+on the API server (never in the public website build):
+
+```env
+RESEND_API_KEY=re_...
+CONTACT_EMAIL_FROM="Transpo24 <contact@transpo24.com>"
+```
+
+Include `https://transpo24.com` in the API's `CORS_ORIGINS`. The endpoint uses a
+hidden spam field and limits each client IP to five submissions per hour per API
+process. If mail delivery is not configured or fails, the form offers a direct
+email link instead of claiming that the message was sent.
+
 ## Stripe testing on a production deployment
 
 Use `STRIPE_MODE=test` with `STRIPE_TEST_SECRET_KEY` and

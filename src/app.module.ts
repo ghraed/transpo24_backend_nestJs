@@ -20,6 +20,7 @@ import { TranslationModule } from './translations/translations.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { HealthModule } from './health/health.module';
 import { validateEnvironment } from './config/environment';
+import { ContactModule } from './contact/contact.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { validateEnvironment } from './config/environment';
     CustomerRequestsModule,
     DriverModule,
     HealthModule,
+    ContactModule,
     NotificationsModule,
     PaymentsModule,
     PushTokensModule,
